@@ -1,0 +1,5 @@
+venv/
+*.pyc
+__pycache__/
+.env
+app.db # Ignore the local SQLite database file

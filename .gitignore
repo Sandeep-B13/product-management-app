@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.env
+venv/
+
+# Node
+node_modules/
+build/
+.env.local
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# IDE-specific files (if any, add as needed)
+.idea/  # For PyCharm/IntelliJ
+.vscode/ # For VS Code (if you want to ignore workspace settings)
