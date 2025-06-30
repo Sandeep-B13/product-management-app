@@ -78,9 +78,11 @@ function App() {
     setLoadingAI(true);
     setAiError(''); // Clear any previous AI errors
     try {
-      const response = await axios.post(`${API_URL}/api/products/${selectedProductId}/generate-discovery`, {
-        userInput: userInput,
-      });
+      const response = await axios.post(`${API_URL}/api/generate-discovery-document`, // Change the URL
+    {
+        product_name: selectedProduct.name, // Send the product's name
+        details: discoveryInput // Send the user's input from the textarea
+    });
       setSelectedProduct((prev) => ({
         ...prev,
         discovery_document: response.data.discovery_document,
