@@ -8,7 +8,7 @@ import google.generativeai as genai
 load_dotenv(override=True) # Load environment variables from .env file
 
 app = Flask(__name__)
-CORS(app) # Enable CORS for all origins in development (will restrict for production later)
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "https://product-management-app-zeta.vercel.app"]}})
 
 # Database Configuration (for Render/Neon.tech)
 # For local development, it defaults to a local SQLite file.
