@@ -1,41 +1,83 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy
 import os
 from dotenv import load_dotenv
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
 import google.generativeai as genai
+from datetime import datetime # Import datetime for timestamp fields
 
-load_dotenv(override=True) # Load environment variables from .env file
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "https://product-management-app-zeta.vercel.app"]}})
 
-# Database Configuration (for Render/Neon.tech)
-# For local development, it defaults to a local SQLite file.
-# For deployment, it will use the DATABASE_URL environment variable set on Render.
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///app.db')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # Suppresses a warning
+# --- Database Configuration ---
+# Get the DATABASE_URL from environment variables.
+# This will be set on Render. Locally, it comes from your .env file.
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # Suppress a warning
+
 db = SQLAlchemy(app)
 
-# Configure Google Gemini API
+# --- CORS Configuration ---
+# Allow requests from your local React development server and the deployed Vercel frontend.
+# Replace 'https://product-management-app-zeta.vercel.app' with your actual Vercel URL
+# if it changes.
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "https://product-management-app-zeta.vercel.app"]}})
+
+# --- Google Gemini API Configuration ---
+# Get the GEMINI_API_KEY from environment variables.
+# This will be set on Render. Locally, it comes from your .env file.
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 if not GEMINI_API_KEY:
-    print("Warning: GEMINI_API_KEY not found. AI features will not work.")
-    # You might want to raise an error or halt execution here for production
-else:
-    genai.configure(api_key=GEMINI_API_KEY)
+    raise ValueError("GEMINI_API_KEY environment variable not set. Please set it in your .env file or Render.")
+genai.configure(api_key=GEMINI_API_KEY)
 
-# --- Database Model for Product/Feature ---
-# This model will store the product/feature name and its generated discovery document.
+# Initialize the Gemini Pro model
+generation_config = {
+    "temperature": 0.7,
+    "top_p": 1,
+    "top_k": 1,
+    "max_output_tokens": 2048,
+}
+
+safety_settings = [
+    {
+        "category": "HARM_CATEGORY_HARASSMENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+    },
+    {
+        "category": "HARM_CATEGORY_HATE_SPEECH",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+    },
+    {
+        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+    },
+    {
+        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+    },
+]
+
+model = genai.GenerativeModel(
+    model_name="gemini-pro",
+    generation_config=generation_config,
+    safety_settings=safety_settings
+)
+
+# --- Database Model Definition ---
 class ProductFeature(db.Model):
+    __tablename__ = 'product_feature' # Explicitly set table name for clarity
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
-    discovery_document = db.Column(db.Text) # To store the AI-generated document
-    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
-    updated_at = db.Column(db.DateTime, default=db.func.current_timestamp(), onupdate=db.func.current_timestamp())
+    discovery_document = db.Column(db.Text, nullable=True) # To store AI generated content
+    created_at = db.Column(db.DateTime, default=datetime.utcnow) # Use datetime.utcnow for timezone-naive UTC
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
-        # Converts a ProductFeature object to a dictionary for JSON serialization
+        # Convert datetime objects to ISO format strings for JSON serialization
         return {
             'id': self.id,
             'name': self.name,
@@ -44,86 +86,86 @@ class ProductFeature(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
+# --- IMPORTANT: Create database tables when the app is initialized by Gunicorn ---
+# This block will run when Gunicorn imports the `app` object.
+# It will create tables if they don't exist.
+with app.app_context():
+    db.create_all()
+
 # --- API Routes ---
 
-@app.route('/')
-def index():
-    return "Product Management Backend is running!"
-
-# Get all product/feature entries
 @app.route('/api/products', methods=['GET'])
 def get_products():
+    """Fetches all product features from the database, ordered by creation date."""
     products = ProductFeature.query.order_by(ProductFeature.created_at.desc()).all()
-    return jsonify([p.to_dict() for p in products])
+    return jsonify([product.to_dict() for product in products])
 
-# Create a new product/feature entry
 @app.route('/api/products', methods=['POST'])
 def create_product():
+    """Creates a new product feature in the database."""
     data = request.json
-    name = data.get('name')
-    if not name:
+    if not data or 'name' not in data:
         return jsonify({"error": "Product name is required"}), 400
 
-    new_product = ProductFeature(name=name)
+    new_product = ProductFeature(name=data['name'])
     db.session.add(new_product)
     db.session.commit()
     return jsonify(new_product.to_dict()), 201
 
-# Get details of a specific product/feature
 @app.route('/api/products/<int:product_id>', methods=['GET'])
 def get_product(product_id):
+    """Fetches a single product feature by ID."""
     product = ProductFeature.query.get_or_404(product_id)
     return jsonify(product.to_dict())
 
-# AI-powered route to generate the discovery document
-@app.route('/api/products/<int:product_id>/generate-discovery', methods=['POST'])
-def generate_discovery_document(product_id):
+@app.route('/api/products/<int:product_id>', methods=['PUT'])
+def update_product(product_id):
+    """Updates an existing product feature by ID."""
     product = ProductFeature.query.get_or_404(product_id)
-    user_input = request.json.get('userInput', '') # Input from frontend chat/form
+    data = request.json
 
-    if not GEMINI_API_KEY:
-        return jsonify({"error": "AI API key not configured on the server."}), 500
+    if 'name' in data:
+        product.name = data['name']
+    if 'discovery_document' in data:
+        product.discovery_document = data['discovery_document']
+
+    db.session.commit()
+    return jsonify(product.to_dict())
+
+@app.route('/api/products/<int:product_id>', methods=['DELETE'])
+def delete_product(product_id):
+    """Deletes a product feature by ID."""
+    product = ProductFeature.query.get_or_404(product_id)
+    db.session.delete(product)
+    db.session.commit()
+    return jsonify({"message": "Product deleted successfully"}), 204
+
+@app.route('/api/generate-discovery-document', methods=['POST'])
+def generate_discovery_document():
+    """
+    Generates a product discovery document using Google Gemini Pro based on user input.
+    Expects JSON with 'product_name' and 'details'.
+    """
+    data = request.json
+    product_name = data.get('product_name')
+    details = data.get('details')
+
+    if not product_name or not details:
+        return jsonify({"error": "Product name and details are required"}), 400
+
+    prompt_parts = [
+        f"Generate a comprehensive product discovery document for a product/feature named '{product_name}' with the following details:\n\n{details}\n\nThe document should include sections like: 'Problem Statement', 'Proposed Solution', 'Target Audience', 'Key Features', 'Success Metrics', 'Potential Risks', and 'Future Considerations'. Ensure the tone is professional and concise."
+    ]
 
     try:
-        # Initialize the generative model
-        model = genai.GenerativeModel('gemini-2.5-flash')
-
-        # Construct the prompt for the AI
-        prompt = f"""
-        You are an AI Product Manager assistant. Your goal is to help define a new product feature or product.
-        The product/feature name is: "{product.name}".
-        Here is some user input/details about the feature provided by the product manager: "{user_input}"
-
-        Based on this information, generate a high-level Discovery Document.
-        The document should include the following sections. Provide content for each section:
-        1.  **Feature/Product Overview:** A brief description of the product or feature.
-        2.  **Core Logic/Functionality:** How the product or feature is expected to work at a high level, step-by-step if applicable.
-        3.  **High-Level Goals/Objectives:** What this product/feature aims to achieve (e.g., improve user engagement, solve a specific user problem, increase revenue, competitive advantage).
-        4.  **Key Assumptions:** Any critical assumptions being made about users, market conditions, existing infrastructure, or technology.
-        5.  **Out of Scope (for this MVP/initial phase):** Clearly list what this product/feature will *not* include in its initial release to manage expectations.
-        6.  **Potential Success Metrics (How to measure success):** How we might measure the success of this product/feature (e.g., DAU, retention, conversion rate, usage of specific features, customer satisfaction scores).
-
-        Format the output clearly using Markdown, with bold headings and bullet points where appropriate.
-        Ensure the content is detailed enough to serve as a strong starting point for a product manager.
-        """
-
-        response = model.generate_content(prompt)
-        discovery_doc_content = response.text
-
-        # Update the product in the database with the generated document
-        product.discovery_document = discovery_doc_content
-        db.session.commit()
-
-        return jsonify({"discovery_document": discovery_doc_content}), 200
-
+        response = model.generate_content(prompt_parts)
+        # Access the text from the response.candidates structure
+        generated_text = response.candidates[0].content.parts[0].text
+        return jsonify({"discovery_document": generated_text})
     except Exception as e:
-        # Log the full exception for debugging
-        print(f"Error during AI generation: {e}")
-        return jsonify({"error": f"Failed to generate discovery document: {str(e)} Please check your API key and input."}), 500
+        app.logger.error(f"Error generating discovery document: {e}")
+        return jsonify({"error": "Failed to generate discovery document. Please try again later."}), 500
 
-# This block ensures that `db.create_all()` is called only when `app.py` is executed directly.
-# It creates tables based on the ProductFeature model if they don't exist.
+# This block only runs when you execute app.py directly (e.g., for local development)
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     app.run(debug=True, port=5000) # Run on port 5000 for local development
