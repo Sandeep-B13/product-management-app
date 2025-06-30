@@ -60,8 +60,9 @@ safety_settings = [
     },
 ]
 
+# --- IMPORTANT CHANGE: Updated model_name to 'gemini-2.5-flash' for higher reasoning ---
 model = genai.GenerativeModel(
-    model_name="gemini-pro",
+    model_name="gemini-2.5-flash", # Changed from "gemini-1.0-pro" to a more recent Flash model
     generation_config=generation_config,
     safety_settings=safety_settings
 )
@@ -164,6 +165,10 @@ def generate_discovery_document():
         return jsonify({"discovery_document": generated_text})
     except Exception as e:
         app.logger.error(f"Error generating discovery document: {e}")
+        # Provide a more specific error for debugging from the API response if possible
+        if hasattr(e, 'response') and e.response:
+            app.logger.error(f"Gemini API error response: {e.response.text}")
+            return jsonify({"error": f"Failed to generate discovery document: {e.response.text}"}), 500
         return jsonify({"error": "Failed to generate discovery document. Please try again later."}), 500
 
 # This block only runs when you execute app.py directly (e.g., for local development)
