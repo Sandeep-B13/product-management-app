@@ -6,36 +6,179 @@ import axios from 'axios';
 // In production (on Vercel), it will use the REACT_APP_API_URL environment variable.
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
+// --- AuthPage Component ---
+// This component will handle both login and signup forms
+function AuthPage({ setIsLoggedIn, setAuthMessage }) {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [isLoginMode, setIsLoginMode] = useState(true); // true for login, false for signup
+    const [loading, setLoading] = useState(false);
+    const [authError, setAuthError] = useState(null);
+
+    const handleAuthSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setAuthError(null);
+        setAuthMessage(''); // Clear global auth message
+
+        try {
+            let response;
+            if (isLoginMode) {
+                // Login API call
+                response = await axios.post(`${API_URL}/api/login`, { email, password });
+                localStorage.setItem('token', response.data.token); // Store JWT token
+                setIsLoggedIn(true); // Update parent state to show main app
+            } else {
+                // Signup API call
+                response = await axios.post(`${API_URL}/api/signup`, { email, password });
+                // For signup, we just show the message and stay on auth page
+                setAuthMessage(response.data.message); // Set global auth message for approval pending
+                setIsLoginMode(true); // Switch to login mode after successful signup attempt
+            }
+            // For successful login, message is handled by setIsLoggedIn.
+            // For successful signup, message is handled by setAuthMessage.
+        } catch (err) {
+            console.error("Authentication error:", err);
+            if (err.response && err.response.data && err.response.data.message) {
+                setAuthError(err.response.data.message); // Display specific backend error message
+            } else {
+                setAuthError("An unexpected error occurred. Please try again.");
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4 font-inter antialiased">
+            <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-200 w-full max-w-md text-center">
+                <h1 className="text-4xl font-extrabold text-gray-900 mb-2">
+                    Auto Product Manager
+                </h1>
+                <p className="text-lg text-gray-600 mb-8">
+                    Your Product Manager on <span className="text-purple-600 font-semibold">Autopilot Mode</span>
+                </p>
+
+                <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b-2 pb-3 border-purple-200">
+                    {isLoginMode ? 'Login' : 'Sign Up'}
+                </h2>
+
+                <form onSubmit={handleAuthSubmit} className="space-y-5">
+                    <div>
+                        <input
+                            type="email"
+                            placeholder="Email"
+                            className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 text-lg"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                        />
+                    </div>
+                    <div>
+                        <input
+                            type="password"
+                            placeholder="Password"
+                            className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 text-lg"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        className="w-full px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg shadow-md hover:bg-purple-700 transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50"
+                        disabled={loading}
+                    >
+                        {loading ? 'Processing...' : (isLoginMode ? 'Login' : 'Sign Up')}
+                    </button>
+                </form>
+
+                {authError && (
+                    <p className="text-red-500 text-center mt-4">{authError}</p>
+                )}
+
+                <p className="mt-6 text-gray-600">
+                    {isLoginMode ? (
+                        <>
+                            Don't have an account?{' '}
+                            <button
+                                onClick={() => { setIsLoginMode(false); setAuthError(null); }}
+                                className="text-purple-600 hover:underline font-medium"
+                            >
+                                Sign Up
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            Already have an account?{' '}
+                            <button
+                                onClick={() => { setIsLoginMode(true); setAuthError(null); }}
+                                className="text-purple-600 hover:underline font-medium"
+                            >
+                                Login
+                            </button>
+                        </>
+                    )}
+                </p>
+            </div>
+        </div>
+    );
+}
+
+// --- Main App Component (Your existing Product Manager App) ---
 function App() {
     // State variables for managing product data and UI
-    const [products, setProducts] = useState([]); // Stores the list of products/features
-    const [selectedProduct, setSelectedProduct] = useState(null); // The currently selected product
-    const [newProductName, setNewProductName] = useState(''); // Input for adding a new product
-    const [loading, setLoading] = useState(false); // Indicates if an API call is in progress
-    const [error, setError] = useState(null); // Stores any error messages
-    const [generatedDocument, setGeneratedDocument] = useState(''); // Stores the AI-generated document
-    const [discoveryInput, setDiscoveryInput] = useState(''); // Input for AI discovery assistant details
+    const [products, setProducts] = useState([]);
+    const [selectedProduct, setSelectedProduct] = useState(null);
+    const [newProductName, setNewProductName] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [generatedDocument, setGeneratedDocument] = useState('');
+    const [discoveryInput, setDiscoveryInput] = useState('');
 
-    // --- useEffect Hook to Fetch Products on Component Mount ---
+    // Authentication state
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [authMessage, setAuthMessage] = useState(''); // For messages like "awaiting approval"
+
+    // Check for existing token on app load
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            // In a real app, you'd verify the token with the backend here.
+            // For now, presence of token means logged in.
+            setIsLoggedIn(true);
+        }
+    }, []);
+
+    // --- useEffect Hook to Fetch Products on Component Mount (only if logged in) ---
     useEffect(() => {
         const fetchProducts = async () => {
+            if (!isLoggedIn) return; // Only fetch if logged in
+
             setLoading(true);
             setError(null);
             try {
-                // Fetch products from the backend API
-                const response = await axios.get(`${API_URL}/api/products`);
+                const token = localStorage.getItem('token');
+                const response = await axios.get(`${API_URL}/api/products`, {
+                    headers: {
+                        Authorization: `Bearer ${token}` // Send token with requests
+                    }
+                });
                 setProducts(response.data);
             } catch (err) {
                 console.error("Error fetching products:", err);
-                // Display a more user-friendly error message
-                setError("Failed to load products. Please check the backend server.");
+                setError("Failed to load products. Please check the backend server or your login status.");
+                // If token is invalid or expired, log out
+                if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+                    handleLogout();
+                }
             } finally {
                 setLoading(false);
             }
         };
 
         fetchProducts();
-    }, []); // Empty dependency array ensures this runs only once on mount
+    }, [isLoggedIn]); // Re-run when login status changes
 
     // --- Handlers for Product Management ---
 
@@ -47,12 +190,15 @@ function App() {
         setLoading(true);
         setError(null);
         try {
-            // Send a POST request to create a new product
+            const token = localStorage.getItem('token');
             const response = await axios.post(`${API_URL}/api/products`, {
                 name: newProductName
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
             });
-            // Add the new product to the state and clear the input
-            setProducts([response.data, ...products]); // Add to top of list
+            setProducts([response.data, ...products]);
             setNewProductName('');
         } catch (err) {
             console.error("Error creating product:", err);
@@ -64,19 +210,21 @@ function App() {
 
     const handleSelectProduct = (product) => {
         setSelectedProduct(product);
-        setGeneratedDocument(product.discovery_document || ''); // Pre-fill if document exists
-        setDiscoveryInput(''); // Clear AI input when selecting a new product
+        setGeneratedDocument(product.discovery_document || '');
+        setDiscoveryInput('');
     };
 
     const handleDeleteProduct = async (productId) => {
         setLoading(true);
         setError(null);
         try {
-            // Send a DELETE request to remove a product
-            await axios.delete(`${API_URL}/api/products/${productId}`);
-            // Remove the product from the state
+            const token = localStorage.getItem('token');
+            await axios.delete(`${API_URL}/api/products/${productId}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
             setProducts(products.filter(p => p.id !== productId));
-            // If the deleted product was selected, clear selection
             if (selectedProduct && selectedProduct.id === productId) {
                 setSelectedProduct(null);
                 setGeneratedDocument('');
@@ -92,7 +240,6 @@ function App() {
 
     // --- Handler for AI Document Generation ---
     const handleGenerateDocument = async () => {
-        // Ensure a product is selected and there's input for the AI
         if (!selectedProduct) {
             alert("Please select a product/feature first.");
             return;
@@ -105,22 +252,26 @@ function App() {
         setLoading(true);
         setError(null);
         try {
-            // Send a POST request to the backend's AI generation endpoint
+            const token = localStorage.getItem('token');
             const response = await axios.post(`${API_URL}/api/generate-discovery-document`, {
-                product_name: selectedProduct.name, // Pass the selected product's name
-                details: discoveryInput // Pass the user's input for details
+                product_name: selectedProduct.name,
+                details: discoveryInput
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
             });
 
             const doc = response.data.discovery_document;
-            setGeneratedDocument(doc); // Display the generated document
+            setGeneratedDocument(doc);
 
-            // --- OPTIONAL: Update the product in the database with the generated document ---
-            // If you want to save the generated document to the specific product,
-            // make a PUT request here.
             await axios.put(`${API_URL}/api/products/${selectedProduct.id}`, {
                 discovery_document: doc
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
             });
-            // Update the product in local state to reflect the saved document
             setProducts(products.map(p =>
                 p.id === selectedProduct.id ? { ...p, discovery_document: doc } : p
             ));
@@ -134,32 +285,58 @@ function App() {
         }
     };
 
+    // --- Logout Handler ---
+    const handleLogout = () => {
+        localStorage.removeItem('token'); // Remove JWT from local storage
+        setIsLoggedIn(false); // Update state to show login page
+        setProducts([]); // Clear product data
+        setSelectedProduct(null); // Clear selected product
+        setGeneratedDocument(''); // Clear generated document
+        setDiscoveryInput(''); // Clear AI input
+        setAuthMessage('You have been logged out.'); // Optional: show a logout message
+    };
+
+    // --- Conditional Rendering: Show AuthPage or Main App ---
+    if (!isLoggedIn) {
+        return <AuthPage setIsLoggedIn={setIsLoggedIn} setAuthMessage={setAuthMessage} />;
+    }
+
+    // --- Main App UI (only rendered if isLoggedIn is true) ---
     return (
         <div className="min-h-screen bg-gray-100 p-8 font-inter antialiased">
             <header className="text-center mb-10">
                 <h1 className="text-5xl font-extrabold text-gray-900 leading-tight">
-                    Product Management & <span className="text-blue-600">AI Discovery Assistant</span>
+                    Auto Product Manager
                 </h1>
                 <p className="mt-4 text-xl text-gray-600">
-                    Manage your product features and generate discovery documents with AI.
+                    Your Product Manager on <span className="text-purple-600 font-semibold">Autopilot Mode</span>
                 </p>
+                <button
+                    onClick={handleLogout}
+                    className="mt-4 px-4 py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-400 transition duration-300 ease-in-out"
+                >
+                    Logout
+                </button>
+                {authMessage && (
+                    <p className="text-green-600 text-center mt-4 text-lg">{authMessage}</p>
+                )}
             </header>
 
             {/* Main Content Area */}
             <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-10">
                 {/* Left Column: Product List */}
                 <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-200">
-                    <h2 className="text-3xl font-bold text-gray-800 mb-6 border-b-2 pb-3 border-blue-200">Product/Feature List</h2>
+                    <h2 className="text-3xl font-bold text-gray-800 mb-6 border-b-2 pb-3 border-purple-200">Product/Feature List</h2>
 
                     {/* Add New Product Input */}
                     <div className="flex items-center mb-6 space-x-3">
                         <input
                             type="text"
                             placeholder="New product/feature name"
-                            className="flex-grow p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-lg"
+                            className="flex-grow p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 text-lg"
                             value={newProductName}
                             onChange={(e) => setNewProductName(e.target.value)}
-                            onKeyPress={(e) => { // Allow adding product by pressing Enter
+                            onKeyPress={(e) => {
                                 if (e.key === 'Enter') {
                                     handleAddProduct();
                                 }
@@ -167,7 +344,7 @@ function App() {
                         />
                         <button
                             onClick={handleAddProduct}
-                            className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50"
+                            className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg shadow-md hover:bg-purple-700 transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50"
                             disabled={loading}
                         >
                             {loading ? 'Adding...' : 'Add Product'}
@@ -175,7 +352,7 @@ function App() {
                     </div>
 
                     {/* Display Loading/Error State */}
-                    {loading && <p className="text-blue-500 text-center my-4">Loading...</p>}
+                    {loading && <p className="text-purple-500 text-center my-4">Loading...</p>}
                     {error && <p className="text-red-500 text-center my-4">{error}</p>}
 
                     {/* Product List Display */}
@@ -188,7 +365,7 @@ function App() {
                                     <li
                                         key={product.id}
                                         className={`flex justify-between items-center p-4 rounded-xl shadow-md cursor-pointer transition duration-200 ease-in-out transform hover:scale-[1.02]
-                                            ${selectedProduct && selectedProduct.id === product.id ? 'bg-blue-100 border-blue-500 border-2' : 'bg-gray-50 border border-gray-200'}`}
+                                            ${selectedProduct && selectedProduct.id === product.id ? 'bg-purple-100 border-purple-500 border-2' : 'bg-gray-50 border border-gray-200'}`}
                                         onClick={() => handleSelectProduct(product)}
                                     >
                                         <span className="text-lg font-medium text-gray-700 flex-grow">
@@ -196,7 +373,7 @@ function App() {
                                         </span>
                                         <button
                                             onClick={(e) => {
-                                                e.stopPropagation(); // Prevent selecting product when deleting
+                                                e.stopPropagation();
                                                 handleDeleteProduct(product.id);
                                             }}
                                             className="ml-4 px-4 py-2 bg-red-500 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-red-600 transition duration-300 ease-in-out transform hover:scale-105"
@@ -213,12 +390,12 @@ function App() {
 
                 {/* Right Column: AI Discovery Assistant */}
                 <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-200">
-                    <h2 className="text-3xl font-bold text-gray-800 mb-6 border-b-2 pb-3 border-blue-200">AI Discovery Assistant</h2>
+                    <h2 className="text-3xl font-bold text-gray-800 mb-6 border-b-2 pb-3 border-purple-200">AI Discovery Assistant</h2>
 
                     {selectedProduct ? (
                         <div>
                             <h3 className="text-xl font-semibold text-gray-700 mb-4">
-                                Currently Selected: <span className="text-blue-600">{selectedProduct.name}</span>
+                                Currently Selected: <span className="text-purple-600">{selectedProduct.name}</span>
                             </h3>
 
                             {/* Input for AI */}
@@ -230,7 +407,7 @@ function App() {
                                     id="discoveryInput"
                                     placeholder="e.g., Target audience, pain points, desired outcomes, core functionality..."
                                     rows="8"
-                                    className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-base"
+                                    className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 text-base"
                                     value={discoveryInput}
                                     onChange={(e) => setDiscoveryInput(e.target.value)}
                                     disabled={loading}
@@ -247,7 +424,7 @@ function App() {
                             {/* Display Generated Document */}
                             {generatedDocument && (
                                 <div className="mt-8">
-                                    <h3 className="text-xl font-semibold text-gray-700 mb-4 border-t-2 pt-4 border-blue-200">
+                                    <h3 className="text-xl font-semibold text-gray-700 mb-4 border-t-2 pt-4 border-purple-200">
                                         Generated Document for {selectedProduct.name}:
                                     </h3>
                                     <div className="bg-gray-50 p-6 rounded-lg shadow-inner border border-gray-200 whitespace-pre-wrap text-gray-800 leading-relaxed text-base">
@@ -257,7 +434,7 @@ function App() {
                             )}
                              {selectedProduct.discovery_document && !generatedDocument && (
                                 <div className="mt-8">
-                                    <h3 className="text-xl font-semibold text-gray-700 mb-4 border-t-2 pt-4 border-blue-200">
+                                    <h3 className="text-xl font-semibold text-gray-700 mb-4 border-t-2 pt-4 border-purple-200">
                                         Saved Document for {selectedProduct.name}:
                                     </h3>
                                     <div className="bg-gray-50 p-6 rounded-lg shadow-inner border border-gray-200 whitespace-pre-wrap text-gray-800 leading-relaxed text-base">
