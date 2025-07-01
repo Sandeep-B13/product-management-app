@@ -1,45 +1,54 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3 } from 'lucide-react';
 
-// Define the API URL for your backend.
-// In development, it will default to http://localhost:5000.
-// In production (on Vercel), it will use the REACT_APP_API_URL environment variable.
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+// Simulated API calls for demo purposes
+const simulateAPI = (endpoint, data, delay = 1000) => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      if (endpoint === '/api/login') {
+        if (data.email === 'demo@company.com' && data.password === 'password') {
+          resolve({ data: { token: 'demo-token-123', message: 'Login successful' } });
+        } else {
+          reject({ response: { data: { message: 'Invalid credentials' } } });
+        }
+      } else if (endpoint === '/api/signup') {
+        resolve({ data: { message: 'Account created! Please wait for admin approval.' } });
+      }
+    }, delay);
+  });
+};
 
 // --- AuthPage Component ---
-// This component will handle both login and signup forms
 function AuthPage({ setIsLoggedIn, setAuthMessage }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [isLoginMode, setIsLoginMode] = useState(true); // true for login, false for signup
+    const [isLoginMode, setIsLoginMode] = useState(true);
     const [loading, setLoading] = useState(false);
     const [authError, setAuthError] = useState(null);
-    const [rememberMe, setRememberMe] = useState(false); // State for "Remember me"
+    const [rememberMe, setRememberMe] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleAuthSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         setAuthError(null);
-        setAuthMessage(''); // Clear global auth message
+        setAuthMessage('');
 
         try {
             let response;
             if (isLoginMode) {
-                // Login API call
-                response = await axios.post(`${API_URL}/api/login`, { email, password });
-                localStorage.setItem('token', response.data.token); // Store JWT token
-                setIsLoggedIn(true); // Update parent state to show main app
+                response = await simulateAPI('/api/login', { email, password });
+                localStorage.setItem('token', response.data.token);
+                setIsLoggedIn(true);
             } else {
-                // Signup API call
-                response = await axios.post(`${API_URL}/api/signup`, { email, password });
-                // For signup, we just show the message and stay on auth page
-                setAuthMessage(response.data.message); // Set global auth message for approval pending
-                setIsLoginMode(true); // Switch to login mode after successful signup attempt
+                response = await simulateAPI('/api/signup', { email, password });
+                setAuthMessage(response.data.message);
+                setIsLoginMode(true);
             }
         } catch (err) {
             console.error("Authentication error:", err);
             if (err.response && err.response.data && err.response.data.message) {
-                setAuthError(err.response.data.message); // Display specific backend error message
+                setAuthError(err.response.data.message);
             } else {
                 setAuthError("An unexpected error occurred. Please try again.");
             }
@@ -49,204 +58,232 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center font-inter antialiased" style={{ backgroundColor: '#F8F8F8' }}> {/* Light gray background */}
-            <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8 sm:p-10 text-center border border-gray-200">
-                {/* Top Arrow Icon */}
-                <div className="flex justify-center mb-6">
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth={2}
-                        stroke="currentColor"
-                        className="w-8 h-8 text-gray-400"
-                    >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
-                    </svg>
+        <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex">
+            {/* Left Side - Hero Section */}
+            <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-800 relative overflow-hidden">
+                {/* Background Pattern */}
+                <div className="absolute inset-0 opacity-10">
+                    <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl animate-pulse"></div>
+                    <div className="absolute top-0 -right-4 w-72 h-72 bg-yellow-300 rounded-full mix-blend-multiply filter blur-xl animate-pulse animation-delay-2000"></div>
+                    <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl animate-pulse animation-delay-4000"></div>
                 </div>
-
-                {/* Logo/App Name (Adjusted to match image's small logo style) */}
-                <div className="mb-8 flex justify-center items-center flex-col">
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        className="w-8 h-8 text-purple-600 mb-2" // Smaller icon
-                    >
-                        <path
-                            fillRule="evenodd"
-                            d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25Zm-2.625 7.5a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm4.875 0a.75.75.0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm-2.25 4.5a.75.75 0 1 0 0 1.5h.008a.75.75 0 0 0 0-1.5H12Z"
-                            clipRule="evenodd"
-                        />
-                    </svg>
-                    <span className="text-xl font-bold text-gray-800">Auto Product Manager</span> {/* Smaller text */}
-                </div>
-
-                {/* Main Heading and Subtext */}
-                <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-                    {isLoginMode ? 'Log in with your work email' : 'Sign up for Auto Product Manager'}
-                </h2>
-                <p className="text-gray-600 mb-6 text-base">
-                    {isLoginMode ? 'Use your work email to log in to your team workspace.' : 'Create your account to start managing products on autopilot.'}
-                </p>
-
-                {/* Form */}
-                <form onSubmit={handleAuthSubmit} className="space-y-5">
-                    {/* Email Input */}
-                    <div>
-                        <label htmlFor="email" className="sr-only">Email</label>
-                        <input
-                            id="email"
-                            type="email"
-                            placeholder="yourname@company.com"
-                            className="w-full p-3 border border-gray-300 rounded-lg text-base focus:ring-purple-500 focus:border-purple-500 transition duration-200 ease-in-out"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                        />
-                    </div>
-                    {/* Password Input */}
-                    <div>
-                        <label htmlFor="password" className="sr-only">Password</label>
-                        <div className="relative">
-                            <input
-                                id="password"
-                                type="password"
-                                placeholder="Enter your password"
-                                className="w-full p-3 border border-gray-300 rounded-lg text-base focus:ring-purple-500 focus:border-purple-500 transition duration-200 ease-in-out pr-10" // Added pr-10 for eye icon
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                            />
-                            {/* Eye icon - not functional yet, but visually present */}
-                            <span className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 cursor-pointer">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                                </svg>
-                            </span>
+                
+                <div className="relative z-10 flex flex-col justify-center px-12 text-white">
+                    <div className="mb-8">
+                        <div className="flex items-center mb-4">
+                            <Sparkles className="w-10 h-10 text-yellow-300 mr-3" />
+                            <span className="text-2xl font-bold">Auto Product Manager</span>
                         </div>
-                        {isLoginMode && (
-                            <div className="text-right mt-2">
-                                <a href="#" className="text-sm text-purple-600 hover:underline font-medium">Forgot password?</a>
+                        <h1 className="text-5xl font-bold leading-tight mb-6">
+                            Product Management
+                            <span className="block text-yellow-300">On Autopilot</span>
+                        </h1>
+                        <p className="text-xl text-indigo-100 mb-8 leading-relaxed">
+                            Streamline your product discovery process with AI-powered insights and automated documentation generation.
+                        </p>
+                    </div>
+                    
+                    {/* Feature highlights */}
+                    <div className="space-y-4">
+                        <div className="flex items-center">
+                            <Zap className="w-6 h-6 text-yellow-300 mr-3 flex-shrink-0" />
+                            <span className="text-indigo-100">AI-Powered Discovery Documents</span>
+                        </div>
+                        <div className="flex items-center">
+                            <Users className="w-6 h-6 text-yellow-300 mr-3 flex-shrink-0" />
+                            <span className="text-indigo-100">Team Collaboration Tools</span>
+                        </div>
+                        <div className="flex items-center">
+                            <BarChart3 className="w-6 h-6 text-yellow-300 mr-3 flex-shrink-0" />
+                            <span className="text-indigo-100">Advanced Analytics & Insights</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Right Side - Auth Form */}
+            <div className="w-full lg:w-1/2 flex items-center justify-center p-8">
+                <div className="w-full max-w-md">
+                    {/* Mobile Logo */}
+                    <div className="lg:hidden text-center mb-8">
+                        <div className="flex items-center justify-center mb-4">
+                            <Sparkles className="w-8 h-8 text-indigo-600 mr-2" />
+                            <span className="text-2xl font-bold text-gray-900">Auto Product Manager</span>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+                        {/* Header */}
+                        <div className="text-center mb-8">
+                            <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                                {isLoginMode ? 'Welcome back' : 'Create your account'}
+                            </h2>
+                            <p className="text-gray-600">
+                                {isLoginMode 
+                                    ? 'Enter your credentials to access your dashboard' 
+                                    : 'Get started with your free account today'
+                                }
+                            </p>
+                            {/* Demo credentials hint */}
+                            {isLoginMode && (
+                                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                    <p className="text-sm text-blue-700">
+                                        <strong>Demo:</strong> demo@company.com / password
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Form */}
+                        <form onSubmit={handleAuthSubmit} className="space-y-6">
+                            {/* Email Input */}
+                            <div>
+                                <label htmlFor="email" className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Work Email
+                                </label>
+                                <input
+                                    id="email"
+                                    type="email"
+                                    placeholder="yourname@company.com"
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-200 placeholder-gray-400"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                />
+                            </div>
+
+                            {/* Password Input */}
+                            <div>
+                                <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Password
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        id="password"
+                                        type={showPassword ? "text" : "password"}
+                                        placeholder="Enter your password"
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg text-base focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-200 placeholder-gray-400 pr-12"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                    >
+                                        {showPassword ? (
+                                            <EyeOff className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+                                        ) : (
+                                            <Eye className="w-5 h-5 text-gray-400 hover:text-gray-600" />
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Remember Me & Forgot Password */}
+                            {isLoginMode && (
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center">
+                                        <input
+                                            id="remember-me"
+                                            type="checkbox"
+                                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                            checked={rememberMe}
+                                            onChange={(e) => setRememberMe(e.target.checked)}
+                                        />
+                                        <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
+                                            Remember me
+                                        </label>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="text-sm text-indigo-600 hover:text-indigo-500 font-medium"
+                                    >
+                                        Forgot password?
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Submit Button */}
+                            <button
+                                type="submit"
+                                className="w-full flex items-center justify-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-lg shadow-lg hover:from-indigo-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02]"
+                                disabled={loading}
+                            >
+                                {loading ? (
+                                    <div className="flex items-center">
+                                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                                        Processing...
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center">
+                                        {isLoginMode ? 'Sign in' : 'Create account'}
+                                        <ArrowRight className="w-5 h-5 ml-2" />
+                                    </div>
+                                )}
+                            </button>
+                        </form>
+
+                        {/* Error Message */}
+                        {authError && (
+                            <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                                <p className="text-red-600 text-sm font-medium">{authError}</p>
                             </div>
                         )}
-                    </div>
 
-                    {/* Remember Me Checkbox (if login mode) */}
-                    {isLoginMode && (
-                        <div className="flex items-center justify-start"> {/* Aligned to start */}
-                            <input
-                                id="remember-me"
-                                name="remember-me"
-                                type="checkbox"
-                                className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
-                                checked={rememberMe}
-                                onChange={(e) => setRememberMe(e.target.checked)}
-                            />
-                            <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                                Remember me
-                            </label>
+                        {/* Toggle Mode */}
+                        <div className="mt-8 text-center">
+                            <p className="text-gray-600">
+                                {isLoginMode ? "Don't have an account?" : "Already have an account?"}{' '}
+                                <button
+                                    type="button"
+                                    onClick={() => { 
+                                        setIsLoginMode(!isLoginMode); 
+                                        setAuthError(null); 
+                                        setEmail('');
+                                        setPassword('');
+                                    }}
+                                    className="text-indigo-600 hover:text-indigo-500 font-semibold"
+                                >
+                                    {isLoginMode ? 'Sign up' : 'Sign in'}
+                                </button>
+                            </p>
                         </div>
-                    )}
-                    <button
-                        type="submit"
-                        className="w-full px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg shadow-md hover:bg-purple-700 transition duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
-                        disabled={loading}
-                    >
-                        {loading ? 'Processing...' : (isLoginMode ? 'Log in' : 'Sign up')}
-                    </button>
-                </form>
 
-                {authError && (
-                    <p className="text-red-600 text-center mt-6 text-base font-medium">{authError}</p>
-                )}
-
-                {/* "Don't have an account" link at the bottom */}
-                <p className="mt-8 text-gray-600 text-base">
-                    {isLoginMode ? (
-                        <>
-                            Don't have an account yet?{' '}
-                            <button
-                                onClick={() => { setIsLoginMode(false); setAuthError(null); }}
-                                className="text-purple-600 hover:underline font-semibold"
-                            >
-                                Sign up
-                            </button>
-                        </>
-                    ) : (
-                        <>
-                            Already have an account?{' '}
-                            <button
-                                onClick={() => { setIsLoginMode(true); setAuthError(null); }}
-                                className="text-purple-600 hover:underline font-semibold"
-                            >
-                                Log in
-                            </button>
-                        </>
-                    )}
-                </p>
+                        {/* Security notice */}
+                        <p className="mt-6 text-xs text-gray-500 text-center">
+                            By continuing, you agree to our Terms of Service and Privacy Policy.
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
     );
 }
 
-// --- Main App Component (Your existing Product Manager App) ---
+// --- Main App Component ---
 function App() {
-    // State variables for managing product data and UI
-    const [products, setProducts] = useState([]);
+    const [products, setProducts] = useState([
+        { id: 1, name: "Mobile App Redesign", discovery_document: "Sample discovery document for mobile app..." },
+        { id: 2, name: "API Gateway", discovery_document: null },
+        { id: 3, name: "User Analytics Dashboard", discovery_document: "Comprehensive analytics solution..." }
+    ]);
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [newProductName, setNewProductName] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [generatedDocument, setGeneratedDocument] = useState('');
     const [discoveryInput, setDiscoveryInput] = useState('');
-
-    // Authentication state
     const [isLoggedIn, setIsLoggedIn] = useState(false);
-    const [authMessage, setAuthMessage] = useState(''); // For messages like "awaiting approval"
+    const [authMessage, setAuthMessage] = useState('');
 
-    // Check for existing token on app load
     useEffect(() => {
         const token = localStorage.getItem('token');
         if (token) {
-            // In a real app, you'd verify the token with the backend here.
-            // For now, presence of token means logged in.
             setIsLoggedIn(true);
         }
     }, []);
-
-    // --- useEffect Hook to Fetch Products on Component Mount (only if logged in) ---
-    useEffect(() => {
-        const fetchProducts = async () => {
-            if (!isLoggedIn) return; // Only fetch if logged in
-
-            setLoading(true);
-            setError(null);
-            try {
-                const token = localStorage.getItem('token');
-                const response = await axios.get(`${API_URL}/api/products`, {
-                    headers: {
-                        Authorization: `Bearer ${token}` // Send token with requests
-                    }
-                });
-                setProducts(response.data);
-            } catch (err) {
-                console.error("Error fetching products:", err);
-                setError("Failed to load products. Please check the backend server or your login status.");
-                // If token is invalid or expired, log out
-                if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-                    handleLogout();
-                }
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchProducts();
-    }, [isLoggedIn]); // Re-run when login status changes
-
-    // --- Handlers for Product Management ---
 
     const handleAddProduct = async () => {
         if (!newProductName.trim()) {
@@ -254,24 +291,18 @@ function App() {
             return;
         }
         setLoading(true);
-        setError(null);
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.post(`${API_URL}/api/products`, {
-                name: newProductName
-            }, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
-            setProducts([response.data, ...products]);
+        
+        // Simulate API call
+        setTimeout(() => {
+            const newProduct = {
+                id: Date.now(),
+                name: newProductName,
+                discovery_document: null
+            };
+            setProducts([newProduct, ...products]);
             setNewProductName('');
-        } catch (err) {
-            console.error("Error creating product:", err);
-            setError("Failed to add product. Please try again.");
-        } finally {
             setLoading(false);
-        }
+        }, 500);
     };
 
     const handleSelectProduct = (product) => {
@@ -282,29 +313,17 @@ function App() {
 
     const handleDeleteProduct = async (productId) => {
         setLoading(true);
-        setError(null);
-        try {
-            const token = localStorage.getItem('token');
-            await axios.delete(`${API_URL}/api/products/${productId}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
+        setTimeout(() => {
             setProducts(products.filter(p => p.id !== productId));
             if (selectedProduct && selectedProduct.id === productId) {
                 setSelectedProduct(null);
                 setGeneratedDocument('');
                 setDiscoveryInput('');
             }
-        } catch (err) {
-            console.error("Error deleting product:", err);
-            setError("Failed to delete product. Please try again.");
-        } finally {
             setLoading(false);
-        }
+        }, 300);
     };
 
-    // --- Handler for AI Document Generation ---
     const handleGenerateDocument = async () => {
         if (!selectedProduct) {
             alert("Please select a product/feature first.");
@@ -316,58 +335,53 @@ function App() {
         }
 
         setLoading(true);
-        setError(null);
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.post(`${API_URL}/api/generate-discovery-document`, {
-                product_name: selectedProduct.name,
-                details: discoveryInput
-            }, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
+        setTimeout(() => {
+            const doc = `# Discovery Document for ${selectedProduct.name}
 
-            const doc = response.data.discovery_document;
+## Overview
+Based on your input: "${discoveryInput}"
+
+This is a comprehensive discovery document that outlines the key aspects of ${selectedProduct.name}.
+
+## Target Audience
+- Primary users who need this solution
+- Secondary stakeholders
+- Technical implementation team
+
+## Problem Statement
+Clear definition of the problem this product addresses.
+
+## Success Metrics
+- User engagement metrics
+- Business impact measurements
+- Technical performance indicators
+
+## Implementation Strategy
+Step-by-step approach to building and launching this feature.`;
+
             setGeneratedDocument(doc);
-
-            await axios.put(`${API_URL}/api/products/${selectedProduct.id}`, {
-                discovery_document: doc
-            }, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
             setProducts(products.map(p =>
                 p.id === selectedProduct.id ? { ...p, discovery_document: doc } : p
             ));
             setSelectedProduct(prev => ({ ...prev, discovery_document: doc }));
-
-        } catch (err) {
-            console.error("Error generating document:", err);
-            setError("Failed to generate document. Make sure your Gemini API key is set correctly in the backend or there's a network issue!");
-        } finally {
             setLoading(false);
-        }
+        }, 2000);
     };
 
-    // --- Logout Handler ---
     const handleLogout = () => {
-        localStorage.removeItem('token'); // Remove JWT from local storage
-        setIsLoggedIn(false); // Update state to show login page
-        setProducts([]); // Clear product data
-        setSelectedProduct(null); // Clear selected product
-        setGeneratedDocument(''); // Clear generated document
-        setDiscoveryInput(''); // Clear AI input
-        setAuthMessage('You have been logged out.'); // Optional: show a logout message
+        localStorage.removeItem('token');
+        setIsLoggedIn(false);
+        setProducts([]);
+        setSelectedProduct(null);
+        setGeneratedDocument('');
+        setDiscoveryInput('');
+        setAuthMessage('You have been logged out.');
     };
 
-    // --- Conditional Rendering: Show AuthPage or Main App ---
     if (!isLoggedIn) {
         return <AuthPage setIsLoggedIn={setIsLoggedIn} setAuthMessage={setAuthMessage} />;
     }
 
-    // --- Main App UI (only rendered if isLoggedIn is true) ---
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-200 p-8 font-inter antialiased">
             <header className="text-center mb-12 py-6 bg-white shadow-lg rounded-b-3xl">
@@ -388,13 +402,10 @@ function App() {
                 )}
             </header>
 
-            {/* Main Content Area */}
             <div className="max-w-screen-xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10">
-                {/* Left Column: Product List */}
                 <div className="bg-white p-10 rounded-3xl shadow-xl border border-gray-100">
                     <h2 className="text-3xl font-bold text-gray-800 mb-8 border-b-2 pb-4 border-purple-300">Product/Feature List</h2>
 
-                    {/* Add New Product Input */}
                     <div className="flex items-center mb-8 space-x-4">
                         <input
                             type="text"
@@ -417,12 +428,10 @@ function App() {
                         </button>
                     </div>
 
-                    {/* Display Loading/Error State */}
                     {loading && <p className="text-purple-500 text-center my-6 text-lg font-medium">Loading...</p>}
                     {error && <p className="text-red-600 text-center my-6 text-lg font-medium">{error}</p>}
 
-                    {/* Product List Display */}
-                    <div className="max-h-[60vh] overflow-y-auto pr-3 custom-scrollbar">
+                    <div className="max-h-[60vh] overflow-y-auto pr-3">
                         {products.length === 0 && !loading && !error ? (
                             <p className="text-gray-500 text-center py-12 text-lg">No products added yet. Start by adding one!</p>
                         ) : (
@@ -439,7 +448,7 @@ function App() {
                                         </span>
                                         <button
                                             onClick={(e) => {
-                                                e.stopPropagation(); // Prevent selecting product when deleting
+                                                e.stopPropagation();
                                                 handleDeleteProduct(product.id);
                                             }}
                                             className="ml-6 px-5 py-2 bg-red-500 text-white text-base font-semibold rounded-lg shadow-sm hover:bg-red-600 transition duration-300 ease-in-out transform hover:scale-105"
@@ -454,7 +463,6 @@ function App() {
                     </div>
                 </div>
 
-                {/* Right Column: AI Discovery Assistant */}
                 <div className="bg-white p-10 rounded-3xl shadow-xl border border-gray-100">
                     <h2 className="text-3xl font-bold text-gray-800 mb-8 border-b-2 pb-4 border-purple-300">AI Discovery Assistant</h2>
 
@@ -464,7 +472,6 @@ function App() {
                                 Currently Selected: <span className="text-purple-600">{selectedProduct.name}</span>
                             </h3>
 
-                            {/* Input for AI */}
                             <div className="mb-8">
                                 <label htmlFor="discoveryInput" className="block text-gray-700 text-base font-bold mb-3">
                                     Details for Discovery Document:
@@ -487,7 +494,6 @@ function App() {
                                 </button>
                             </div>
 
-                            {/* Display Generated Document */}
                             {(generatedDocument || selectedProduct.discovery_document) && (
                                 <div className="mt-10">
                                     <h3 className="text-2xl font-semibold text-gray-700 mb-5 border-t-2 pt-6 border-purple-300">
