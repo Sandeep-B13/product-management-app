@@ -50,25 +50,25 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4 font-inter antialiased">
-            <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-200 w-full max-w-md text-center">
-                <h1 className="text-4xl font-extrabold text-gray-900 mb-2">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-200 p-4 font-inter antialiased">
+            <div className="bg-white p-10 rounded-3xl shadow-2xl border border-gray-100 w-full max-w-md text-center transform transition-all duration-300 ease-in-out hover:scale-[1.01]">
+                <h1 className="text-5xl font-extrabold text-gray-900 mb-3 tracking-tight">
                     Auto Product Manager
                 </h1>
-                <p className="text-lg text-gray-600 mb-8">
-                    Your Product Manager on <span className="text-purple-600 font-semibold">Autopilot Mode</span>
+                <p className="text-xl text-gray-600 mb-10">
+                    Your Product Manager on <span className="text-purple-700 font-bold">Autopilot Mode</span>
                 </p>
 
-                <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b-2 pb-3 border-purple-200">
-                    {isLoginMode ? 'Login' : 'Sign Up'}
+                <h2 className="text-3xl font-bold text-gray-800 mb-8 border-b-2 pb-4 border-purple-300">
+                    {isLoginMode ? 'Welcome Back!' : 'Join the Future of PM!'}
                 </h2>
 
-                <form onSubmit={handleAuthSubmit} className="space-y-5">
+                <form onSubmit={handleAuthSubmit} className="space-y-6">
                     <div>
                         <input
                             type="email"
-                            placeholder="Email"
-                            className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 text-lg"
+                            placeholder="Email address"
+                            className="w-full p-4 border border-gray-300 rounded-xl shadow-sm text-lg focus:ring-purple-500 focus:border-purple-500 transition duration-200 ease-in-out"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
@@ -78,7 +78,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                         <input
                             type="password"
                             placeholder="Password"
-                            className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 text-lg"
+                            className="w-full p-4 border border-gray-300 rounded-xl shadow-sm text-lg focus:ring-purple-500 focus:border-purple-500 transition duration-200 ease-in-out"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
@@ -86,26 +86,26 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                     </div>
                     <button
                         type="submit"
-                        className="w-full px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg shadow-md hover:bg-purple-700 transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50"
+                        className="w-full px-6 py-4 bg-purple-600 text-white font-bold rounded-xl shadow-lg hover:bg-purple-700 transition duration-300 ease-in-out transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
                         disabled={loading}
                     >
-                        {loading ? 'Processing...' : (isLoginMode ? 'Login' : 'Sign Up')}
+                        {loading ? 'Processing...' : (isLoginMode ? 'Log In' : 'Sign Up')}
                     </button>
                 </form>
 
                 {authError && (
-                    <p className="text-red-500 text-center mt-4">{authError}</p>
+                    <p className="text-red-600 text-center mt-6 text-base font-medium">{authError}</p>
                 )}
 
-                <p className="mt-6 text-gray-600">
+                <p className="mt-8 text-gray-600 text-base">
                     {isLoginMode ? (
                         <>
                             Don't have an account?{' '}
                             <button
                                 onClick={() => { setIsLoginMode(false); setAuthError(null); }}
-                                className="text-purple-600 hover:underline font-medium"
+                                className="text-purple-600 hover:underline font-semibold transition duration-200 ease-in-out"
                             >
-                                Sign Up
+                                Sign Up Now
                             </button>
                         </>
                     ) : (
@@ -113,9 +113,9 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                             Already have an account?{' '}
                             <button
                                 onClick={() => { setIsLoginMode(true); setAuthError(null); }}
-                                className="text-purple-600 hover:underline font-medium"
+                                className="text-purple-600 hover:underline font-semibold transition duration-200 ease-in-out"
                             >
-                                Login
+                                Log In
                             </button>
                         </>
                     )}
@@ -303,37 +303,37 @@ function App() {
 
     // --- Main App UI (only rendered if isLoggedIn is true) ---
     return (
-        <div className="min-h-screen bg-gray-100 p-8 font-inter antialiased">
-            <header className="text-center mb-10">
-                <h1 className="text-5xl font-extrabold text-gray-900 leading-tight">
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-200 p-8 font-inter antialiased">
+            <header className="text-center mb-12 py-6 bg-white shadow-lg rounded-b-3xl">
+                <h1 className="text-6xl font-extrabold text-gray-900 leading-tight tracking-tight">
                     Auto Product Manager
                 </h1>
-                <p className="mt-4 text-xl text-gray-600">
-                    Your Product Manager on <span className="text-purple-600 font-semibold">Autopilot Mode</span>
+                <p className="mt-4 text-2xl text-gray-600">
+                    Your Product Manager on <span className="text-purple-700 font-bold">Autopilot Mode</span>
                 </p>
                 <button
                     onClick={handleLogout}
-                    className="mt-4 px-4 py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-400 transition duration-300 ease-in-out"
+                    className="mt-6 px-6 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg shadow-md hover:bg-gray-300 transition duration-300 ease-in-out transform hover:scale-105"
                 >
                     Logout
                 </button>
                 {authMessage && (
-                    <p className="text-green-600 text-center mt-4 text-lg">{authMessage}</p>
+                    <p className="text-green-600 text-center mt-4 text-lg font-semibold">{authMessage}</p>
                 )}
             </header>
 
             {/* Main Content Area */}
-            <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-10">
+            <div className="max-w-screen-xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10">
                 {/* Left Column: Product List */}
-                <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-200">
-                    <h2 className="text-3xl font-bold text-gray-800 mb-6 border-b-2 pb-3 border-purple-200">Product/Feature List</h2>
+                <div className="bg-white p-10 rounded-3xl shadow-xl border border-gray-100">
+                    <h2 className="text-3xl font-bold text-gray-800 mb-8 border-b-2 pb-4 border-purple-300">Product/Feature List</h2>
 
                     {/* Add New Product Input */}
-                    <div className="flex items-center mb-6 space-x-3">
+                    <div className="flex items-center mb-8 space-x-4">
                         <input
                             type="text"
-                            placeholder="New product/feature name"
-                            className="flex-grow p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 text-lg"
+                            placeholder="Enter new product/feature name"
+                            className="flex-grow p-4 border border-gray-300 rounded-xl shadow-sm text-lg focus:ring-purple-500 focus:border-purple-500 transition duration-200 ease-in-out"
                             value={newProductName}
                             onChange={(e) => setNewProductName(e.target.value)}
                             onKeyPress={(e) => {
@@ -344,7 +344,7 @@ function App() {
                         />
                         <button
                             onClick={handleAddProduct}
-                            className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg shadow-md hover:bg-purple-700 transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50"
+                            className="px-8 py-4 bg-purple-600 text-white font-bold rounded-xl shadow-lg hover:bg-purple-700 transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={loading}
                         >
                             {loading ? 'Adding...' : 'Add Product'}
@@ -352,31 +352,31 @@ function App() {
                     </div>
 
                     {/* Display Loading/Error State */}
-                    {loading && <p className="text-purple-500 text-center my-4">Loading...</p>}
-                    {error && <p className="text-red-500 text-center my-4">{error}</p>}
+                    {loading && <p className="text-purple-500 text-center my-6 text-lg font-medium">Loading...</p>}
+                    {error && <p className="text-red-600 text-center my-6 text-lg font-medium">{error}</p>}
 
                     {/* Product List Display */}
-                    <div className="max-h-96 overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="max-h-[60vh] overflow-y-auto pr-3 custom-scrollbar">
                         {products.length === 0 && !loading && !error ? (
-                            <p className="text-gray-500 text-center py-8">No products added yet. Start by adding one!</p>
+                            <p className="text-gray-500 text-center py-12 text-lg">No products added yet. Start by adding one!</p>
                         ) : (
-                            <ul className="space-y-4">
+                            <ul className="space-y-5">
                                 {products.map(product => (
                                     <li
                                         key={product.id}
-                                        className={`flex justify-between items-center p-4 rounded-xl shadow-md cursor-pointer transition duration-200 ease-in-out transform hover:scale-[1.02]
-                                            ${selectedProduct && selectedProduct.id === product.id ? 'bg-purple-100 border-purple-500 border-2' : 'bg-gray-50 border border-gray-200'}`}
+                                        className={`flex justify-between items-center p-5 rounded-2xl shadow-md cursor-pointer transition duration-200 ease-in-out transform hover:scale-[1.01] hover:shadow-lg
+                                            ${selectedProduct && selectedProduct.id === product.id ? 'bg-purple-50 border-purple-500 border-2' : 'bg-white border border-gray-200'}`}
                                         onClick={() => handleSelectProduct(product)}
                                     >
-                                        <span className="text-lg font-medium text-gray-700 flex-grow">
+                                        <span className="text-xl font-medium text-gray-800 flex-grow">
                                             {product.name}
                                         </span>
                                         <button
                                             onClick={(e) => {
-                                                e.stopPropagation();
+                                                e.stopPropagation(); // Prevent selecting product when deleting
                                                 handleDeleteProduct(product.id);
                                             }}
-                                            className="ml-4 px-4 py-2 bg-red-500 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-red-600 transition duration-300 ease-in-out transform hover:scale-105"
+                                            className="ml-6 px-5 py-2 bg-red-500 text-white text-base font-semibold rounded-lg shadow-sm hover:bg-red-600 transition duration-300 ease-in-out transform hover:scale-105"
                                             disabled={loading}
                                         >
                                             Delete
@@ -389,32 +389,32 @@ function App() {
                 </div>
 
                 {/* Right Column: AI Discovery Assistant */}
-                <div className="bg-white p-8 rounded-2xl shadow-xl border border-gray-200">
-                    <h2 className="text-3xl font-bold text-gray-800 mb-6 border-b-2 pb-3 border-purple-200">AI Discovery Assistant</h2>
+                <div className="bg-white p-10 rounded-3xl shadow-xl border border-gray-100">
+                    <h2 className="text-3xl font-bold text-gray-800 mb-8 border-b-2 pb-4 border-purple-300">AI Discovery Assistant</h2>
 
                     {selectedProduct ? (
                         <div>
-                            <h3 className="text-xl font-semibold text-gray-700 mb-4">
+                            <h3 className="text-2xl font-semibold text-gray-700 mb-5">
                                 Currently Selected: <span className="text-purple-600">{selectedProduct.name}</span>
                             </h3>
 
                             {/* Input for AI */}
-                            <div className="mb-6">
-                                <label htmlFor="discoveryInput" className="block text-gray-700 text-sm font-bold mb-2">
+                            <div className="mb-8">
+                                <label htmlFor="discoveryInput" className="block text-gray-700 text-base font-bold mb-3">
                                     Details for Discovery Document:
                                 </label>
                                 <textarea
                                     id="discoveryInput"
-                                    placeholder="e.g., Target audience, pain points, desired outcomes, core functionality..."
-                                    rows="8"
-                                    className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-purple-500 focus:border-purple-500 text-base"
+                                    placeholder="e.g., Target audience, pain points, desired outcomes, core functionality, competitive analysis..."
+                                    rows="10"
+                                    className="w-full p-4 border border-gray-300 rounded-xl shadow-sm text-base focus:ring-purple-500 focus:border-purple-500 transition duration-200 ease-in-out"
                                     value={discoveryInput}
                                     onChange={(e) => setDiscoveryInput(e.target.value)}
                                     disabled={loading}
                                 ></textarea>
                                 <button
                                     onClick={handleGenerateDocument}
-                                    className="mt-4 w-full px-6 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50"
+                                    className="mt-6 w-full px-8 py-4 bg-green-600 text-white font-bold rounded-xl shadow-lg hover:bg-green-700 transition duration-300 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                                     disabled={loading}
                                 >
                                     {loading ? 'Generating...' : 'Generate Discovery Document'}
@@ -422,29 +422,19 @@ function App() {
                             </div>
 
                             {/* Display Generated Document */}
-                            {generatedDocument && (
-                                <div className="mt-8">
-                                    <h3 className="text-xl font-semibold text-gray-700 mb-4 border-t-2 pt-4 border-purple-200">
-                                        Generated Document for {selectedProduct.name}:
+                            {(generatedDocument || selectedProduct.discovery_document) && (
+                                <div className="mt-10">
+                                    <h3 className="text-2xl font-semibold text-gray-700 mb-5 border-t-2 pt-6 border-purple-300">
+                                        {generatedDocument ? 'Generated Document' : 'Saved Document'} for {selectedProduct.name}:
                                     </h3>
-                                    <div className="bg-gray-50 p-6 rounded-lg shadow-inner border border-gray-200 whitespace-pre-wrap text-gray-800 leading-relaxed text-base">
-                                        {generatedDocument}
-                                    </div>
-                                </div>
-                            )}
-                             {selectedProduct.discovery_document && !generatedDocument && (
-                                <div className="mt-8">
-                                    <h3 className="text-xl font-semibold text-gray-700 mb-4 border-t-2 pt-4 border-purple-200">
-                                        Saved Document for {selectedProduct.name}:
-                                    </h3>
-                                    <div className="bg-gray-50 p-6 rounded-lg shadow-inner border border-gray-200 whitespace-pre-wrap text-gray-800 leading-relaxed text-base">
-                                        {selectedProduct.discovery_document}
+                                    <div className="bg-gray-50 p-8 rounded-xl shadow-inner border border-gray-200 whitespace-pre-wrap text-gray-800 leading-relaxed text-base">
+                                        {generatedDocument || selectedProduct.discovery_document}
                                     </div>
                                 </div>
                             )}
                         </div>
                     ) : (
-                        <p className="text-gray-500 text-center py-8">Select a product/feature from the left to generate a discovery document.</p>
+                        <p className="text-gray-500 text-center py-12 text-lg">Select a product/feature from the left to generate a discovery document.</p>
                     )}
                 </div>
             </div>
