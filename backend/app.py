@@ -57,7 +57,8 @@ class User(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)
+    # --- IMPORTANT CHANGE: Increased length for password_hash ---
+    password_hash = db.Column(db.String(255), nullable=False) # Increased from 128 to 255
     is_approved = db.Column(db.Boolean, default=False, nullable=False) # Approval status
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
