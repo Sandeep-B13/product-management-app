@@ -14,7 +14,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
     const [isLoginMode, setIsLoginMode] = useState(true); // true for login, false for signup
     const [loading, setLoading] = useState(false);
     const [authError, setAuthError] = useState(null);
-    const [rememberMe, setRememberMe] = useState(false); // New state for "Remember me"
+    const [rememberMe, setRememberMe] = useState(false); // State for "Remember me"
 
     const handleAuthSubmit = async (e) => {
         e.preventDefault();
@@ -36,8 +36,6 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                 setAuthMessage(response.data.message); // Set global auth message for approval pending
                 setIsLoginMode(true); // Switch to login mode after successful signup attempt
             }
-            // For successful login, message is handled by setIsLoggedIn.
-            // For successful signup, message is handled by setAuthMessage.
         } catch (err) {
             console.error("Authentication error:", err);
             if (err.response && err.response.data && err.response.data.message) {
@@ -51,111 +49,130 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-100 font-inter antialiased">
-            <div className="flex w-full max-w-5xl bg-white rounded-xl shadow-2xl overflow-hidden">
-                {/* Left Column - Dark Background */}
-                <div className="w-1/2 bg-gray-900 text-white p-12 flex flex-col justify-center items-start">
-                    <h1 className="text-6xl font-extrabold mb-4 leading-tight">
-                        Auto Product Manager
-                    </h1>
-                    <p className="text-2xl font-light leading-relaxed">
-                        Your Product Manager on <span className="text-purple-400 font-semibold">Autopilot Mode</span>
-                    </p>
-                    <p className="mt-8 text-lg text-gray-400">
-                        Streamline your product discovery with AI-powered insights and seamless management.
-                    </p>
+        <div className="min-h-screen flex items-center justify-center bg-gray-100 font-inter antialiased" style={{ backgroundColor: '#F8F8F8' }}> {/* Light gray background */}
+            <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8 sm:p-10 text-center border border-gray-200">
+                {/* Logo/App Name */}
+                <div className="mb-8 flex justify-center items-center">
+                    {/* Placeholder for a logo/icon like "Specify" in the image */}
+                    {/* You can replace this SVG with an actual logo image or a more complex SVG */}
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        className="w-10 h-10 text-purple-600 mr-2"
+                    >
+                        <path
+                            fillRule="evenodd"
+                            d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25Zm-2.625 7.5a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm4.875 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm-2.25 4.5a.75.75 0 1 0 0 1.5h.008a.75.75 0 0 0 0-1.5H12Z"
+                            clipRule="evenodd"
+                        />
+                    </svg>
+                    <span className="text-3xl font-bold text-gray-800">Auto Product Manager</span>
                 </div>
 
-                {/* Right Column - Login/Signup Form */}
-                <div className="w-1/2 p-12 flex flex-col justify-center">
-                    <h2 className="text-4xl font-bold text-gray-900 mb-2 text-left">
-                        {isLoginMode ? 'Login to your account' : 'Create your account'}
-                    </h2>
-                    <p className="text-gray-600 mb-8 text-left">
-                        {isLoginMode ? (
-                            <>
-                                Don't have an account?{' '}
-                                <button
-                                    onClick={() => { setIsLoginMode(false); setAuthError(null); }}
-                                    className="text-purple-600 hover:underline font-semibold"
-                                >
-                                    Sign Up
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                Already have an account?{' '}
-                                <button
-                                    onClick={() => { setIsLoginMode(true); setAuthError(null); }}
-                                    className="text-purple-600 hover:underline font-semibold"
-                                >
-                                    Login
-                                </button>
-                            </>
-                        )}
-                    </p>
+                {/* Main Heading and Subtext */}
+                <h2 className="text-2xl font-semibold text-gray-900 mb-2">
+                    {isLoginMode ? 'Log in with your work email' : 'Sign up for Auto Product Manager'}
+                </h2>
+                <p className="text-gray-600 mb-6 text-base">
+                    {isLoginMode ? 'Use your work email to log in to your team workspace.' : 'Create your account to start managing products on autopilot.'}
+                </p>
 
-                    {/* Removed Social Login Buttons */}
-                    {/* Removed OR divider */}
-
-                    <form onSubmit={handleAuthSubmit} className="space-y-6">
-                        <div>
-                            <label htmlFor="email" className="sr-only">Email address</label>
-                            <input
-                                id="email"
-                                type="email"
-                                placeholder="Email address"
-                                className="w-full p-4 border border-gray-300 rounded-lg shadow-sm text-lg focus:ring-purple-500 focus:border-purple-500 transition duration-200 ease-in-out"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="password" className="sr-only">Password</label>
+                {/* Form */}
+                <form onSubmit={handleAuthSubmit} className="space-y-5">
+                    {/* Email Input */}
+                    <div>
+                        <label htmlFor="email" className="sr-only">Email</label>
+                        <input
+                            id="email"
+                            type="email"
+                            placeholder="yourname@company.com"
+                            className="w-full p-3 border border-gray-300 rounded-lg text-base focus:ring-purple-500 focus:border-purple-500 transition duration-200 ease-in-out"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                        />
+                    </div>
+                    {/* Password Input */}
+                    <div>
+                        <label htmlFor="password" className="sr-only">Password</label>
+                        <div className="relative">
                             <input
                                 id="password"
                                 type="password"
-                                placeholder="Password"
-                                className="w-full p-4 border border-gray-300 rounded-lg shadow-sm text-lg focus:ring-purple-500 focus:border-purple-500 transition duration-200 ease-in-out"
+                                placeholder="Enter your password"
+                                className="w-full p-3 border border-gray-300 rounded-lg text-base focus:ring-purple-500 focus:border-purple-500 transition duration-200 ease-in-out pr-10" // Added pr-10 for eye icon
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
                             />
-                            {isLoginMode && (
-                                <div className="text-right mt-2">
-                                    <a href="#" className="text-sm text-purple-600 hover:underline font-medium">Forgot Password?</a>
-                                </div>
-                            )}
+                            {/* Placeholder for eye icon - not functional yet */}
+                            <span className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 cursor-pointer">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                </svg>
+                            </span>
                         </div>
                         {isLoginMode && (
-                            <div className="flex items-center">
-                                <input
-                                    id="remember-me"
-                                    name="remember-me"
-                                    type="checkbox"
-                                    className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
-                                    checked={rememberMe}
-                                    onChange={(e) => setRememberMe(e.target.checked)}
-                                />
-                                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                                    Remember me
-                                </label>
+                            <div className="text-right mt-2">
+                                <a href="#" className="text-sm text-purple-600 hover:underline font-medium">Forgot password?</a>
                             </div>
                         )}
-                        <button
-                            type="submit"
-                            className="w-full px-6 py-4 bg-gray-900 text-white font-bold rounded-lg shadow-lg hover:bg-gray-700 transition duration-300 ease-in-out transform hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={loading}
-                        >
-                            {loading ? 'Processing...' : (isLoginMode ? 'Login' : 'Sign Up')}
-                        </button>
-                    </form>
+                    </div>
 
-                    {authError && (
-                        <p className="text-red-600 text-center mt-6 text-base font-medium">{authError}</p>
+                    {isLoginMode && (
+                        <div className="flex items-center">
+                            <input
+                                id="remember-me"
+                                name="remember-me"
+                                type="checkbox"
+                                className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                                checked={rememberMe}
+                                onChange={(e) => setRememberMe(e.target.checked)}
+                            />
+                            <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+                                Remember me
+                            </label>
+                        </div>
                     )}
-                </div>
+                    <button
+                        type="submit"
+                        className="w-full px-6 py-3 bg-purple-600 text-white font-semibold rounded-lg shadow-md hover:bg-purple-700 transition duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={loading}
+                    >
+                        {loading ? 'Processing...' : (isLoginMode ? 'Log in' : 'Sign up')}
+                    </button>
+                </form>
+
+                {authError && (
+                    <p className="text-red-600 text-center mt-6 text-base font-medium">{authError}</p>
+                )}
+
+                {/* "Don't have an account" link at the bottom */}
+                <p className="mt-8 text-gray-600 text-base">
+                    {isLoginMode ? (
+                        <>
+                            Don't have an account yet?{' '}
+                            <button
+                                onClick={() => { setIsLoginMode(false); setAuthError(null); }}
+                                className="text-purple-600 hover:underline font-semibold"
+                            >
+                                Sign up
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            Already have an account?{' '}
+                            <button
+                                onClick={() => { setIsLoginMode(true); setAuthError(null); }}
+                                className="text-purple-600 hover:underline font-semibold"
+                            >
+                                Log in
+                            </button>
+                        </>
+                    )}
+                </p>
             </div>
         </div>
     );
