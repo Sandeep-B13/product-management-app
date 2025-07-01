@@ -49,25 +49,37 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-100 font-inter antialiased" style={{ backgroundColor: '#F8F8F8' }}> {/* Light gray background */}
+        <div className="min-h-screen flex items-center justify-center font-inter antialiased" style={{ backgroundColor: '#F8F8F8' }}> {/* Light gray background */}
             <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8 sm:p-10 text-center border border-gray-200">
-                {/* Logo/App Name */}
-                <div className="mb-8 flex justify-center items-center">
-                    {/* Placeholder for a logo/icon like "Specify" in the image */}
-                    {/* You can replace this SVG with an actual logo image or a more complex SVG */}
+                {/* Top Arrow Icon */}
+                <div className="flex justify-center mb-6">
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={2}
+                        stroke="currentColor"
+                        className="w-8 h-8 text-gray-400"
+                    >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 8.25 21 12m0 0-3.75 3.75M21 12H3" />
+                    </svg>
+                </div>
+
+                {/* Logo/App Name (Adjusted to match image's small logo style) */}
+                <div className="mb-8 flex justify-center items-center flex-col">
                     <svg
                         xmlns="http://www.w3.org/2000/svg"
                         viewBox="0 0 24 24"
                         fill="currentColor"
-                        className="w-10 h-10 text-purple-600 mr-2"
+                        className="w-8 h-8 text-purple-600 mb-2" // Smaller icon
                     >
                         <path
                             fillRule="evenodd"
-                            d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25Zm-2.625 7.5a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm4.875 0a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm-2.25 4.5a.75.75 0 1 0 0 1.5h.008a.75.75 0 0 0 0-1.5H12Z"
+                            d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25Zm-2.625 7.5a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm4.875 0a.75.75.0 1 1-1.5 0 .75.75 0 0 1 1.5 0Zm-2.25 4.5a.75.75 0 1 0 0 1.5h.008a.75.75 0 0 0 0-1.5H12Z"
                             clipRule="evenodd"
                         />
                     </svg>
-                    <span className="text-3xl font-bold text-gray-800">Auto Product Manager</span>
+                    <span className="text-xl font-bold text-gray-800">Auto Product Manager</span> {/* Smaller text */}
                 </div>
 
                 {/* Main Heading and Subtext */}
@@ -106,7 +118,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
                             />
-                            {/* Placeholder for eye icon - not functional yet */}
+                            {/* Eye icon - not functional yet, but visually present */}
                             <span className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 cursor-pointer">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
@@ -121,8 +133,9 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                         )}
                     </div>
 
+                    {/* Remember Me Checkbox (if login mode) */}
                     {isLoginMode && (
-                        <div className="flex items-center">
+                        <div className="flex items-center justify-start"> {/* Aligned to start */}
                             <input
                                 id="remember-me"
                                 name="remember-me"
