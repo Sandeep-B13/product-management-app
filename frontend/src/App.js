@@ -95,30 +95,8 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                         )}
                     </p>
 
-                    {/* Social Login Buttons (Placeholders) */}
-                    <div className="space-y-4 mb-6">
-                        <button className="w-full flex items-center justify-center px-6 py-3 border border-gray-300 rounded-lg shadow-sm text-lg font-medium text-gray-700 hover:bg-gray-50 transition duration-200">
-                            <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12.24 10.29v2.45h6.64c-.26 1.43-1.04 2.87-2.3 3.86l2.19 1.7c1.37-1.28 2.17-3.1 2.17-5.51 0-1.8-.32-3.2-.9-4.39H12.24z" fill="#4285F4"/>
-                                <path d="M12.24 20.48c-3.23 0-5.96-1.72-7.46-4.25l2.25-1.75c1.1 1.9 2.94 3.19 5.21 3.19 2.93 0 4.96-1.92 4.96-4.75 0-.39-.04-.77-.11-1.14H12.24v-3.08h7.97c.1.53.16 1.09.16 1.69 0 3.8-2.6 6.8-7.97 6.8z" fill="#34A853"/>
-                                <path d="M4.78 14.23c-.2-.6-.32-1.23-.32-1.88 0-.65.12-1.28.32-1.88L2.53 8.7C1.86 10.15 1.5 12.01 1.5 14c0 1.99.36 3.85 1.03 5.3L4.78 14.23z" fill="#FBBC05"/>
-                                <path d="M12.24 3.52c1.43 0 2.7.5 3.7 1.46l2.11-2.06c-1.44-1.35-3.3-2.12-5.81-2.12-3.23 0-5.96 1.72-7.46 4.25l2.25 1.75c1.1-1.9 2.94-3.19 5.21-3.19z" fill="#EA4335"/>
-                            </svg>
-                            Sign in with Google
-                        </button>
-                        <button className="w-full flex items-center justify-center px-6 py-3 border border-gray-300 rounded-lg shadow-sm text-lg font-medium text-gray-700 hover:bg-gray-50 transition duration-200">
-                            <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M22.675 0H1.325C.593 0 0 .593 0 1.325v21.35C0 23.407.593 24 1.325 24h11.397V14.77h-3.04V11.16h3.04V8.56c0-3.02 1.83-4.66 4.52-4.66 1.303 0 2.427.097 2.744.14v3.17h-1.87c-1.47 0-1.75.7-1.75 1.72v2.24h3.55l-.54 3.61h-3.01V24h6.07c.732 0 1.325-.593 1.325-1.325V1.325C24 .593 23.407 0 22.675 0z" fill="#1877F2"/>
-                            </svg>
-                            Sign in with Facebook
-                        </button>
-                    </div>
-
-                    <div className="relative flex py-5 items-center">
-                        <div className="flex-grow border-t border-gray-300"></div>
-                        <span className="flex-shrink mx-4 text-gray-500">OR</span>
-                        <div className="flex-grow border-t border-gray-300"></div>
-                    </div>
+                    {/* Removed Social Login Buttons */}
+                    {/* Removed OR divider */}
 
                     <form onSubmit={handleAuthSubmit} className="space-y-6">
                         <div>
