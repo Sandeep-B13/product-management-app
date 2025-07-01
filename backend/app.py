@@ -4,36 +4,30 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import google.generativeai as genai
-from datetime import datetime # Import datetime for timestamp fields
+from datetime import datetime, timedelta # Import timedelta for JWT expiration
+from werkzeug.security import generate_password_hash, check_password_hash # For password hashing
+import jwt # For JSON Web Tokens
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
 
-# --- Database Configuration ---
-# Get the DATABASE_URL from environment variables.
-# This will be set on Render. Locally, it comes from your .env file.
+# --- Configuration ---
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # Suppress a warning
-
-db = SQLAlchemy(app)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Add a secret key for JWT signing. Generate a strong one!
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_super_secret_key_change_this_in_production')
 
 # --- CORS Configuration ---
-# Allow requests from your local React development server and the deployed Vercel frontend.
-# Replace 'https://product-management-app-zeta.vercel.app' with your actual Vercel URL
-# if it changes.
 CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "https://product-management-app-zeta.vercel.app"]}})
 
 # --- Google Gemini API Configuration ---
-# Get the GEMINI_API_KEY from environment variables.
-# This will be set on Render. Locally, it comes from your .env file.
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY environment variable not set. Please set it in your .env file or Render.")
 genai.configure(api_key=GEMINI_API_KEY)
 
-# Initialize the Gemini Pro model
 generation_config = {
     "temperature": 0.7,
     "top_p": 1,
@@ -42,43 +36,58 @@ generation_config = {
 }
 
 safety_settings = [
-    {
-        "category": "HARM_CATEGORY_HARASSMENT",
-        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-    },
-    {
-        "category": "HARM_CATEGORY_HATE_SPEECH",
-        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-    },
-    {
-        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-    },
-    {
-        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-    },
+    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
 ]
 
-# --- IMPORTANT CHANGE: Updated model_name to 'gemini-2.5-flash' for higher reasoning ---
 model = genai.GenerativeModel(
-    model_name="gemini-2.5-flash", # Changed from "gemini-1.0-pro" to a more recent Flash model
+    model_name="gemini-2.5-flash",
     generation_config=generation_config,
     safety_settings=safety_settings
 )
 
-# --- Database Model Definition ---
+db = SQLAlchemy(app)
+
+# --- Database Models ---
+
+class User(db.Model):
+    __tablename__ = 'users' # Table name for users
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    is_approved = db.Column(db.Boolean, default=False, nullable=False) # Approval status
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'email': self.email,
+            'is_approved': self.is_approved,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
 class ProductFeature(db.Model):
-    __tablename__ = 'product_feature' # Explicitly set table name for clarity
+    __tablename__ = 'product_feature'
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
-    discovery_document = db.Column(db.Text, nullable=True) # To store AI generated content
-    created_at = db.Column(db.DateTime, default=datetime.utcnow) # Use datetime.utcnow for timezone-naive UTC
+    discovery_document = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Add a user_id to link products to users (optional for now, but good for future)
+    # user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    # user = db.relationship('User', backref='product_features') # If you uncomment user_id
 
     def to_dict(self):
-        # Convert datetime objects to ISO format strings for JSON serialization
         return {
             'id': self.id,
             'name': self.name,
@@ -88,12 +97,90 @@ class ProductFeature(db.Model):
         }
 
 # --- IMPORTANT: Create database tables when the app is initialized by Gunicorn ---
-# This block will run when Gunicorn imports the `app` object.
-# It will create tables if they don't exist.
 with app.app_context():
     db.create_all()
 
-# --- API Routes ---
+# --- Authentication Endpoints ---
+
+@app.route('/api/signup', methods=['POST'])
+def signup():
+    """Registers a new user. User is unapproved by default."""
+    data = request.json
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return jsonify({"message": "Email and password are required"}), 400
+
+    if User.query.filter_by(email=email).first():
+        return jsonify({"message": "Email already registered. Please log in or use a different email."}), 409
+
+    new_user = User(email=email)
+    new_user.set_password(password)
+    # is_approved defaults to False as per requirements
+
+    db.session.add(new_user)
+    db.session.commit()
+
+    # Placeholder for owner notification (no actual email sent)
+    app.logger.info(f"New user signed up: {email}. Awaiting approval by app owner.")
+
+    return jsonify({"message": "Sign up successful! Your account is awaiting approval by the app owner."}), 201
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    """Logs in a user and provides a JWT if approved."""
+    data = request.json
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return jsonify({"message": "Email and password are required"}), 400
+
+    user = User.query.filter_by(email=email).first()
+
+    if not user:
+        return jsonify({"message": "User not found. Please sign up first."}), 404
+
+    if not user.check_password(password):
+        return jsonify({"message": "Invalid credentials. Please check your email and password."}), 401
+
+    if not user.is_approved:
+        return jsonify({"message": "Your account is awaiting approval by the app owner. Please try again later."}), 403
+
+    # If approved, generate JWT
+    token_payload = {
+        'user_id': user.id,
+        'email': user.email,
+        'is_approved': user.is_approved,
+        'exp': datetime.utcnow() + timedelta(hours=24) # Token expires in 24 hours
+    }
+    token = jwt.encode(token_payload, app.config['SECRET_KEY'], algorithm='HS256')
+
+    return jsonify({"message": "Login successful!", "token": token}), 200
+
+@app.route('/api/admin/approve_user/<int:user_id>', methods=['POST'])
+def approve_user(user_id):
+    """
+    Admin endpoint to approve a user.
+    NOTE: This endpoint is NOT secured with authentication yet.
+    In a real application, only an authenticated admin should access this.
+    For now, it's a simple way for you to test the approval flow.
+    """
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    if user.is_approved:
+        return jsonify({"message": f"User {user.email} is already approved."}), 200
+
+    user.is_approved = True
+    db.session.commit()
+    app.logger.info(f"User {user.email} (ID: {user.id}) has been approved by app owner.")
+    return jsonify({"message": f"User {user.email} has been approved."}), 200
+
+
+# --- API Routes for Product Management (will be protected later) ---
 
 @app.route('/api/products', methods=['GET'])
 def get_products():
@@ -144,7 +231,7 @@ def delete_product(product_id):
 @app.route('/api/generate-discovery-document', methods=['POST'])
 def generate_discovery_document():
     """
-    Generates a product discovery document using Google Gemini Pro based on user input.
+    Generates a product discovery document using Google Gemini Flash based on user input.
     Expects JSON with 'product_name' and 'details'.
     """
     data = request.json
@@ -160,12 +247,10 @@ def generate_discovery_document():
 
     try:
         response = model.generate_content(prompt_parts)
-        # Access the text from the response.candidates structure
         generated_text = response.candidates[0].content.parts[0].text
         return jsonify({"discovery_document": generated_text})
     except Exception as e:
         app.logger.error(f"Error generating discovery document: {e}")
-        # Provide a more specific error for debugging from the API response if possible
         if hasattr(e, 'response') and e.response:
             app.logger.error(f"Gemini API error response: {e.response.text}")
             return jsonify({"error": f"Failed to generate discovery document: {e.response.text}"}), 500
@@ -173,4 +258,4 @@ def generate_discovery_document():
 
 # This block only runs when you execute app.py directly (e.g., for local development)
 if __name__ == '__main__':
-    app.run(debug=True, port=5000) # Run on port 5000 for local development
+    app.run(debug=True, port=5000)
