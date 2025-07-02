@@ -26,7 +26,7 @@ import {
 } from '@mui/material';
 
 // Importing Lucide icons
-import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, ChevronLeft, ChevronRight, Search, CheckCircle, Archive, Unarchive } from 'lucide-react'; 
+import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, ChevronLeft, ChevronRight, Search, CheckCircle, Archive, ArchiveRestore } from 'lucide-react'; // Changed Unarchive to ArchiveRestore
 
 // Define the API URL for your backend.
 // In development, it will default to http://localhost:5000.
@@ -1010,7 +1010,7 @@ function App() {
                                         />
                                         <Box sx={{ display: 'flex', gap: 0.5 }}>
                                             <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleArchiveProduct(product.id, false); }}>
-                                                <Unarchive size={16} />
+                                                <ArchiveRestore size={16} /> {/* Changed Unarchive to ArchiveRestore */}
                                             </IconButton>
                                             <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}>
                                                 <Trash2 size={16} />
