@@ -47,7 +47,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState(''); 
-    const [isLoginMode, setIsLoginMode] = true);
+    const [isLoginMode, setIsLoginMode] = useState(true); // Corrected: Added useState
     const [loading, setLoading] = useState(false);
     const [authError, setAuthError] = useState(null);
     const [rememberMe, setRememberMe] = useState(false);
@@ -279,7 +279,8 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                                             sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
                                         >
                                             {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                                        </InputAdornment>
+                                        </IconButton>
+                                    </InputAdornment>
                                 ),
                                 sx: {
                                     borderRadius: '0.5rem',
