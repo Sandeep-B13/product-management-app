@@ -47,7 +47,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState(''); 
-    const [isLoginMode, setIsLoginMode] = useState(true); // Corrected: Added useState
+    const [isLoginMode, setIsLoginMode] = useState(true); // Corrected: Added useState hook
     const [loading, setLoading] = useState(false);
     const [authError, setAuthError] = useState(null);
     const [rememberMe, setRememberMe] = useState(false);
@@ -1763,10 +1763,11 @@ function App() {
                                                     Add Task / Set Stage
                                                 </Button>
                                             </Paper>
-                                        </TabPanel>
-                                    ))}
-                                </>
-                            )}
+                                        </Box>
+                                    </TabPanel>
+                                ))}
+                            </>
+                        )}
                     </Paper>
                 </Box>
             </Box>
