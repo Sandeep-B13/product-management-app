@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
 
 // Importing Material-UI components
@@ -500,6 +500,10 @@ function App() {
     const [sortBy, setSortBy] = useState('newest'); 
     const [filterByStage, setFilterByStage] = useState('All'); // New state for filtering by stage
 
+    // Ref for Lottie animation container
+    const lottieContainer = useRef(null);
+    const lottieInstance = useRef(null);
+
     // Define possible Kanban stages and their associated progress percentages
     const kanbanStages = ['Research', 'Ideation', 'Design', 'Planning', 'Development', 'Documentation'];
     const stageProgressMap = {
@@ -511,6 +515,314 @@ function App() {
         'Documentation': 100,
     };
 
+    // Lottie animation setup
+    useEffect(() => {
+        if (lottieContainer.current && !selectedProduct) {
+            // Ensure lottie is loaded before trying to use it
+            if (window.lottie) {
+                if (lottieInstance.current) {
+                    lottieInstance.current.destroy(); // Destroy previous instance if it exists
+                }
+                lottieInstance.current = window.lottie.loadAnimation({
+                    container: lottieContainer.current,
+                    renderer: 'svg',
+                    loop: true,
+                    autoplay: true,
+                    // Public Lottie animation for an empty/waiting state
+                    animationData: {
+                        "v": "5.7.4",
+                        "fr": 60,
+                        "ip": 0,
+                        "op": 120,
+                        "wh": 100,
+                        "ht": 100,
+                        "nm": "Empty State",
+                        "ddd": 0,
+                        "assets": [],
+                        "layers": [
+                            {
+                                "ddd": 0,
+                                "ind": 1,
+                                "ty": 4,
+                                "nm": "Folder",
+                                "sr": 1,
+                                "ks": {
+                                    "o": { "a": 0, "k": 100, "ix": 11 },
+                                    "rp": { "a": 0, "k": 0, "ix": 12 },
+                                    "s": { "a": 0, "k": [100, 100, 100], "ix": 6 },
+                                    "r": { "a": 0, "k": 0, "ix": 10 },
+                                    "p": { "a": 0, "k": [50, 50, 0], "ix": 2 },
+                                    "a": { "a": 0, "k": [50, 50, 0], "ix": 1 }
+                                },
+                                "ao": 0,
+                                "shapes": [
+                                    {
+                                        "ty": "gr",
+                                        "it": [
+                                            {
+                                                "ind": 0,
+                                                "ty": "sh",
+                                                "ix": 1,
+                                                "ks": {
+                                                    "k": {
+                                                        "i": [
+                                                            { "x": 0.833, "y": 0.833 },
+                                                            { "x": 0.833, "y": 0.833 },
+                                                            { "x": 0.833, "y": 0.833 },
+                                                            { "x": 0.833, "y": 0.833 }
+                                                        ],
+                                                        "o": [
+                                                            { "x": 0.167, "y": 0.167 },
+                                                            { "x": 0.167, "y": 0.167 },
+                                                            { "x": 0.167, "y": 0.167 },
+                                                            { "x": 0.167, "y": 0.167 }
+                                                        ],
+                                                        "v": [
+                                                            [30, 80],
+                                                            [70, 80],
+                                                            [70, 20],
+                                                            [30, 20]
+                                                        ]
+                                                    },
+                                                    "ix": 2
+                                                },
+                                                "nm": "Rectangle Path",
+                                                "mn": "ADBE Vector Shape - Group",
+                                                "hd": false
+                                            },
+                                            {
+                                                "ty": "fl",
+                                                "c": { "a": 0, "k": [0.8, 0.8, 0.8, 1], "ix": 3 },
+                                                "o": { "a": 0, "k": 100, "ix": 4 },
+                                                "r": 1,
+                                                "nm": "Fill 1",
+                                                "mn": "ADBE Vector Fill",
+                                                "hd": false
+                                            },
+                                            {
+                                                "ty": "st",
+                                                "c": { "a": 0, "k": [0.5, 0.5, 0.5, 1], "ix": 5 },
+                                                "o": { "a": 0, "k": 100, "ix": 6 },
+                                                "w": { "a": 0, "k": 2, "ix": 7 },
+                                                "lc": 1,
+                                                "lj": 1,
+                                                "ml": 4,
+                                                "nm": "Stroke 1",
+                                                "mn": "ADBE Vector Stroke",
+                                                "hd": false
+                                            }
+                                        ],
+                                        "nm": "Rectangle 1",
+                                        "mn": "ADBE Vector Group",
+                                        "hd": false
+                                    },
+                                    {
+                                        "ty": "gr",
+                                        "it": [
+                                            {
+                                                "ind": 0,
+                                                "ty": "sh",
+                                                "ix": 1,
+                                                "ks": {
+                                                    "k": {
+                                                        "i": [
+                                                            { "x": 0.833, "y": 0.833 },
+                                                            { "x": 0.833, "y": 0.833 },
+                                                            { "x": 0.833, "y": 0.833 },
+                                                            { "x": 0.833, "y": 0.833 }
+                                                        ],
+                                                        "o": [
+                                                            { "x": 0.167, "y": 0.167 },
+                                                            { "x": 0.167, "y": 0.167 },
+                                                            { "x": 0.167, "y": 0.167 },
+                                                            { "x": 0.167, "y": 0.167 }
+                                                        ],
+                                                        "v": [
+                                                            [30, 80],
+                                                            [70, 80],
+                                                            [70, 20],
+                                                            [30, 20]
+                                                        ]
+                                                    },
+                                                    "ix": 2
+                                                },
+                                                "nm": "Rectangle Path",
+                                                "mn": "ADBE Vector Shape - Group",
+                                                "hd": false
+                                            },
+                                            {
+                                                "ty": "fl",
+                                                "c": { "a": 0, "k": [0.9, 0.9, 0.9, 1], "ix": 3 },
+                                                "o": { "a": 0, "k": 100, "ix": 4 },
+                                                "r": 1,
+                                                "nm": "Fill 1",
+                                                "mn": "ADBE Vector Fill",
+                                                "hd": false
+                                            },
+                                            {
+                                                "ty": "st",
+                                                "c": { "a": 0, "k": [0.6, 0.6, 0.6, 1], "ix": 5 },
+                                                "o": { "a": 0, "k": 100, "ix": 6 },
+                                                "w": { "a": 0, "k": 2, "ix": 7 },
+                                                "lc": 1,
+                                                "lj": 1,
+                                                "ml": 4,
+                                                "nm": "Stroke 1",
+                                                "mn": "ADBE Vector Stroke",
+                                                "hd": false
+                                            }
+                                        ],
+                                        "nm": "Rectangle 2",
+                                        "mn": "ADBE Vector Group",
+                                        "hd": false,
+                                        "tf": true
+                                    },
+                                    {
+                                        "ty": "gr",
+                                        "it": [
+                                            {
+                                                "ind": 0,
+                                                "ty": "sh",
+                                                "ix": 1,
+                                                "ks": {
+                                                    "k": {
+                                                        "i": [
+                                                            { "x": 0.833, "y": 0.833 },
+                                                            { "x": 0.833, "y": 0.833 },
+                                                            { "x": 0.833, "y": 0.833 },
+                                                            { "x": 0.833, "y": 0.833 }
+                                                        ],
+                                                        "o": [
+                                                            { "x": 0.167, "y": 0.167 },
+                                                            { "x": 0.167, "y": 0.167 },
+                                                            { "x": 0.167, "y": 0.167 },
+                                                            { "x": 0.167, "y": 0.167 }
+                                                        ],
+                                                        "v": [
+                                                            [30, 80],
+                                                            [70, 80],
+                                                            [70, 20],
+                                                            [30, 20]
+                                                        ]
+                                                    },
+                                                    "ix": 2
+                                                },
+                                                "nm": "Rectangle Path",
+                                                "mn": "ADBE Vector Shape - Group",
+                                                "hd": false
+                                            },
+                                            {
+                                                "ty": "fl",
+                                                "c": { "a": 0, "k": [1, 1, 1, 1], "ix": 3 },
+                                                "o": { "a": 0, "k": 100, "ix": 4 },
+                                                "r": 1,
+                                                "nm": "Fill 1",
+                                                "mn": "ADBE Vector Fill",
+                                                "hd": false
+                                            },
+                                            {
+                                                "ty": "st",
+                                                "c": { "a": 0, "k": [0.7, 0.7, 0.7, 1], "ix": 5 },
+                                                "o": { "a": 0, "k": 100, "ix": 6 },
+                                                "w": { "a": 0, "k": 2, "ix": 7 },
+                                                "lc": 1,
+                                                "lj": 1,
+                                                "ml": 4,
+                                                "nm": "Stroke 1",
+                                                "mn": "ADBE Vector Stroke",
+                                                "hd": false
+                                            }
+                                        ],
+                                        "nm": "Rectangle 3",
+                                        "mn": "ADBE Vector Group",
+                                        "hd": false,
+                                        "tf": true
+                                    }
+                                ],
+                                "ip": 0,
+                                "op": 120,
+                                "st": 0,
+                                "bm": 0
+                            },
+                            {
+                                "ddd": 0,
+                                "ind": 2,
+                                "ty": 4,
+                                "nm": "Magnifying Glass",
+                                "sr": 1,
+                                "ks": {
+                                    "o": { "a": 0, "k": 100, "ix": 11 },
+                                    "rp": { "a": 0, "k": 0, "ix": 12 },
+                                    "s": { "a": 0, "k": [100, 100, 100], "ix": 6 },
+                                    "r": { "a": 0, "k": 0, "ix": 10 },
+                                    "p": { "a": 0, "k": [50, 50, 0], "ix": 2 },
+                                    "a": { "a": 0, "k": [50, 50, 0], "ix": 1 }
+                                },
+                                "ao": 0,
+                                "shapes": [
+                                    {
+                                        "ty": "gr",
+                                        "it": [
+                                            {
+                                                "ind": 0,
+                                                "ty": "sh",
+                                                "ix": 1,
+                                                "ks": {
+                                                    "k": {
+                                                        "i": [
+                                                            { "x": 0.833, "y": 0.833 },
+                                                            { "x": 0.833, "y": 0.833 },
+                                                            { "x": 0.833, "y": 0.833 },
+                                                            { "x": 0.833, "y": 0.833 }
+                                                        ],
+                                                        "o": [
+                                                            { "x": 0.167, "y": 0.167 },
+                                                            { "x": 0.167, "y": 0.167 },
+                                                            { "x": 0.167, "y": 0.167 },
+                                                            { "x": 0.167, "y": 0.167 }
+                                                        ],
+                                                        "v": [
+                                                            [30, 80],
+                                                            [70, 80],
+                                                            [70, 20],
+                                                            [30, 20]
+                                                        ]
+                                                    },
+                                                    "ix": 2
+                                                },
+                                                "nm": "Rectangle Path",
+                                                "mn": "ADBE Vector Shape - Group",
+                                                "hd": false
+                                            },
+                                            {
+                                                "ty": "st",
+                                                "c": { "a": 0, "k": [0.2, 0.2, 0.2, 1], "ix": 3 },
+                                                "o": { "a": 0, "k": 100, "ix": 4 },
+                                                "w": { "a": 0, "k": 2, "ix": 5 },
+                                                "lc": 1,
+                                                "lj": 1,
+                                                "ml": 4,
+                                                "nm": "Stroke 1",
+                                                "mn": "ADBE Vector Stroke",
+                                                "hd": false
+                                            }
+                                        ],
+                                        "nm": "Ellipse 1",
+                                        "mn": "ADBE Vector Group",
+                                        "hd": false
+                                    }
+                                ],
+                                "ip": 0,
+                                "op": 120,
+                                "st": 0,
+                                "bm": 0
+                            }
+                        ]
+                    }
+                });
+            }
+        }
+    }, [selectedProduct]); // Re-run when selectedProduct changes
 
     const handleSnackbarClose = (event, reason) => {
         if (reason === 'clickaway') {
@@ -842,11 +1154,11 @@ function App() {
     return (
         <Box
             sx={{
-                minHeight: '100vh',
-                background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100vh', // Make the entire app fill the viewport height
                 fontFamily: 'Inter, sans-serif',
-                display: 'flex', 
-                flexDirection: 'column', 
+                background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)',
             }}
         >
             {/* Main Header */}
@@ -861,6 +1173,7 @@ function App() {
                     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', 
                     borderRadius: '0.75rem', 
                     margin: '1rem', 
+                    flexShrink: 0, // Prevent header from shrinking
                 }}
             >
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -897,7 +1210,7 @@ function App() {
             </Box>
 
             {/* Main Content Area: Sidebar + Kanban Board */}
-            <Box sx={{ flexGrow: 1, display: 'flex', padding: '1rem', gap: '1rem' }}> 
+            <Box sx={{ flexGrow: 1, display: 'flex', padding: '1rem', gap: '1rem', overflow: 'hidden' }}> 
                 {/* Left Sidebar */}
                 <Paper
                     elevation={3}
@@ -910,9 +1223,12 @@ function App() {
                         p: 2,
                         display: 'flex',
                         flexDirection: 'column',
+                        // Fixed height for sidebar to allow its content to scroll
+                        height: '100%', 
                         '@media (max-width: 600px)': { 
                             width: '100%',
                             marginBottom: '1rem',
+                            height: 'auto', // Adjust for mobile if needed
                         },
                     }}
                 >
@@ -1052,7 +1368,7 @@ function App() {
                                 {showArchivedView ? 'Archived Items' : 'Active Items'}
                             </ListSubheader>
                         }
-                        sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', maxHeight: 'calc(100vh - 450px)' }} // Adjusted max height
+                        sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', flexGrow: 1 }} // Allow list to scroll
                     >
                         {loading && <Typography sx={{ color: '#9333ea', textAlign: 'center', marginY: 3, fontSize: '0.9rem', fontWeight: 500 }}>Loading...</Typography>}
                         {error && <Alert severity="error" sx={{ marginY: 3, borderRadius: '0.5rem' }}>{error}</Alert>}
@@ -1135,6 +1451,7 @@ function App() {
                             justifyContent: 'space-between',
                             flexWrap: 'wrap', 
                             gap: 2, 
+                            flexShrink: 0, // Prevent header from shrinking
                         }}
                     >
                         <Box>
@@ -1193,115 +1510,142 @@ function App() {
                         </Box>
                     </Paper>
 
-                    {/* Kanban Board Columns */}
-                    <Grid container spacing={2} sx={{ flexGrow: 1, alignItems: 'stretch' }}> 
-                        {kanbanStages.map(stage => (
-                            <Grid item xs={12} sm={6} md={4} lg={3} key={stage}> 
-                                <Paper
-                                    elevation={1}
-                                    sx={{
-                                        backgroundColor: '#f5f3ff', // Base color, could vary by stage
-                                        p: 2,
-                                        borderRadius: '0.75rem', 
-                                        minHeight: '200px', // Maintain minHeight
-                                        height: '100%', // Ensure all cards stretch to fill grid item height
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        border: '1px solid #d8b4fe', 
-                                        // Highlight current selected product's stage
-                                        ...(selectedProduct && selectedProduct.stage === stage && {
-                                            border: '2px solid #4f46e5',
-                                            boxShadow: '0 0 0 3px rgba(79, 70, 229, 0.3)',
-                                        })
-                                    }}
-                                >
-                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
-                                            <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', display: 'inline-block', marginRight: '0.5rem' }} />
-                                            {stage}
-                                        </Typography>
-                                    </Box>
-                                    <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                        {/* Display the selected product's details if its stage matches the column */}
-                                        {selectedProduct && selectedProduct.stage === stage && (
-                                            <Box sx={{ 
-                                                backgroundColor: '#e0e7ff', // Light indigo background for selected product in its stage
-                                                p: 1.5, 
-                                                borderRadius: '0.5rem', 
-                                                border: '1px solid #c7d2fe',
-                                                marginBottom: 1
-                                            }}>
-                                                <Typography variant="body2" sx={{ fontWeight: 'medium', color: '#374151' }}>
-                                                    {selectedProduct.name}
-                                                </Typography>
-                                                <Typography variant="caption" sx={{ color: '#6b7280', fontSize: '0.7rem' }}>
-                                                    Progress: {selectedProduct.progress}%
-                                                </Typography>
-                                            </Box>
-                                        )}
-
-                                        {/* Example static tasks - these would ideally come from DB and be filterable by product */}
-                                        {stage === 'Research' && (
-                                            <>
-                                                <Typography variant="body2" sx={{ color: '#374151' }}>Market analysis completed <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
-                                                <Typography variant="body2" sx={{ color: '#374151' }}>Competitor analysis <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
-                                            </>
-                                        )}
-                                        {stage === 'Ideation' && (
-                                            <>
-                                                <Typography variant="body2" sx={{ color: '#374151' }}>Plan logic and expectations <Box component="span" sx={{ color: '#fde047', display: 'inline-flex', alignItems: 'center' }}><CircularProgress size={14} sx={{ marginLeft: '0.25rem', color: '#fde047' }} /></Box></Typography>
-                                            </>
-                                        )}
-                                        {stage === 'Design' && (
-                                            <>
-                                                <Typography variant="body2" sx={{ color: '#374151' }}>PRD handover to design team <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
-                                            </>
-                                        )}
-                                        {stage === 'Planning' && (
-                                            <>
-                                                <Typography variant="body2" sx={{ color: '#374151' }}>Timeline planning <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
-                                            </>
-                                        )}
-                                        {stage === 'Development' && (
-                                            <>
-                                                <Typography variant="body2" sx={{ color: '#374151' }}>Frontend development <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
-                                                <Typography variant="body2" sx={{ color: '#374151' }}>Backend API integration <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
-                                            </>
-                                        )}
-                                        {stage === 'Documentation' && (
-                                            <>
-                                                <Typography variant="body2" sx={{ color: '#374151' }}>Tech documentation handover <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
-                                            </>
-                                        )}
-                                        {/* Add button to add task to this stage (future enhancement) */}
-                                        <Button 
-                                            variant="outlined" 
-                                            startIcon={<Plus size={16} />} 
-                                            sx={{ 
-                                                marginTop: 'auto', 
-                                                textTransform: 'none', 
-                                                color: '#4f46e5', 
-                                                borderColor: '#d8b4fe', 
-                                                '&:hover': { borderColor: '#9333ea', backgroundColor: '#f0eaff' } 
-                                            }}
-                                            onClick={() => {
-                                                if (selectedProduct) {
-                                                    const newProgress = stageProgressMap[stage];
-                                                    updateProductStageAndProgress(selectedProduct.id, stage, newProgress);
-                                                } else {
-                                                    setSnackbarMessage("Please select a product/feature first to add tasks or set stage.");
-                                                    setSnackbarSeverity('info');
-                                                    setSnackbarOpen(true);
-                                                }
+                    {/* Kanban Board Columns Container - Now scrollable */}
+                    <Box sx={{ flexGrow: 1, overflowY: 'auto', paddingBottom: '1rem' }}> {/* Added paddingBottom for scroll comfort */}
+                        {selectedProduct === null ? (
+                            <Box sx={{ 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                height: '100%', 
+                                minHeight: '300px', // Ensure it takes up space
+                                backgroundColor: '#fff',
+                                borderRadius: '1rem',
+                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                                p: 4,
+                                mx: 2, // Add some horizontal margin
+                                my: 1, // Add some vertical margin
+                            }}>
+                                <Box ref={lottieContainer} sx={{ width: '200px', height: '200px', marginBottom: 2 }}></Box>
+                                <Typography variant="h6" sx={{ color: '#4f46e5', fontWeight: 'bold', textAlign: 'center' }}>
+                                    Select a Product or Feature
+                                </Typography>
+                                <Typography variant="body1" sx={{ color: '#6b7280', textAlign: 'center', maxWidth: '400px' }}>
+                                    Choose an item from the left sidebar to view its Kanban board and details.
+                                </Typography>
+                            </Box>
+                        ) : (
+                            <Grid container spacing={2} sx={{ height: '100%', alignItems: 'stretch' }}> {/* Ensure Grid container stretches */}
+                                {kanbanStages.map(stage => (
+                                    <Grid item xs={12} sm={6} md={4} lg={3} key={stage} sx={{ display: 'flex' }}> {/* Ensure Grid item is flex to stretch child */}
+                                        <Paper
+                                            elevation={1}
+                                            sx={{
+                                                backgroundColor: '#f5f3ff', // Base color, could vary by stage
+                                                p: 2,
+                                                borderRadius: '0.75rem', 
+                                                minHeight: '200px', 
+                                                height: '100%', // Crucial for making all cards the same size
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                border: '1px solid #d8b4fe', 
+                                                // Highlight current selected product's stage
+                                                ...(selectedProduct && selectedProduct.stage === stage && {
+                                                    border: '2px solid #4f46e5',
+                                                    boxShadow: '0 0 0 3px rgba(79, 70, 229, 0.3)',
+                                                })
                                             }}
                                         >
-                                            Add Task / Set Stage
-                                        </Button>
-                                    </Box>
-                                </Paper>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                                                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
+                                                    <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', display: 'inline-block', marginRight: '0.5rem' }} />
+                                                    {stage}
+                                                </Typography>
+                                            </Box>
+                                            <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                                {/* Display the selected product's details if its stage matches the column */}
+                                                {selectedProduct && selectedProduct.stage === stage && (
+                                                    <Box sx={{ 
+                                                        backgroundColor: '#e0e7ff', // Light indigo background for selected product in its stage
+                                                        p: 1.5, 
+                                                        borderRadius: '0.5rem', 
+                                                        border: '1px solid #c7d2fe',
+                                                        marginBottom: 1
+                                                    }}>
+                                                        <Typography variant="body2" sx={{ fontWeight: 'medium', color: '#374151' }}>
+                                                            {selectedProduct.name}
+                                                        </Typography>
+                                                        <Typography variant="caption" sx={{ color: '#6b7280', fontSize: '0.7rem' }}>
+                                                            Progress: {selectedProduct.progress}%
+                                                        </Typography>
+                                                    </Box>
+                                                )}
+
+                                                {/* Example static tasks - these would ideally come from DB and be filterable by product */}
+                                                {stage === 'Research' && (
+                                                    <>
+                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Market analysis completed <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
+                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Competitor analysis <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
+                                                    </>
+                                                )}
+                                                {stage === 'Ideation' && (
+                                                    <>
+                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Plan logic and expectations <Box component="span" sx={{ color: '#fde047', display: 'inline-flex', alignItems: 'center' }}><CircularProgress size={14} sx={{ marginLeft: '0.25rem', color: '#fde047' }} /></Box></Typography>
+                                                    </>
+                                                )}
+                                                {stage === 'Design' && (
+                                                    <>
+                                                        <Typography variant="body2" sx={{ color: '#374151' }}>PRD handover to design team <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                                    </>
+                                                )}
+                                                {stage === 'Planning' && (
+                                                    <>
+                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Timeline planning <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                                    </>
+                                                )}
+                                                {stage === 'Development' && (
+                                                    <>
+                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Frontend development <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Backend API integration <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                                    </>
+                                                )}
+                                                {stage === 'Documentation' && (
+                                                    <>
+                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Tech documentation handover <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                                    </>
+                                                )}
+                                                {/* Add button to add task to this stage (future enhancement) */}
+                                                <Button 
+                                                    variant="outlined" 
+                                                    startIcon={<Plus size={16} />} 
+                                                    sx={{ 
+                                                        marginTop: 'auto', 
+                                                        textTransform: 'none', 
+                                                        color: '#4f46e5', 
+                                                        borderColor: '#d8b4fe', 
+                                                        '&:hover': { borderColor: '#9333ea', backgroundColor: '#f0eaff' } 
+                                                    }}
+                                                    onClick={() => {
+                                                        if (selectedProduct) {
+                                                            const newProgress = stageProgressMap[stage];
+                                                            updateProductStageAndProgress(selectedProduct.id, stage, newProgress);
+                                                        } else {
+                                                            setSnackbarMessage("Please select a product/feature first to add tasks or set stage.");
+                                                            setSnackbarSeverity('info');
+                                                            setSnackbarOpen(true);
+                                                        }
+                                                    }}
+                                                >
+                                                    Add Task / Set Stage
+                                                </Button>
+                                            </Box>
+                                        </Paper>
+                                    </Grid>
+                                ))}
                             </Grid>
-                        ))}
-                    </Grid>
+                        )}
+                    </Box>
                 </Box>
             </Box>
 
