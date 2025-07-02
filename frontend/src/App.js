@@ -20,18 +20,19 @@ import {
     ListItemText,
     IconButton,
     InputAdornment,
-    Grid 
+    Grid, // Specifically for layout
+    LinearProgress // For progress bar
 } from '@mui/material';
 
 // Importing Lucide icons
-import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2 } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 
 // Define the API URL for your backend.
 // In development, it will default to http://localhost:5000.
 // In production (on Vercel), it will use the REACT_APP_API_URL environment variable.
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-// --- AuthPage Component ---
+// --- AuthPage Component (Frozen - No changes here) ---
 function AuthPage({ setIsLoggedIn, setAuthMessage }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -74,13 +75,11 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
         try {
             let response;
             if (isLoginMode) {
-                // Use axios for actual login API call
                 response = await axios.post(`${API_URL}/api/login`, { email, password });
                 localStorage.setItem('token', response.data.token);
                 setIsLoggedIn(true);
                 setAuthMessage(response.data.message); 
             } else {
-                // Use axios for actual signup API call
                 response = await axios.post(`${API_URL}/api/signup`, { email, password });
                 setAuthMessage(response.data.message);
                 setSnackbarMessage(response.data.message);
@@ -474,6 +473,7 @@ function App() {
     const [error, setError] = useState(null);
     const [generatedDocument, setGeneratedDocument] = useState('');
     const [discoveryInput, setDiscoveryInput] = useState('');
+    const [showAiAssistant, setShowAiAssistant] = useState(false); // State to toggle AI Assistant panel
 
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [authMessage, setAuthMessage] = useState(''); 
@@ -643,7 +643,7 @@ function App() {
                 p.id === selectedProduct.id ? { ...p, discovery_document: doc } : p
             ));
             setSelectedProduct(prev => ({ ...prev, discovery_document: doc }));
-            setSnackbarMessage("Discovery document generated and saved!");
+            setSnackbarMessage("Document generated and saved!");
             setSnackbarSeverity('success');
             setSnackbarOpen(true);
 
@@ -681,113 +681,453 @@ function App() {
             sx={{
                 minHeight: '100vh',
                 background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)', 
-                p: 4, 
                 fontFamily: 'Inter, sans-serif',
+                display: 'flex', // Make App container a flex container
+                flexDirection: 'column', // Stack children vertically
             }}
         >
+            {/* Main Header */}
             <Box
                 component="header"
                 sx={{
-                    textAlign: 'center',
-                    marginBottom: 6, 
-                    paddingY: 3, 
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '1rem 2rem', // px-8 py-4
                     backgroundColor: '#fff',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', 
-                    borderBottomLeftRadius: '1.5rem', 
-                    borderBottomRightRadius: '1.5rem', 
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', // shadow-md
+                    borderRadius: '0.75rem', // rounded-xl
+                    margin: '1rem', // m-4
                 }}
             >
-                <Typography variant="h2" component="h1" sx={{ fontSize: '3.75rem', fontWeight: 800, color: '#111827', lineHeight: 1, letterSpacing: '-0.025em' }}>
-                    Auto Product Manager
-                </Typography>
-                <Typography variant="h5" sx={{ marginTop: 2, color: '#4b5563' }}>
-                    Your Product Manager on <Box component="span" sx={{ color: '#7e22ce', fontWeight: 700 }}>Autopilot Mode</Box>
-                </Typography>
-                <Button
-                    onClick={handleLogout}
-                    variant="contained"
-                    sx={{
-                        marginTop: 3, 
-                        paddingX: 3, 
-                        paddingY: 1, 
-                        backgroundColor: '#e5e7eb', 
-                        color: '#374151', 
-                        fontWeight: 600, 
-                        borderRadius: '0.5rem', 
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', 
-                        textTransform: 'none',
-                        transition: 'all 300ms ease-in-out',
-                        '&:hover': {
-                            backgroundColor: '#d1d5db', 
-                            transform: 'scale(1.05)', 
-                        },
-                    }}
-                >
-                    Logout
-                </Button>
-                {authMessage && (
-                    <Typography variant="body1" sx={{ color: '#16a34a', textAlign: 'center', marginTop: 2, fontSize: '1.125rem', fontWeight: 600 }}>{authMessage}</Typography>
-                )}
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Sparkles size={32} color="#4f46e5" style={{ marginRight: '0.5rem' }} />
+                    <Box>
+                        <Typography variant="h6" component="h1" sx={{ fontWeight: 'bold', color: '#111827', lineHeight: 1 }}>
+                            Auto Product Manager
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#4b5563', display: 'block' }}>
+                            Your Product Management in Auto Pilot mode
+                        </Typography>
+                    </Box>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Button
+                        variant="contained"
+                        startIcon={<Plus size={20} />}
+                        sx={{
+                            backgroundColor: '#9333ea', // bg-purple-600
+                            '&:hover': { backgroundColor: '#7e22ce' }, // hover:bg-purple-700
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            padding: '0.5rem 1rem',
+                            boxShadow: 'none',
+                        }}
+                        onClick={handleAddProduct} // Re-use existing add product logic
+                    >
+                        New Item
+                    </Button>
+                    <Button
+                        onClick={handleLogout}
+                        variant="outlined"
+                        sx={{
+                            borderColor: '#e5e7eb', // border-gray-200
+                            color: '#374151', // text-gray-700
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            padding: '0.5rem 1rem',
+                            '&:hover': {
+                                backgroundColor: '#f0f0f0', // Light hover background
+                                borderColor: '#d1d5db',
+                            },
+                        }}
+                    >
+                        Logout
+                    </Button>
+                </Box>
             </Box>
 
-            <Container maxWidth="xl" sx={{ marginX: 'auto', display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 5 }}>
-                {/* Product List Panel (Existing) */}
+            {/* Main Content Area: Sidebar + Kanban Board */}
+            <Box sx={{ flexGrow: 1, display: 'flex', padding: '1rem', gap: '1rem' }}> {/* flex-grow to fill remaining space */}
+                {/* Left Sidebar: Active Items */}
                 <Paper
                     elevation={3}
                     sx={{
+                        width: { xs: '100%', sm: '280px' }, // Fixed width for sidebar on larger screens
+                        flexShrink: 0, // Prevent shrinking
+                        backgroundColor: '#fff',
+                        borderRadius: '1rem', // rounded-xl
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                        p: 2,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        // Responsive adjustments for sidebar
+                        '@media (max-width: 600px)': { // For small screens, make it full width and potentially collapsible
+                            width: '100%',
+                            marginBottom: '1rem',
+                        },
+                    }}
+                >
+                    <List
+                        subheader={
+                            <ListSubheader component="div" id="nested-list-subheader" sx={{ 
+                                backgroundColor: 'transparent', 
+                                fontWeight: 'bold', 
+                                fontSize: '1.125rem', // text-lg
+                                color: '#1f2937', // text-gray-800
+                                lineHeight: '1.75rem', // leading-7
+                                paddingX: 0,
+                                paddingY: 1,
+                            }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                        <Box sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#16a34a', marginRight: '0.5rem' }} /> {/* green dot */}
+                                        Active Items
+                                    </Box>
+                                    <Button size="small" sx={{ textTransform: 'none', color: '#4f46e5' }}>
+                                        <ChevronLeft size={16} style={{ marginRight: '0.25rem' }} /> Collapse
+                                    </Button>
+                                </Box>
+                            </ListSubheader>
+                        }
+                        sx={{ width: '100%', maxWidth: 360, bgcolor: 'background.paper', overflow: 'auto', maxHeight: 'calc(100vh - 180px)' }} // Adjust max height
+                    >
+                        {products.length === 0 && !loading && !error ? (
+                            <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 3 }}>No products yet.</Typography>
+                        ) : (
+                            products.map(product => (
+                                <ListItem
+                                    key={product.id}
+                                    onClick={() => handleSelectProduct(product)}
+                                    secondaryAction={
+                                        <IconButton edge="end" aria-label="delete" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}>
+                                            <Trash2 size={16} />
+                                        </IconButton>
+                                    }
+                                    sx={{
+                                        borderRadius: '0.5rem', // rounded-lg
+                                        marginBottom: '0.5rem', // mb-2
+                                        backgroundColor: selectedProduct && selectedProduct.id === product.id ? '#eef2ff' : '#fff', // bg-indigo-50 vs bg-white
+                                        border: selectedProduct && selectedProduct.id === product.id ? '1px solid #c7d2fe' : '1px solid #f3f4f6', // border-indigo-200 vs border-gray-100
+                                        '&:hover': {
+                                            backgroundColor: '#e0e7ff', // hover:bg-indigo-100
+                                        },
+                                    }}
+                                >
+                                    <ListItemText 
+                                        primary={product.name} 
+                                        secondary={product.discovery_document ? "Documented" : "Pending Doc"}
+                                        primaryTypographyProps={{ fontWeight: 'medium', color: '#1f2937' }}
+                                        secondaryTypographyProps={{ fontSize: '0.75rem', color: '#6b7280' }}
+                                    />
+                                </ListItem>
+                            ))
+                        )}
+                    </List>
+                </Paper>
+
+                {/* Right Main Content: Kanban Board */}
+                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {/* Kanban Board Header */}
+                    <Paper
+                        elevation={3}
+                        sx={{
+                            backgroundColor: '#fff',
+                            p: 2,
+                            borderRadius: '1rem', // rounded-xl
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap', // Allow wrapping on smaller screens
+                            gap: 2, // Gap between items
+                        }}
+                    >
+                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1f2937' }}>
+                            AI Chat Integration <Typography component="span" variant="body2" sx={{ color: '#6b7280' }}>Development Stage</Typography>
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="body2" sx={{ color: '#4b5563' }}>Progress: 60%</Typography>
+                                <LinearProgress variant="determinate" value={60} sx={{ width: 100, borderRadius: 5, height: 8, backgroundColor: '#e0e7ff', '& .MuiLinearProgress-bar': { backgroundColor: '#4f46e5' } }} />
+                            </Box>
+                            <Button
+                                variant="contained"
+                                startIcon={<Sparkles size={20} />}
+                                sx={{
+                                    backgroundColor: '#4f46e5', // bg-indigo-600
+                                    '&:hover': { backgroundColor: '#4338ca' }, // hover:bg-indigo-700
+                                    color: '#fff',
+                                    fontWeight: 600,
+                                    borderRadius: '0.5rem',
+                                    textTransform: 'none',
+                                    padding: '0.5rem 1rem',
+                                    boxShadow: 'none',
+                                }}
+                                onClick={() => setShowAiAssistant(!showAiAssistant)} // Toggle AI Assistant
+                            >
+                                AI Assistant
+                            </Button>
+                        </Box>
+                    </Paper>
+
+                    {/* Kanban Board Columns */}
+                    <Grid container spacing={2} sx={{ flexGrow: 1, alignItems: 'stretch' }}> {/* align-items: stretch to make columns equal height */}
+                        {/* Research Column */}
+                        <Grid item xs={12} sm={6} md={4} lg={3}> {/* Responsive column sizing */}
+                            <Paper
+                                elevation={1}
+                                sx={{
+                                    backgroundColor: '#f5f3ff', // bg-purple-50
+                                    p: 2,
+                                    borderRadius: '0.75rem', // rounded-xl
+                                    minHeight: '200px', // Ensure minimum height for visual consistency
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    border: '1px solid #d8b4fe', // border-purple-300
+                                }}
+                            >
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
+                                        <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', display: 'inline-block', marginRight: '0.5rem' }} />
+                                        Research
+                                    </Typography>
+                                    <IconButton size="small"><ChevronRight size={16} /></IconButton>
+                                </Box>
+                                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    <Typography variant="body2" sx={{ color: '#374151' }}>Market analysis completed <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
+                                    <Typography variant="body2" sx={{ color: '#374151' }}>Competitor analysis <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
+                                    <Button variant="outlined" startIcon={<Plus size={16} />} sx={{ marginTop: 'auto', textTransform: 'none', color: '#4f46e5', borderColor: '#d8b4fe', '&:hover': { borderColor: '#9333ea', backgroundColor: '#f0eaff' } }}>Add Task</Button>
+                                </Box>
+                            </Paper>
+                        </Grid>
+
+                        {/* Ideation Column */}
+                        <Grid item xs={12} sm={6} md={4} lg={3}>
+                            <Paper
+                                elevation={1}
+                                sx={{
+                                    backgroundColor: '#eef2ff', // bg-indigo-50
+                                    p: 2,
+                                    borderRadius: '0.75rem',
+                                    minHeight: '200px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    border: '1px solid #c7d2fe', // border-indigo-200
+                                }}
+                            >
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#6366f1' }}>
+                                        <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#6366f1', display: 'inline-block', marginRight: '0.5rem' }} />
+                                        Ideation
+                                    </Typography>
+                                    <IconButton size="small"><ChevronRight size={16} /></IconButton>
+                                </Box>
+                                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    <Typography variant="body2" sx={{ color: '#374151' }}>Plan logic and expectations <Box component="span" sx={{ color: '#fde047', display: 'inline-flex', alignItems: 'center' }}><CircularProgress size={14} sx={{ marginLeft: '0.25rem', color: '#fde047' }} /></Box></Typography>
+                                    <Button variant="outlined" startIcon={<Plus size={16} />} sx={{ marginTop: 'auto', textTransform: 'none', color: '#6366f1', borderColor: '#c7d2fe', '&:hover': { borderColor: '#4f46e5', backgroundColor: '#e0e7ff' } }}>Add Task</Button>
+                                </Box>
+                            </Paper>
+                        </Grid>
+
+                        {/* Design Column */}
+                        <Grid item xs={12} sm={6} md={4} lg={3}>
+                            <Paper
+                                elevation={1}
+                                sx={{
+                                    backgroundColor: '#fff',
+                                    p: 2,
+                                    borderRadius: '0.75rem',
+                                    minHeight: '200px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    border: '1px solid #e5e7eb',
+                                }}
+                            >
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#4b5563' }}>
+                                        <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#9ca3af', display: 'inline-block', marginRight: '0.5rem' }} />
+                                        Design
+                                    </Typography>
+                                    <IconButton size="small"><ChevronRight size={16} /></IconButton>
+                                </Box>
+                                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    <Typography variant="body2" sx={{ color: '#374151' }}>PRD handover to design team <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                    <Button variant="outlined" startIcon={<Plus size={16} />} sx={{ marginTop: 'auto', textTransform: 'none', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#9ca3af', backgroundColor: '#f3f4f6' } }}>Add Task</Button>
+                                </Box>
+                            </Paper>
+                        </Grid>
+                        
+                        {/* Planning Column */}
+                        <Grid item xs={12} sm={6} md={4} lg={3}>
+                            <Paper
+                                elevation={1}
+                                sx={{
+                                    backgroundColor: '#f5f3ff', // bg-purple-50
+                                    p: 2,
+                                    borderRadius: '0.75rem',
+                                    minHeight: '200px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    border: '1px solid #d8b4fe',
+                                }}
+                            >
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
+                                        <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', display: 'inline-block', marginRight: '0.5rem' }} />
+                                        Planning
+                                    </Typography>
+                                    <IconButton size="small"><ChevronRight size={16} /></IconButton>
+                                </Box>
+                                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    <Typography variant="body2" sx={{ color: '#374151' }}>Timeline planning <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                    <Button variant="outlined" startIcon={<Plus size={16} />} sx={{ marginTop: 'auto', textTransform: 'none', color: '#4f46e5', borderColor: '#d8b4fe', '&:hover': { borderColor: '#9333ea', backgroundColor: '#f0eaff' } }}>Add Task</Button>
+                                </Box>
+                            </Paper>
+                        </Grid>
+
+                        {/* Development Column */}
+                        <Grid item xs={12} sm={6} md={4} lg={3}>
+                            <Paper
+                                elevation={1}
+                                sx={{
+                                    backgroundColor: '#eef2ff', // bg-indigo-50
+                                    p: 2,
+                                    borderRadius: '0.75rem',
+                                    minHeight: '200px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    border: '1px solid #c7d2fe',
+                                }}
+                            >
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#6366f1' }}>
+                                        <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#6366f1', display: 'inline-block', marginRight: '0.5rem' }} />
+                                        Development
+                                    </Typography>
+                                    <IconButton size="small"><ChevronRight size={16} /></IconButton>
+                                </Box>
+                                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    <Typography variant="body2" sx={{ color: '#374151' }}>Frontend development <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                    <Typography variant="body2" sx={{ color: '#374151' }}>Backend API integration <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                    <Button variant="outlined" startIcon={<Plus size={16} />} sx={{ marginTop: 'auto', textTransform: 'none', color: '#6366f1', borderColor: '#c7d2fe', '&:hover': { borderColor: '#4f46e5', backgroundColor: '#e0e7ff' } }}>Add Task</Button>
+                                </Box>
+                            </Paper>
+                        </Grid>
+
+                        {/* Documentation Column */}
+                        <Grid item xs={12} sm={6} md={4} lg={3}>
+                            <Paper
+                                elevation={1}
+                                sx={{
+                                    backgroundColor: '#fff',
+                                    p: 2,
+                                    borderRadius: '0.75rem',
+                                    minHeight: '200px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    border: '1px solid #e5e7eb',
+                                }}
+                            >
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#4b5563' }}>
+                                        <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#9ca3af', display: 'inline-block', marginRight: '0.5rem' }} />
+                                        Documentation
+                                    </Typography>
+                                    <IconButton size="small"><ChevronRight size={16} /></IconButton>
+                                </Box>
+                                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    <Typography variant="body2" sx={{ color: '#374151' }}>Tech documentation handover <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                    <Button variant="outlined" startIcon={<Plus size={16} />} sx={{ marginTop: 'auto', textTransform: 'none', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#9ca3af', backgroundColor: '#f3f4f6' } }}>Add Task</Button>
+                                </Box>
+                            </Paper>
+                        </Grid>
+                    </Grid>
+                </Box>
+            </Box>
+
+            {/* AI Assistant Panel (Conditional Rendering based on showAiAssistant state) */}
+            {showAiAssistant && selectedProduct && (
+                <Paper
+                    elevation={3}
+                    sx={{
+                        position: 'fixed', // Fixed position to float above other content
+                        top: '50%',
+                        right: '1rem',
+                        transform: 'translateY(-50%)',
+                        width: { xs: '90%', sm: '400px' }, // Responsive width
+                        maxHeight: '80vh', // Max height to prevent overflow
+                        overflowY: 'auto', // Scroll if content overflows
                         backgroundColor: '#fff',
                         p: 4, 
                         borderRadius: '1.5rem', 
                         boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', 
                         border: '1px solid #e5e7eb', 
+                        zIndex: 1000, // Ensure it's on top
                     }}
                 >
-                    <Typography variant="h5" component="h2" sx={{ fontWeight: 700, color: '#1f2937', marginBottom: 4, borderBottom: '2px solid #d8b4fe', paddingBottom: 2 }}>
-                        Product/Feature List
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                        <Typography variant="h5" component="h2" sx={{ fontWeight: 700, color: '#1f2937' }}>
+                            AI Assistant
+                        </Typography>
+                        <IconButton onClick={() => setShowAiAssistant(false)} size="small">
+                            <Plus size={24} style={{ transform: 'rotate(45deg)' }} /> {/* Close icon */}
+                        </IconButton>
+                    </Box>
+                    
+                    <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151', marginBottom: 2.5 }}>
+                        Currently Selected: <Box component="span" sx={{ color: '#9333ea' }}>{selectedProduct.name}</Box>
                     </Typography>
 
-                    <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: 4, gap: 2 }}>
+                    <Box sx={{ marginBottom: 4 }}>
+                        <Typography variant="body1" sx={{ color: '#374151', fontWeight: 700, marginBottom: 1.5 }}>
+                            Details for AI Generation:
+                        </Typography>
                         <TextField
-                            type="text"
-                            placeholder="Enter new product/feature name"
-                            value={newProductName}
-                            onChange={(e) => setNewProductName(e.target.value)}
-                            onKeyPress={(e) => {
-                                if (e.key === 'Enter') {
-                                    handleAddProduct();
-                                }
-                            }}
+                            id="discoveryInput"
+                            placeholder="e.g., Target audience, pain points, desired outcomes, core functionality, competitive analysis..."
+                            multiline
+                            rows={10}
+                            value={discoveryInput}
+                            onChange={(e) => setDiscoveryInput(e.target.value)}
+                            disabled={loading}
                             fullWidth
                             variant="outlined"
                             sx={{
                                 '& .MuiOutlinedInput-root': {
                                     borderRadius: '0.75rem', 
-                                },
-                                '& .MuiInputBase-input': {
                                     padding: '1rem', 
-                                    fontSize: '1.125rem', 
                                 },
                                 '& .Mui-focused fieldset': {
                                     borderColor: '#9333ea', 
                                     boxShadow: '0 0 0 2px rgba(147, 51, 234, 0.25)', 
                                 },
+                                '& .MuiInputBase-input::placeholder': {
+                                    color: '#9ca3af', 
+                                    opacity: 1,
+                                },
                             }}
                         />
                         <Button
-                            onClick={handleAddProduct}
+                            onClick={handleGenerateDocument}
                             variant="contained"
                             disabled={loading}
                             sx={{
+                                marginTop: 3, 
+                                width: '100%',
                                 paddingX: 4, 
                                 paddingY: 2, 
-                                backgroundColor: '#9333ea', 
+                                backgroundColor: '#16a34a', 
                                 color: '#fff',
                                 fontWeight: 700,
                                 borderRadius: '0.75rem', 
                                 boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', 
                                 textTransform: 'none',
                                 '&:hover': {
-                                    backgroundColor: '#7e22ce', 
+                                    backgroundColor: '#15803d', 
                                     transform: 'scale(1.05)', 
                                 },
                                 '&:disabled': {
@@ -797,252 +1137,36 @@ function App() {
                                 },
                             }}
                         >
-                            {loading ? <CircularProgress size={20} color="inherit" /> : 'Add Product'}
+                            {loading ? <CircularProgress size={20} color="inherit" /> : 'Generate Document'}
                         </Button>
                     </Box>
 
-                    {loading && <Typography sx={{ color: '#9333ea', textAlign: 'center', marginY: 3, fontSize: '1.125rem', fontWeight: 500 }}>Loading...</Typography>}
-                    {error && <Alert severity="error" sx={{ marginY: 3, borderRadius: '0.5rem' }}>{error}</Alert>}
-
-                    <Box sx={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: '0.75rem' }}>
-                        {products.length === 0 && !loading && !error ? (
-                            <Typography sx={{ color: '#6b7280', textAlign: 'center', paddingY: 6, fontSize: '1.125rem' }}>No products added yet. Start by adding one!</Typography>
-                        ) : (
-                            <List sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-                                {products.map(product => (
-                                    <ListItem
-                                        key={product.id}
-                                        onClick={() => handleSelectProduct(product)}
-                                        sx={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            padding: 2.5, 
-                                            borderRadius: '1rem', 
-                                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', 
-                                            cursor: 'pointer',
-                                            transition: 'all 200ms ease-in-out',
-                                            '&:hover': {
-                                                transform: 'scale(1.01)', 
-                                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', 
-                                            },
-                                            backgroundColor: selectedProduct && selectedProduct.id === product.id ? '#f5f3ff' : '#fff', 
-                                            border: selectedProduct && selectedProduct.id === product.id ? '2px solid #9333ea' : '1px solid #e5e7eb', 
-                                        }}
-                                    >
-                                        <ListItemText 
-                                            primary={product.name} 
-                                            primaryTypographyProps={{ 
-                                                fontSize: '1.25rem', 
-                                                fontWeight: 500, 
-                                                color: '#1f2937', 
-                                                flexGrow: 1 
-                                            }} 
-                                        />
-                                        <IconButton
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDeleteProduct(product.id);
-                                            }}
-                                            disabled={loading}
-                                            sx={{
-                                                marginLeft: 3, 
-                                                paddingX: 2.5, 
-                                                paddingY: 1, 
-                                                backgroundColor: '#ef4444', 
-                                                color: '#fff',
-                                                fontSize: '1rem', 
-                                                fontWeight: 600, 
-                                                borderRadius: '0.5rem', 
-                                                boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
-                                                transition: 'all 300ms ease-in-out',
-                                                '&:hover': {
-                                                    backgroundColor: '#dc2626', 
-                                                    transform: 'scale(1.05)', 
-                                                },
-                                                '&:disabled': {
-                                                    opacity: 0.5,
-                                                    cursor: 'not-allowed',
-                                                    color: '#fff',
-                                                },
-                                            }}
-                                        >
-                                            <Trash2 size={20} />
-                                        </IconButton>
-                                    </ListItem>
-                                ))}
-                            </List>
-                        )}
-                    </Box>
-                </Paper>
-
-                {/* AI Assistant Panel (Existing) */}
-                <Paper
-                    elevation={3}
-                    sx={{
-                        backgroundColor: '#fff',
-                        p: 4, 
-                        borderRadius: '1.5rem', 
-                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', 
-                        border: '1px solid #e5e7eb', 
-                    }}
-                >
-                    <Typography variant="h5" component="h2" sx={{ fontWeight: 700, color: '#1f2937', marginBottom: 4, borderBottom: '2px solid #d8b4fe', paddingBottom: 2 }}>
-                        AI Assistant
-                    </Typography>
-
-                    {selectedProduct ? (
-                        <Box>
-                            <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151', marginBottom: 2.5 }}>
-                                Currently Selected: <Box component="span" sx={{ color: '#9333ea' }}>{selectedProduct.name}</Box>
+                    {(generatedDocument || selectedProduct.discovery_document) && (
+                        <Box sx={{ marginTop: 5 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151', marginBottom: 2.5, borderTop: '2px solid #d8b4fe', paddingTop: 3 }}>
+                                {generatedDocument ? 'Generated Document' : 'Saved Document'} for {selectedProduct.name}:
                             </Typography>
-
-                            <Box sx={{ marginBottom: 4 }}>
-                                <Typography variant="body1" sx={{ color: '#374151', fontWeight: 700, marginBottom: 1.5 }}>
-                                    Details for AI Generation:
-                                </Typography>
-                                <TextField
-                                    id="discoveryInput"
-                                    placeholder="e.g., Target audience, pain points, desired outcomes, core functionality, competitive analysis..."
-                                    multiline
-                                    rows={10}
-                                    value={discoveryInput}
-                                    onChange={(e) => setDiscoveryInput(e.target.value)}
-                                    disabled={loading}
-                                    fullWidth
-                                    variant="outlined"
-                                    sx={{
-                                        '& .MuiOutlinedInput-root': {
-                                            borderRadius: '0.75rem', 
-                                            padding: '1rem', 
-                                        },
-                                        '& .Mui-focused fieldset': {
-                                            borderColor: '#9333ea', 
-                                            boxShadow: '0 0 0 2px rgba(147, 51, 234, 0.25)', 
-                                        },
-                                        '& .MuiInputBase-input::placeholder': {
-                                            color: '#9ca3af', 
-                                            opacity: 1,
-                                        },
-                                    }}
-                                />
-                                <Button
-                                    onClick={handleGenerateDocument}
-                                    variant="contained"
-                                    disabled={loading}
-                                    sx={{
-                                        marginTop: 3, 
-                                        width: '100%',
-                                        paddingX: 4, 
-                                        paddingY: 2, 
-                                        backgroundColor: '#16a34a', 
-                                        color: '#fff',
-                                        fontWeight: 700,
-                                        borderRadius: '0.75rem', 
-                                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', 
-                                        textTransform: 'none',
-                                        '&:hover': {
-                                            backgroundColor: '#15803d', 
-                                            transform: 'scale(1.05)', 
-                                        },
-                                        '&:disabled': {
-                                            opacity: 0.5,
-                                            cursor: 'not-allowed',
-                                            color: '#fff',
-                                        },
-                                    }}
-                                >
-                                    {loading ? <CircularProgress size={20} color="inherit" /> : 'Generate Document'}
-                                </Button>
-                            </Box>
-
-                            {(generatedDocument || selectedProduct.discovery_document) && (
-                                <Box sx={{ marginTop: 5 }}>
-                                    <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151', marginBottom: 2.5, borderTop: '2px solid #d8b4fe', paddingTop: 3 }}>
-                                        {generatedDocument ? 'Generated Document' : 'Saved Document'} for {selectedProduct.name}:
-                                    </Typography>
-                                    <Paper
-                                        elevation={0}
-                                        sx={{
-                                            backgroundColor: '#f9fafb', 
-                                            p: 4, 
-                                            borderRadius: '0.75rem', 
-                                            boxShadow: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)', 
-                                            border: '1px solid #e5e7eb', 
-                                            whiteSpace: 'pre-wrap',
-                                            color: '#1f2937', 
-                                            lineHeight: '1.625', 
-                                            fontSize: '1rem', 
-                                        }}
-                                    >
-                                        {generatedDocument || selectedProduct.discovery_document}
-                                    </Paper>
-                                </Box>
-                            )}
+                            <Paper
+                                elevation={0}
+                                sx={{
+                                    backgroundColor: '#f9fafb', 
+                                    p: 4, 
+                                    borderRadius: '0.75rem', 
+                                    boxShadow: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)', 
+                                    border: '1px solid #e5e7eb', 
+                                    whiteSpace: 'pre-wrap',
+                                    color: '#1f2937', 
+                                    lineHeight: '1.625', 
+                                    fontSize: '1rem', 
+                                }}
+                            >
+                                {generatedDocument || selectedProduct.discovery_document}
+                            </Paper>
                         </Box>
-                    ) : (
-                        <Typography sx={{ color: '#6b7280', textAlign: 'center', paddingY: 6, fontSize: '1.125rem' }}>Select a product/feature from the left to generate a document.</Typography>
                     )}
                 </Paper>
+            )}
 
-                {/* New: Roadmap Panel Placeholder */}
-                <Paper
-                    elevation={3}
-                    sx={{
-                        backgroundColor: '#fff',
-                        p: 4, 
-                        borderRadius: '1.5rem', 
-                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', 
-                        border: '1px solid #e5e7eb', 
-                        gridColumn: { xs: 'span 1', lg: 'span 2' } // Spans full width on small screens, and both columns on large
-                    }}
-                >
-                    <Typography variant="h5" component="h2" sx={{ fontWeight: 700, color: '#1f2937', marginBottom: 4, borderBottom: '2px solid #d8b4fe', paddingBottom: 2 }}>
-                        Product Roadmap
-                    </Typography>
-                    <Box sx={{ minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
-                        <Typography variant="h6">Roadmap visualization and planning tools coming soon!</Typography>
-                    </Box>
-                </Paper>
-
-                {/* New: Analytics Panel Placeholder */}
-                <Paper
-                    elevation={3}
-                    sx={{
-                        backgroundColor: '#fff',
-                        p: 4, 
-                        borderRadius: '1.5rem', 
-                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', 
-                        border: '1px solid #e5e7eb', 
-                    }}
-                >
-                    <Typography variant="h5" component="h2" sx={{ fontWeight: 700, color: '#1f2937', marginBottom: 4, borderBottom: '2px solid #d8b4fe', paddingBottom: 2 }}>
-                        Product Analytics
-                    </Typography>
-                    <Box sx={{ minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
-                        <Typography variant="h6">Detailed product analytics and insights coming soon!</Typography>
-                    </Box>
-                </Paper>
-
-                {/* New: Team Collaboration Panel Placeholder */}
-                <Paper
-                    elevation={3}
-                    sx={{
-                        backgroundColor: '#fff',
-                        p: 4, 
-                        borderRadius: '1.5rem', 
-                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', 
-                        border: '1px solid #e5e7eb', 
-                    }}
-                >
-                    <Typography variant="h5" component="h2" sx={{ fontWeight: 700, color: '#1f2937', marginBottom: 4, borderBottom: '2px solid #d8b4fe', paddingBottom: 2 }}>
-                        Team Collaboration
-                    </Typography>
-                    <Box sx={{ minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
-                        <Typography variant="h6">Real-time collaboration tools coming soon!</Typography>
-                    </Box>
-                </Paper>
-            </Container>
             <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
                 <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
                     {snackbarMessage}
