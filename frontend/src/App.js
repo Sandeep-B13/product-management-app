@@ -1,4 +1,4 @@
-import React, { useState, useEffect } => 'react';
+import React, { useState, useEffect } from 'react'; // Corrected '=>' to 'from'
 import axios from 'axios';
 
 // Importing Material-UI components
@@ -25,7 +25,7 @@ import {
 } from '@mui/material';
 
 // Importing Lucide icons
-import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, ChevronLeft, ChevronRight, Search, CheckCircle } from 'lucide-react'; // Added CheckCircle import
+import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, ChevronLeft, ChevronRight, Search, CheckCircle } from 'lucide-react'; 
 
 // Define the API URL for your backend.
 // In development, it will default to http://localhost:5000.
@@ -1168,7 +1168,7 @@ function App() {
             )}
 
             <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
-                <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+                <Alert onClose={snackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
                     {snackbarMessage}
                 </Alert>
             </Snackbar>
