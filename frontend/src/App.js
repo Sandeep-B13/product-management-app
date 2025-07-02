@@ -26,18 +26,47 @@ import {
 // Importing Lucide icons
 import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2 } from 'lucide-react';
 
-// Simulated API calls for demo purposes
+// --- Simulated Backend (In-memory user store for demo) ---
+const mockUsers = {
+    'demo@company.com': { password: 'password', isApproved: true, loginAttempts: 0 },
+    // Add more mock users here if needed for specific test cases
+};
+
 const simulateAPI = (endpoint, data, delay = 1000) => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
             if (endpoint === '/api/login') {
-                if (data.email === 'demo@company.com' && data.password === 'password') {
+                const user = mockUsers[data.email];
+                if (!user) {
+                    reject({ response: { data: { message: 'Invalid credentials' } } });
+                    return;
+                }
+
+                if (user.isApproved === false) {
+                    // Simulate approval after a few attempts for the demo user, otherwise always awaiting approval
+                    if (data.email === 'demo@company.com' && user.loginAttempts < 2) {
+                        user.loginAttempts++;
+                        reject({ response: { data: { message: 'Account awaiting approval. Please try again later.' } } });
+                    } else if (data.email === 'demo@company.com' && user.loginAttempts >= 2) {
+                        user.isApproved = true; // Simulate approval
+                        user.loginAttempts = 0; // Reset attempts
+                        resolve({ data: { token: 'demo-token-123', message: 'Login successful' } });
+                    } else {
+                        // For non-demo users, always awaiting approval until explicitly approved (not implemented in this mock)
+                        reject({ response: { data: { message: 'Account awaiting approval. Please try again later.' } } });
+                    }
+                } else if (user.password === data.password) {
                     resolve({ data: { token: 'demo-token-123', message: 'Login successful' } });
                 } else {
                     reject({ response: { data: { message: 'Invalid credentials' } } });
                 }
             } else if (endpoint === '/api/signup') {
-                resolve({ data: { message: 'Account created! Please wait for admin approval.' } });
+                if (mockUsers[data.email]) {
+                    reject({ response: { data: { message: 'Account with this email already exists.' } } });
+                } else {
+                    mockUsers[data.email] = { password: data.password, isApproved: false, loginAttempts: 0 };
+                    resolve({ data: { message: 'Account created! Please wait for admin approval.' } });
+                }
             }
         }, delay);
     });
@@ -50,11 +79,13 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 function AuthPage({ setIsLoggedIn, setAuthMessage }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState(''); // New state for confirm password
     const [isLoginMode, setIsLoginMode] = useState(true);
     const [loading, setLoading] = useState(false);
     const [authError, setAuthError] = useState(null);
     const [rememberMe, setRememberMe] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false); // New state for confirm password visibility
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
@@ -72,6 +103,17 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
         setAuthError(null);
         setAuthMessage('');
         setSnackbarOpen(false); // Close any existing snackbars
+
+        if (!isLoginMode) { // If in signup mode, validate passwords
+            if (password !== confirmPassword) {
+                setAuthError("Passwords do not match.");
+                setSnackbarMessage("Passwords do not match.");
+                setSnackbarSeverity('error');
+                setSnackbarOpen(true);
+                setLoading(false);
+                return;
+            }
+        }
 
         try {
             let response;
@@ -215,7 +257,6 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                                 : 'Get started with your free account today'
                             }
                         </Typography>
-                        {/* Removed Demo credentials hint */}
                     </Box>
 
                     {/* Form */}
@@ -294,9 +335,55 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                             }}
                         />
 
-                        {/* Remember Me (Forgot Password removed) */}
+                        {/* Confirm Password Input (only for signup mode) */}
+                        {!isLoginMode && (
+                            <TextField
+                                label="Confirm Password"
+                                id="confirm-password"
+                                type={showConfirmPassword ? "text" : "password"}
+                                placeholder="Confirm your password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                required
+                                fullWidth
+                                variant="outlined"
+                                InputProps={{
+                                    endAdornment: (
+                                        <InputAdornment position="end">
+                                            <IconButton
+                                                aria-label="toggle confirm password visibility"
+                                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                                edge="end"
+                                                sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
+                                            >
+                                                {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                            </IconButton>
+                                        </InputAdornment>
+                                    ),
+                                    sx: {
+                                        borderRadius: '0.5rem',
+                                        '&.Mui-focused fieldset': {
+                                            borderColor: '#6366f1',
+                                            boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)',
+                                        },
+                                    },
+                                }}
+                                sx={{
+                                    '& .MuiInputLabel-root': {
+                                        fontWeight: 600,
+                                        color: '#374151',
+                                    },
+                                    '& .MuiInputBase-input::placeholder': {
+                                        color: '#9ca3af',
+                                        opacity: 1,
+                                    },
+                                }}
+                            />
+                        )}
+
+                        {/* Remember Me */}
                         {isLoginMode && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}> {/* Changed justifyContent to flex-start */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
                                 <FormControlLabel
                                     control={
                                         <Checkbox
@@ -304,12 +391,12 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                                             onChange={(e) => setRememberMe(e.target.checked)}
                                             id="remember-me"
                                             sx={{
-                                                color: '#4f46e5', // text-indigo-600
+                                                color: '#4f46e5',
                                                 '&.Mui-checked': {
-                                                    color: '#4f46e5', // text-indigo-600
+                                                    color: '#4f46e5',
                                                 },
                                                 '& .MuiSvgIcon-root': {
-                                                    fontSize: '1rem', // h-4 w-4
+                                                    fontSize: '1rem',
                                                 },
                                             }}
                                         />
@@ -320,7 +407,6 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                                         </Typography>
                                     }
                                 />
-                                {/* The Forgot password button has been removed */}
                             </Box>
                         )}
 
@@ -331,24 +417,24 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                             disabled={loading}
                             sx={{
                                 width: '100%',
-                                paddingY: '0.75rem', // py-3
-                                paddingX: '1.5rem', // px-6
-                                background: 'linear-gradient(to right, #4f46e5, #9333ea)', // bg-gradient-to-r from-indigo-600 to-purple-600
+                                paddingY: '0.75rem',
+                                paddingX: '1.5rem',
+                                background: 'linear-gradient(to right, #4f46e5, #9333ea)',
                                 color: '#fff',
-                                fontWeight: 600, // font-semibold
-                                borderRadius: '0.5rem', // rounded-lg
-                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', // shadow-lg
+                                fontWeight: 600,
+                                borderRadius: '0.5rem',
+                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
                                 textTransform: 'none',
                                 transition: 'all 200ms ease-in-out',
                                 '&:hover': {
-                                    background: 'linear-gradient(to right, #4338ca, #7e22ce)', // hover:from-indigo-700 hover:to-purple-700
-                                    transform: 'scale(1.02)', // transform hover:scale-[1.02]
-                                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', // Re-apply shadow on hover
+                                    background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                                    transform: 'scale(1.02)',
+                                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
                                 },
                                 '&:disabled': {
                                     opacity: 0.5,
                                     cursor: 'not-allowed',
-                                    color: '#fff', // Keep text white when disabled
+                                    color: '#fff',
                                 },
                             }}
                         >
@@ -384,14 +470,15 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                                     setAuthError(null); 
                                     setEmail('');
                                     setPassword('');
+                                    setConfirmPassword(''); // Clear confirm password on mode change
                                     setSnackbarOpen(false);
                                 }}
                                 sx={{
-                                    color: '#4f46e5', // text-indigo-600
-                                    fontWeight: 600, // font-semibold
+                                    color: '#4f46e5',
+                                    fontWeight: 600,
                                     textTransform: 'none',
                                     '&:hover': {
-                                        color: '#6366f1', // hover:text-indigo-500
+                                        color: '#6366f1',
                                         backgroundColor: 'transparent',
                                     },
                                 }}
