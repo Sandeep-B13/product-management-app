@@ -29,7 +29,9 @@ import {
     Select, // For sort dropdown
     MenuItem, // For sort dropdown items
     FormControl, // For select input
-    InputLabel // For select input label
+    InputLabel, // For select input label
+    Tabs, // New: For tabbed navigation
+    Tab // New: For individual tabs
 } from '@mui/material';
 
 // Importing Lucide icons
@@ -515,6 +517,9 @@ function App() {
         'Documentation': 100,
     };
 
+    // New state for selected Kanban tab
+    const [selectedKanbanTab, setSelectedKanbanTab] = useState(0); 
+
     // Lottie animation setup
     useEffect(() => {
         if (lottieContainer.current && !selectedProduct) {
@@ -961,6 +966,9 @@ function App() {
         setDiscoveryInput('');
         setShowAiAssistant(false); 
         setSnackbarOpen(false);
+        // Set the selected Kanban tab to the index of the selected product's stage
+        const stageIndex = kanbanStages.indexOf(product.stage);
+        setSelectedKanbanTab(stageIndex >= 0 ? stageIndex : 0);
     };
 
     const handleArchiveProduct = async (productId, archiveStatus) => {
@@ -1130,6 +1138,9 @@ function App() {
             ));
             if (selectedProduct && selectedProduct.id === productId) {
                 setSelectedProduct(response.data);
+                // Also update the selected Kanban tab to the new stage
+                const newStageIndex = kanbanStages.indexOf(newStage);
+                setSelectedKanbanTab(newStageIndex >= 0 ? newStageIndex : 0);
             }
             setSnackbarMessage(`Product stage updated to ${newStage}!`);
             setSnackbarSeverity('success');
@@ -1144,6 +1155,43 @@ function App() {
         } finally {
             setLoading(false);
         }
+    };
+
+    // Helper function to get tab color based on stage status
+    const getTabColor = (stage) => {
+        if (!selectedProduct) return '#6b7280'; // Default grey if no product selected
+
+        const currentStageIndex = kanbanStages.indexOf(selectedProduct.stage);
+        const tabStageIndex = kanbanStages.indexOf(stage);
+
+        if (tabStageIndex < currentStageIndex) {
+            return '#16a34a'; // Green for completed stages
+        } else if (tabStageIndex === currentStageIndex) {
+            return '#4f46e5'; // Primary color for current stage
+        } else {
+            return '#6b7280'; // Grey for pending/future stages
+        }
+    };
+
+    // Helper function for TabPanel content
+    const TabPanel = (props) => {
+        const { children, value, index, ...other } = props;
+        return (
+            <div
+                role="tabpanel"
+                hidden={value !== index}
+                id={`kanban-tabpanel-${index}`}
+                aria-labelledby={`kanban-tab-${index}`}
+                {...other}
+                style={{ flexGrow: 1, display: value === index ? 'flex' : 'none', flexDirection: 'column', overflowY: 'auto' }}
+            >
+                {value === index && (
+                    <Box sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+                        {children}
+                    </Box>
+                )}
+            </div>
+        );
     };
 
 
@@ -1436,7 +1484,7 @@ function App() {
                     </List>
                 </Paper>
 
-                {/* Right Main Content: Kanban Board */}
+                {/* Right Main Content: Kanban Board (now tabbed) */}
                 <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     {/* Kanban Board Header */}
                     <Paper
@@ -1497,6 +1545,9 @@ function App() {
                                 }}
                                 onClick={() => {
                                     if (selectedProduct) {
+                                        // When AI Assistant is toggled, ensure we're on the current product's stage tab
+                                        const stageIndex = kanbanStages.indexOf(selectedProduct.stage);
+                                        setSelectedKanbanTab(stageIndex >= 0 ? stageIndex : 0);
                                         setShowAiAssistant(!showAiAssistant);
                                     } else {
                                         setSnackbarMessage("Please select a product/feature first to use the AI Assistant.");
@@ -1510,8 +1561,19 @@ function App() {
                         </Box>
                     </Paper>
 
-                    {/* Kanban Board Columns Container - Now scrollable */}
-                    <Box sx={{ flexGrow: 1, overflowY: 'auto', paddingBottom: '1rem' }}> {/* Added paddingBottom for scroll comfort */}
+                    {/* Kanban Board Tabs Container */}
+                    <Paper
+                        elevation={1}
+                        sx={{
+                            backgroundColor: '#fff',
+                            borderRadius: '1rem',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            flexGrow: 1, // Allow this container to grow
+                            overflow: 'hidden' // Hide overflow from tabs themselves
+                        }}
+                    >
                         {selectedProduct === null ? (
                             <Box sx={{ 
                                 display: 'flex', 
@@ -1519,70 +1581,132 @@ function App() {
                                 alignItems: 'center', 
                                 justifyContent: 'center', 
                                 height: '100%', 
-                                minHeight: '300px', // Ensure it takes up space
-                                backgroundColor: '#fff',
-                                borderRadius: '1rem',
-                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                                minHeight: '300px', 
                                 p: 4,
-                                mx: 2, // Add some horizontal margin
-                                my: 1, // Add some vertical margin
                             }}>
                                 <Box ref={lottieContainer} sx={{ width: '200px', height: '200px', marginBottom: 2 }}></Box>
                                 <Typography variant="h6" sx={{ color: '#4f46e5', fontWeight: 'bold', textAlign: 'center' }}>
                                     Select a Product or Feature
                                 </Typography>
                                 <Typography variant="body1" sx={{ color: '#6b7280', textAlign: 'center', maxWidth: '400px' }}>
-                                    Choose an item from the left sidebar to view its Kanban board and details.
+                                    Choose an item from the left sidebar to view its details and Kanban stages.
                                 </Typography>
                             </Box>
                         ) : (
-                            <Grid container spacing={2} sx={{ height: '100%', alignItems: 'stretch' }}> {/* Ensure Grid container stretches */}
-                                {kanbanStages.map(stage => (
-                                    <Grid item xs={12} sm={6} md={4} lg={3} key={stage} sx={{ display: 'flex', minHeight: '300px' }}> {/* Added minHeight here */}
-                                        <Paper
-                                            elevation={1}
+                            <>
+                                <Tabs 
+                                    value={selectedKanbanTab} 
+                                    onChange={(event, newValue) => setSelectedKanbanTab(newValue)} 
+                                    aria-label="Kanban stages tabs"
+                                    variant="scrollable" // Make tabs scrollable if many stages
+                                    scrollButtons="auto"
+                                    sx={{
+                                        borderBottom: 1,
+                                        borderColor: 'divider',
+                                        '& .MuiTabs-indicator': { backgroundColor: '#4f46e5' }, // Indicator color
+                                    }}
+                                >
+                                    {kanbanStages.map((stage, index) => (
+                                        <Tab 
+                                            key={stage} 
+                                            label={stage} 
+                                            id={`kanban-tab-${index}`} 
+                                            aria-controls={`kanban-tabpanel-${index}`}
                                             sx={{
-                                                backgroundColor: '#f5f3ff', // Base color, could vary by stage
-                                                p: 2,
-                                                borderRadius: '0.75rem', 
-                                                // Removed minHeight here, rely on parent stretching
-                                                height: '100%', // Crucial for making all cards the same size
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                border: '1px solid #d8b4fe', 
-                                                // Highlight current selected product's stage
-                                                ...(selectedProduct && selectedProduct.stage === stage && {
-                                                    border: '2px solid #4f46e5',
-                                                    boxShadow: '0 0 0 3px rgba(79, 70, 229, 0.3)',
-                                                })
+                                                textTransform: 'none',
+                                                fontWeight: 'bold',
+                                                color: getTabColor(stage), // Dynamic color based on stage status
+                                                '&.Mui-selected': {
+                                                    color: '#4f46e5', // Selected tab color
+                                                },
+                                                '&:hover': {
+                                                    backgroundColor: '#eef2ff',
+                                                },
+                                                borderRadius: '0.5rem 0.5rem 0 0', // Rounded top corners
+                                                minHeight: '48px', // Standard tab height
                                             }}
-                                        >
-                                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                                                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
-                                                    <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', display: 'inline-block', marginRight: '0.5rem' }} />
-                                                    {stage}
-                                                </Typography>
-                                            </Box>
-                                            <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                                {/* Display the selected product's details if its stage matches the column */}
-                                                {selectedProduct && selectedProduct.stage === stage && (
-                                                    <Box sx={{ 
-                                                        backgroundColor: '#e0e7ff', // Light indigo background for selected product in its stage
-                                                        p: 1.5, 
-                                                        borderRadius: '0.5rem', 
-                                                        border: '1px solid #c7d2fe',
-                                                        marginBottom: 1
-                                                    }}>
-                                                        <Typography variant="body2" sx={{ fontWeight: 'medium', color: '#374151' }}>
-                                                            {selectedProduct.name}
-                                                        </Typography>
-                                                        <Typography variant="caption" sx={{ color: '#6b7280', fontSize: '0.7rem' }}>
-                                                            Progress: {selectedProduct.progress}%
-                                                        </Typography>
-                                                    </Box>
-                                                )}
+                                        />
+                                    ))}
+                                </Tabs>
 
-                                                {/* Example static tasks - these would ideally come from DB and be filterable by product */}
+                                {/* Tab Panels for each stage */}
+                                {kanbanStages.map((stage, index) => (
+                                    <TabPanel value={selectedKanbanTab} index={index} key={stage}>
+                                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flexGrow: 1 }}>
+                                            {/* AI Assistant section, now within the active tab */}
+                                            {showAiAssistant && (
+                                                <Paper
+                                                    elevation={1}
+                                                    sx={{
+                                                        backgroundColor: '#f5f3ff',
+                                                        p: 3,
+                                                        borderRadius: '0.75rem',
+                                                        border: '1px solid #d8b4fe',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: 2,
+                                                    }}
+                                                >
+                                                    <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151' }}>
+                                                        AI Discovery Assistant for {stage}
+                                                    </Typography>
+                                                    <TextField
+                                                        id={`discoveryInput-${stage}`}
+                                                        placeholder="Enter details for AI generation..."
+                                                        multiline
+                                                        rows={6}
+                                                        value={discoveryInput}
+                                                        onChange={(e) => setDiscoveryInput(e.target.value)}
+                                                        disabled={loading}
+                                                        fullWidth
+                                                        variant="outlined"
+                                                        sx={{
+                                                            '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' },
+                                                            '& .Mui-focused fieldset': { borderColor: '#9333ea', boxShadow: '0 0 0 2px rgba(147, 51, 234, 0.25)' },
+                                                        }}
+                                                    />
+                                                    <Button
+                                                        onClick={handleGenerateDocument}
+                                                        variant="contained"
+                                                        disabled={loading}
+                                                        sx={{
+                                                            backgroundColor: '#16a34a', '&:hover': { backgroundColor: '#15803d' },
+                                                            color: '#fff', fontWeight: 600, borderRadius: '0.5rem', textTransform: 'none',
+                                                        }}
+                                                    >
+                                                        {loading ? <CircularProgress size={20} color="inherit" /> : 'Generate Document'}
+                                                    </Button>
+                                                    {(generatedDocument || selectedProduct.discovery_document) && (
+                                                        <Box sx={{ marginTop: 2 }}>
+                                                            <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#374151', marginBottom: 1 }}>
+                                                                Generated Document:
+                                                            </Typography>
+                                                            <Paper elevation={0} sx={{ backgroundColor: '#f9fafb', p: 2, borderRadius: '0.5rem', border: '1px solid #e5e7eb', whiteSpace: 'pre-wrap', fontSize: '0.9rem' }}>
+                                                                {generatedDocument || selectedProduct.discovery_document}
+                                                            </Paper>
+                                                        </Box>
+                                                    )}
+                                                </Paper>
+                                            )}
+
+                                            {/* Static tasks for the current stage (can be replaced with dynamic data) */}
+                                            <Paper
+                                                elevation={1}
+                                                sx={{
+                                                    backgroundColor: '#f5f3ff', // Light purple background
+                                                    p: 3,
+                                                    borderRadius: '0.75rem',
+                                                    border: '1px solid #d8b4fe',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    gap: 1,
+                                                    flexGrow: 1, // Allow this paper to grow
+                                                }}
+                                            >
+                                                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#4f46e5', marginBottom: 1 }}>
+                                                    Tasks for {stage}
+                                                </Typography>
+                                                {/* Example static tasks - these would ideally come from DB */}
                                                 {stage === 'Research' && (
                                                     <>
                                                         <Typography variant="body2" sx={{ color: '#374151' }}>Market analysis completed <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
@@ -1615,7 +1739,6 @@ function App() {
                                                         <Typography variant="body2" sx={{ color: '#374151' }}>Tech documentation handover <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
                                                     </>
                                                 )}
-                                                {/* Add button to add task to this stage (future enhancement) */}
                                                 <Button 
                                                     variant="outlined" 
                                                     startIcon={<Plus size={16} />} 
@@ -1640,12 +1763,11 @@ function App() {
                                                     Add Task / Set Stage
                                                 </Button>
                                             </Box>
-                                        </Paper>
-                                    </Grid>
-                                ))}
-                            </Grid>
-                        )}
-                    </Box>
+                                        </TabPanel>
+                                    ))}
+                                </>
+                            )}
+                    </Paper>
                 </Box>
             </Box>
 
@@ -1755,124 +1877,6 @@ function App() {
                     </Button>
                 </DialogActions>
             </Dialog>
-
-            {/* AI Assistant Panel (Conditional Rendering based on showAiAssistant state) */}
-            {showAiAssistant && selectedProduct && (
-                <Paper
-                    elevation={3}
-                    sx={{
-                        position: 'fixed', 
-                        top: '50%',
-                        right: '1rem',
-                        transform: 'translateY(-50%)',
-                        width: { xs: '90%', sm: '400px' }, 
-                        maxHeight: '80vh', 
-                        overflowY: 'auto', 
-                        backgroundColor: '#fff',
-                        p: 4, 
-                        borderRadius: '1.5rem', 
-                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', 
-                        border: '1px solid #e5e7eb', 
-                        zIndex: 1000, 
-                    }}
-                >
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                        <Typography variant="h5" component="h2" sx={{ fontWeight: 700, color: '#1f2937' }}>
-                            AI Assistant
-                        </Typography>
-                        <IconButton onClick={() => setShowAiAssistant(false)} size="small">
-                            <Plus size={24} style={{ transform: 'rotate(45deg)' }} /> 
-                        </IconButton>
-                    </Box>
-                    
-                    <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151', marginBottom: 2.5 }}>
-                        Currently Selected: <Box component="span" sx={{ color: '#9333ea' }}>{selectedProduct.name}</Box>
-                    </Typography>
-
-                    <Box sx={{ marginBottom: 4 }}>
-                        <Typography variant="body1" sx={{ color: '#374151', fontWeight: 700, marginBottom: 1.5 }}>
-                            Details for AI Generation:
-                        </Typography>
-                        <TextField
-                            id="discoveryInput"
-                            placeholder="e.g., Target audience, pain points, desired outcomes, core functionality, competitive analysis..."
-                            multiline
-                            rows={10}
-                            value={discoveryInput}
-                            onChange={(e) => setDiscoveryInput(e.target.value)}
-                            disabled={loading}
-                            fullWidth
-                            variant="outlined"
-                            sx={{
-                                '& .MuiOutlinedInput-root': {
-                                    borderRadius: '0.75rem', 
-                                    padding: '1rem', 
-                                },
-                                '& .Mui-focused fieldset': {
-                                    borderColor: '#9333ea', 
-                                    boxShadow: '0 0 0 2px rgba(147, 51, 234, 0.25)', 
-                                },
-                                '& .MuiInputBase-input::placeholder': {
-                                    color: '#9ca3af', 
-                                    opacity: 1,
-                                },
-                            }}
-                        />
-                        <Button
-                            onClick={handleGenerateDocument}
-                            variant="contained"
-                            disabled={loading}
-                            sx={{
-                                marginTop: 3, 
-                                width: '100%',
-                                paddingX: 4, 
-                                paddingY: 2, 
-                                backgroundColor: '#16a34a', 
-                                color: '#fff',
-                                fontWeight: 700,
-                                borderRadius: '0.75rem', 
-                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', 
-                                textTransform: 'none',
-                                '&:hover': {
-                                    backgroundColor: '#15803d', 
-                                    transform: 'scale(1.05)', 
-                                },
-                                '&:disabled': {
-                                    opacity: 0.5,
-                                    cursor: 'not-allowed',
-                                    color: '#fff',
-                                },
-                            }}
-                        >
-                            {loading ? <CircularProgress size={20} color="inherit" /> : 'Generate Document'}
-                        </Button>
-                    </Box>
-
-                    {(generatedDocument || selectedProduct.discovery_document) && (
-                        <Box sx={{ marginTop: 5 }}>
-                            <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151', marginBottom: 2.5, borderTop: '2px solid #d8b4fe', paddingTop: 3 }}>
-                                {generatedDocument ? 'Generated Document' : 'Saved Document'} for {selectedProduct.name}:
-                            </Typography>
-                            <Paper
-                                elevation={0}
-                                sx={{
-                                    backgroundColor: '#f9fafb', 
-                                    p: 4, 
-                                    borderRadius: '0.75rem', 
-                                    boxShadow: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)', 
-                                    border: '1px solid #e5e7eb', 
-                                    whiteSpace: 'pre-wrap',
-                                    color: '#1f2937', 
-                                    lineHeight: '1.625', 
-                                    fontSize: '1rem', 
-                                }}
-                            >
-                                {generatedDocument || selectedProduct.discovery_document}
-                            </Paper>
-                        </Box>
-                    )}
-                </Paper>
-            )}
 
             <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
                 <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
