@@ -26,7 +26,7 @@ import {
 } from '@mui/material';
 
 // Importing Lucide icons
-import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, Archive, ArchiveRestore, MessageSquare } from 'lucide-react'; // Removed ChevronLeft/Right, added MessageSquare
+import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, Archive, ArchiveRestore, MessageSquare, CheckCircle } from 'lucide-react'; // Re-added CheckCircle
 
 // Define the API URL for your backend.
 // In development, it will default to http://localhost:5000.
