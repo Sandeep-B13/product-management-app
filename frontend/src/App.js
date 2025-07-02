@@ -1762,7 +1762,7 @@ function App() {
                                                 >
                                                     Add Task / Set Stage
                                                 </Button>
-                                            </Box>
+                                            </Paper>
                                         </TabPanel>
                                     ))}
                                 </>
