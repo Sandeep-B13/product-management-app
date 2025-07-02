@@ -547,6 +547,36 @@ function App() {
         fetchProducts();
     }, [isLoggedIn]);
 
+    // Filter and Sort Logic - Moved outside the conditional rendering
+    const filteredAndSortedProducts = useMemo(() => {
+        let currentProducts = showArchivedView ? products.filter(p => p.isArchived) : products.filter(p => !p.isArchived);
+
+        // Apply search filter
+        if (searchTerm) {
+            currentProducts = currentProducts.filter(p => 
+                p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (p.discovery_document && p.discovery_document.toLowerCase().includes(searchTerm.toLowerCase()))
+            );
+        }
+
+        // Apply sort
+        currentProducts.sort((a, b) => {
+            if (sortBy === 'newest') {
+                return new Date(b.created_at) - new Date(a.created_at);
+            } else if (sortBy === 'oldest') {
+                return new Date(a.created_at) - new Date(b.created_at);
+            } else if (sortBy === 'alpha-asc') {
+                return a.name.localeCompare(b.name);
+            } else if (sortBy === 'alpha-desc') {
+                return b.name.localeCompare(a.name);
+            }
+            return 0;
+        });
+
+        return currentProducts;
+    }, [products, showArchivedView, searchTerm, sortBy]);
+
+
     const handleAddProduct = async () => {
         if (!newProductName.trim()) {
             setSnackbarMessage("Product name cannot be empty.");
@@ -742,36 +772,6 @@ function App() {
     if (!isLoggedIn) {
         return <AuthPage setIsLoggedIn={setIsLoggedIn} setAuthMessage={setAuthMessage} />;
     }
-
-    // Filter and Sort Logic
-    const filteredAndSortedProducts = useMemo(() => {
-        let currentProducts = showArchivedView ? products.filter(p => p.isArchived) : products.filter(p => !p.isArchived);
-
-        // Apply search filter
-        if (searchTerm) {
-            currentProducts = currentProducts.filter(p => 
-                p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (p.discovery_document && p.discovery_document.toLowerCase().includes(searchTerm.toLowerCase()))
-            );
-        }
-
-        // Apply sort
-        currentProducts.sort((a, b) => {
-            if (sortBy === 'newest') {
-                return new Date(b.created_at) - new Date(a.created_at);
-            } else if (sortBy === 'oldest') {
-                return new Date(a.created_at) - new Date(b.created_at);
-            } else if (sortBy === 'alpha-asc') {
-                return a.name.localeCompare(b.name);
-            } else if (sortBy === 'alpha-desc') {
-                return b.name.localeCompare(a.name);
-            }
-            return 0;
-        });
-
-        return currentProducts;
-    }, [products, showArchivedView, searchTerm, sortBy]);
-
 
     return (
         <Box
