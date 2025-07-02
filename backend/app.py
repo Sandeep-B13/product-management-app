@@ -15,7 +15,16 @@ load_dotenv()
 app = Flask(__name__)
 
 # --- Configuration ---
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+# Ensure DATABASE_URL includes ?sslmode=require for Render PostgreSQL
+db_url = os.environ.get('DATABASE_URL')
+if db_url and "postgresql://" in db_url and not ("sslmode=" in db_url):
+    # Append sslmode=require if not already present for PostgreSQL connections
+    if "?" in db_url:
+        db_url += "&sslmode=require"
+    else:
+        db_url += "?sslmode=require"
+
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_super_secret_key_change_this_in_production') # Used for JWT signing
 
