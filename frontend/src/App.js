@@ -16,76 +16,32 @@ import {
     Alert,
     List,
     ListItem,
-    ListSubheader, // Added for sticky headers
+    ListSubheader, 
     ListItemText,
     IconButton,
     InputAdornment,
-    Grid // For layout
+    Grid 
 } from '@mui/material';
 
 // Importing Lucide icons
 import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2 } from 'lucide-react';
 
-// --- Simulated Backend (In-memory user store for demo) ---
-const mockUsers = {
-    'demo@company.com': { password: 'password', isApproved: true, loginAttempts: 0 },
-    // Add more mock users here if needed for specific test cases
-};
-
-const simulateAPI = (endpoint, data, delay = 1000) => {
-    return new Promise((resolve, reject) => {
-        setTimeout(() => {
-            if (endpoint === '/api/login') {
-                const user = mockUsers[data.email];
-                if (!user) {
-                    reject({ response: { data: { message: 'Invalid credentials' } } });
-                    return;
-                }
-
-                if (user.isApproved === false) {
-                    // Simulate approval after a few attempts for the demo user, otherwise always awaiting approval
-                    if (data.email === 'demo@company.com' && user.loginAttempts < 2) {
-                        user.loginAttempts++;
-                        reject({ response: { data: { message: 'Account awaiting approval. Please try again later.' } } });
-                    } else if (data.email === 'demo@company.com' && user.loginAttempts >= 2) {
-                        user.isApproved = true; // Simulate approval
-                        user.loginAttempts = 0; // Reset attempts
-                        resolve({ data: { token: 'demo-token-123', message: 'Login successful' } });
-                    } else {
-                        // For non-demo users, always awaiting approval until explicitly approved (not implemented in this mock)
-                        reject({ response: { data: { message: 'Account awaiting approval. Please try again later.' } } });
-                    }
-                } else if (user.password === data.password) {
-                    resolve({ data: { token: 'demo-token-123', message: 'Login successful' } });
-                } else {
-                    reject({ response: { data: { message: 'Invalid credentials' } } });
-                }
-            } else if (endpoint === '/api/signup') {
-                if (mockUsers[data.email]) {
-                    reject({ response: { data: { message: 'Account with this email already exists.' } } });
-                } else {
-                    mockUsers[data.email] = { password: data.password, isApproved: false, loginAttempts: 0 };
-                    resolve({ data: { message: 'Account created! Please wait for admin approval.' } });
-                }
-            }
-        }, delay);
-    });
-};
-
 // Define the API URL for your backend.
+// In development, it will default to http://localhost:5000.
+// In production (on Vercel), it will use the REACT_APP_API_URL environment variable.
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 // --- AuthPage Component ---
 function AuthPage({ setIsLoggedIn, setAuthMessage }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState(''); // New state for confirm password
+    const [confirmPassword, setConfirmPassword] = useState(''); 
     const [isLoginMode, setIsLoginMode] = useState(true);
     const [loading, setLoading] = useState(false);
     const [authError, setAuthError] = useState(null);
     const [rememberMe, setRememberMe] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-    const [showConfirmPassword, setShowConfirmPassword] = useState(false); // New state for confirm password visibility
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false); 
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
@@ -102,9 +58,9 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
         setLoading(true);
         setAuthError(null);
         setAuthMessage('');
-        setSnackbarOpen(false); // Close any existing snackbars
+        setSnackbarOpen(false); 
 
-        if (!isLoginMode) { // If in signup mode, validate passwords
+        if (!isLoginMode) { 
             if (password !== confirmPassword) {
                 setAuthError("Passwords do not match.");
                 setSnackbarMessage("Passwords do not match.");
@@ -118,17 +74,19 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
         try {
             let response;
             if (isLoginMode) {
-                response = await simulateAPI('/api/login', { email, password });
+                // Use axios for actual login API call
+                response = await axios.post(`${API_URL}/api/login`, { email, password });
                 localStorage.setItem('token', response.data.token);
                 setIsLoggedIn(true);
-                setAuthMessage(response.data.message); // Set auth message for main app
+                setAuthMessage(response.data.message); 
             } else {
-                response = await simulateAPI('/api/signup', { email, password });
+                // Use axios for actual signup API call
+                response = await axios.post(`${API_URL}/api/signup`, { email, password });
                 setAuthMessage(response.data.message);
                 setSnackbarMessage(response.data.message);
                 setSnackbarSeverity('success');
                 setSnackbarOpen(true);
-                setIsLoginMode(true); // Switch to login mode after signup
+                setIsLoginMode(true); 
             }
         } catch (err) {
             console.error("Authentication error:", err);
@@ -150,23 +108,23 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                 minHeight: '100vh',
                 display: 'flex',
                 fontFamily: 'Inter, sans-serif',
-                background: 'linear-gradient(to bottom right, #eef2ff, #fff, #f5f3ff)', // from-indigo-50 via-white to-purple-50
-                '@media (min-width: 1024px)': { // lg breakpoint
-                    display: 'flex', // Ensure flex on larger screens
+                background: 'linear-gradient(to bottom right, #eef2ff, #fff, #f5f3ff)', 
+                '@media (min-width: 1024px)': { 
+                    display: 'flex', 
                 },
             }}
         >
             {/* Left Side - Hero Section */}
             <Box
                 sx={{
-                    display: { xs: 'none', lg: 'flex' }, // hidden on xs, flex on lg
-                    width: { lg: '50%' }, // lg:w-1/2
-                    background: 'linear-gradient(to bottom right, #4f46e5, #9333ea, #3730a3)', // from-indigo-600 via-purple-600 to-indigo-800
+                    display: { xs: 'none', lg: 'flex' }, 
+                    width: { lg: '50%' }, 
+                    background: 'linear-gradient(to bottom right, #4f46e5, #9333ea, #3730a3)', 
                     position: 'relative',
                     overflow: 'hidden',
                     flexDirection: 'column',
                     justifyContent: 'center',
-                    px: 6, // px-12
+                    px: 6, 
                     color: '#fff',
                 }}
             >
@@ -221,27 +179,27 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
             {/* Right Side - Auth Form */}
             <Box
                 sx={{
-                    width: { xs: '100%', lg: '50%' }, // w-full on xs, lg:w-1/2 on lg
+                    width: { xs: '100%', lg: '50%' }, 
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    p: 4, // p-8
+                    p: 4, 
                 }}
             >
                 <Paper
                     elevation={3}
                     sx={{
                         width: '100%',
-                        maxWidth: '28rem', // max-w-md
-                        borderRadius: '1rem', // rounded-2xl
-                        p: { xs: 4, sm: 5 }, // p-8 sm:p-10
-                        border: '1px solid #e5e7eb', // border border-gray-100
+                        maxWidth: '28rem', 
+                        borderRadius: '1rem', 
+                        p: { xs: 4, sm: 5 }, 
+                        border: '1px solid #e5e7eb', 
                     }}
                 >
                     {/* Mobile Logo */}
                     <Box sx={{ display: { xs: 'flex', lg: 'none' }, justifyContent: 'center', alignItems: 'center', flexDirection: 'column', marginBottom: 4 }}>
                         <Sparkles size={32} color="#4f46e5" style={{ marginBottom: '0.5rem' }} />
-                        <Typography variant="h6" component="span" sx={{ fontWeight: 'bold', color: '#111827' }}>
+                        <Typography variant="h6" component="span" sx={{ fontWeight: 'bold' }}>
                             Auto Product Manager
                         </Typography>
                     </Box>
@@ -276,17 +234,17 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                                 '& .MuiOutlinedInput-root': {
                                     borderRadius: '0.5rem',
                                     '&.Mui-focused fieldset': {
-                                        borderColor: '#6366f1', // focus:border-indigo-500
-                                        boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)', // focus:ring-2 focus:ring-indigo-500
+                                        borderColor: '#6366f1', 
+                                        boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)', 
                                     },
                                 },
                                 '& .MuiInputLabel-root': {
-                                    fontWeight: 600, // font-semibold
-                                    color: '#374151', // text-gray-700
+                                    fontWeight: 600, 
+                                    color: '#374151', 
                                 },
                                 '& .MuiInputBase-input::placeholder': {
-                                    color: '#9ca3af', // placeholder-gray-400
-                                    opacity: 1, // Ensure placeholder is visible
+                                    color: '#9ca3af', 
+                                    opacity: 1, 
                                 },
                             }}
                         />
@@ -318,19 +276,19 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                                 sx: {
                                     borderRadius: '0.5rem',
                                     '&.Mui-focused fieldset': {
-                                        borderColor: '#6366f1', // focus:border-indigo-500
-                                        boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)', // focus:ring-2 focus:ring-indigo-500
+                                        borderColor: '#6366f1', 
+                                        boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)', 
                                     },
                                 },
                             }}
                             sx={{
                                 '& .MuiInputLabel-root': {
-                                    fontWeight: 600, // font-semibold
-                                    color: '#374151', // text-gray-700
+                                    fontWeight: 600, 
+                                    color: '#374151', 
                                 },
                                 '& .MuiInputBase-input::placeholder': {
-                                    color: '#9ca3af', // placeholder-gray-400
-                                    opacity: 1, // Ensure placeholder is visible
+                                    color: '#9ca3af', 
+                                    opacity: 1, 
                                 },
                             }}
                         />
@@ -470,7 +428,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                                     setAuthError(null); 
                                     setEmail('');
                                     setPassword('');
-                                    setConfirmPassword(''); // Clear confirm password on mode change
+                                    setConfirmPassword(''); 
                                     setSnackbarOpen(false);
                                 }}
                                 sx={{
@@ -608,7 +566,7 @@ function App() {
         setSelectedProduct(product);
         setGeneratedDocument(product.discovery_document || '');
         setDiscoveryInput('');
-        setSnackbarOpen(false); // Clear messages on product select
+        setSnackbarOpen(false); 
     };
 
     const handleDeleteProduct = async (productId) => {
@@ -722,8 +680,8 @@ function App() {
         <Box
             sx={{
                 minHeight: '100vh',
-                background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)', // bg-gradient-to-br from-gray-50 to-gray-200
-                p: 4, // p-8
+                background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)', 
+                p: 4, 
                 fontFamily: 'Inter, sans-serif',
             }}
         >
@@ -731,12 +689,12 @@ function App() {
                 component="header"
                 sx={{
                     textAlign: 'center',
-                    marginBottom: 6, // mb-12
-                    paddingY: 3, // py-6
+                    marginBottom: 6, 
+                    paddingY: 3, 
                     backgroundColor: '#fff',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', // shadow-lg
-                    borderBottomLeftRadius: '1.5rem', // rounded-b-3xl
-                    borderBottomRightRadius: '1.5rem', // rounded-b-3xl
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', 
+                    borderBottomLeftRadius: '1.5rem', 
+                    borderBottomRightRadius: '1.5rem', 
                 }}
             >
                 <Typography variant="h2" component="h1" sx={{ fontSize: '3.75rem', fontWeight: 800, color: '#111827', lineHeight: 1, letterSpacing: '-0.025em' }}>
@@ -749,19 +707,19 @@ function App() {
                     onClick={handleLogout}
                     variant="contained"
                     sx={{
-                        marginTop: 3, // mt-6
-                        paddingX: 3, // px-6
-                        paddingY: 1, // py-2
-                        backgroundColor: '#e5e7eb', // bg-gray-200
-                        color: '#374151', // text-gray-700
-                        fontWeight: 600, // font-semibold
-                        borderRadius: '0.5rem', // rounded-lg
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', // shadow-md
+                        marginTop: 3, 
+                        paddingX: 3, 
+                        paddingY: 1, 
+                        backgroundColor: '#e5e7eb', 
+                        color: '#374151', 
+                        fontWeight: 600, 
+                        borderRadius: '0.5rem', 
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', 
                         textTransform: 'none',
                         transition: 'all 300ms ease-in-out',
                         '&:hover': {
-                            backgroundColor: '#d1d5db', // hover:bg-gray-300
-                            transform: 'scale(1.05)', // transform hover:scale-105
+                            backgroundColor: '#d1d5db', 
+                            transform: 'scale(1.05)', 
                         },
                     }}
                 >
@@ -777,10 +735,10 @@ function App() {
                     elevation={3}
                     sx={{
                         backgroundColor: '#fff',
-                        p: 4, // p-10
-                        borderRadius: '1.5rem', // rounded-3xl
-                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', // shadow-xl
-                        border: '1px solid #e5e7eb', // border border-gray-100
+                        p: 4, 
+                        borderRadius: '1.5rem', 
+                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', 
+                        border: '1px solid #e5e7eb', 
                     }}
                 >
                     <Typography variant="h5" component="h2" sx={{ fontWeight: 700, color: '#1f2937', marginBottom: 4, borderBottom: '2px solid #d8b4fe', paddingBottom: 2 }}>
@@ -802,15 +760,15 @@ function App() {
                             variant="outlined"
                             sx={{
                                 '& .MuiOutlinedInput-root': {
-                                    borderRadius: '0.75rem', // rounded-xl
+                                    borderRadius: '0.75rem', 
                                 },
                                 '& .MuiInputBase-input': {
-                                    padding: '1rem', // p-4
-                                    fontSize: '1.125rem', // text-lg
+                                    padding: '1rem', 
+                                    fontSize: '1.125rem', 
                                 },
                                 '& .Mui-focused fieldset': {
-                                    borderColor: '#9333ea', // focus:border-purple-500
-                                    boxShadow: '0 0 0 2px rgba(147, 51, 234, 0.25)', // focus:ring-purple-500
+                                    borderColor: '#9333ea', 
+                                    boxShadow: '0 0 0 2px rgba(147, 51, 234, 0.25)', 
                                 },
                             }}
                         />
@@ -819,17 +777,17 @@ function App() {
                             variant="contained"
                             disabled={loading}
                             sx={{
-                                paddingX: 4, // px-8
-                                paddingY: 2, // py-4
-                                backgroundColor: '#9333ea', // bg-purple-600
+                                paddingX: 4, 
+                                paddingY: 2, 
+                                backgroundColor: '#9333ea', 
                                 color: '#fff',
                                 fontWeight: 700,
-                                borderRadius: '0.75rem', // rounded-xl
-                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', // shadow-lg
+                                borderRadius: '0.75rem', 
+                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', 
                                 textTransform: 'none',
                                 '&:hover': {
-                                    backgroundColor: '#7e22ce', // hover:bg-purple-700
-                                    transform: 'scale(1.05)', // transform hover:scale-105
+                                    backgroundColor: '#7e22ce', 
+                                    transform: 'scale(1.05)', 
                                 },
                                 '&:disabled': {
                                     opacity: 0.5,
@@ -858,25 +816,25 @@ function App() {
                                             display: 'flex',
                                             justifyContent: 'space-between',
                                             alignItems: 'center',
-                                            padding: 2.5, // p-5
-                                            borderRadius: '1rem', // rounded-2xl
-                                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', // shadow-md
+                                            padding: 2.5, 
+                                            borderRadius: '1rem', 
+                                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', 
                                             cursor: 'pointer',
                                             transition: 'all 200ms ease-in-out',
                                             '&:hover': {
-                                                transform: 'scale(1.01)', // transform hover:scale-[1.01]
-                                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', // hover:shadow-lg
+                                                transform: 'scale(1.01)', 
+                                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', 
                                             },
-                                            backgroundColor: selectedProduct && selectedProduct.id === product.id ? '#f5f3ff' : '#fff', // bg-purple-50 vs bg-white
-                                            border: selectedProduct && selectedProduct.id === product.id ? '2px solid #9333ea' : '1px solid #e5e7eb', // border-purple-500 border-2 vs border-gray-200
+                                            backgroundColor: selectedProduct && selectedProduct.id === product.id ? '#f5f3ff' : '#fff', 
+                                            border: selectedProduct && selectedProduct.id === product.id ? '2px solid #9333ea' : '1px solid #e5e7eb', 
                                         }}
                                     >
                                         <ListItemText 
                                             primary={product.name} 
                                             primaryTypographyProps={{ 
-                                                fontSize: '1.25rem', // text-xl
-                                                fontWeight: 500, // font-medium
-                                                color: '#1f2937', // text-gray-800
+                                                fontSize: '1.25rem', 
+                                                fontWeight: 500, 
+                                                color: '#1f2937', 
                                                 flexGrow: 1 
                                             }} 
                                         />
@@ -887,19 +845,19 @@ function App() {
                                             }}
                                             disabled={loading}
                                             sx={{
-                                                marginLeft: 3, // ml-6
-                                                paddingX: 2.5, // px-5
-                                                paddingY: 1, // py-2
-                                                backgroundColor: '#ef4444', // bg-red-500
+                                                marginLeft: 3, 
+                                                paddingX: 2.5, 
+                                                paddingY: 1, 
+                                                backgroundColor: '#ef4444', 
                                                 color: '#fff',
-                                                fontSize: '1rem', // text-base
-                                                fontWeight: 600, // font-semibold
-                                                borderRadius: '0.5rem', // rounded-lg
-                                                boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', // shadow-sm
+                                                fontSize: '1rem', 
+                                                fontWeight: 600, 
+                                                borderRadius: '0.5rem', 
+                                                boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', 
                                                 transition: 'all 300ms ease-in-out',
                                                 '&:hover': {
-                                                    backgroundColor: '#dc2626', // hover:bg-red-600
-                                                    transform: 'scale(1.05)', // transform hover:scale-105
+                                                    backgroundColor: '#dc2626', 
+                                                    transform: 'scale(1.05)', 
                                                 },
                                                 '&:disabled': {
                                                     opacity: 0.5,
@@ -921,10 +879,10 @@ function App() {
                     elevation={3}
                     sx={{
                         backgroundColor: '#fff',
-                        p: 4, // p-10
-                        borderRadius: '1.5rem', // rounded-3xl
-                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', // shadow-xl
-                        border: '1px solid #e5e7eb', // border border-gray-100
+                        p: 4, 
+                        borderRadius: '1.5rem', 
+                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', 
+                        border: '1px solid #e5e7eb', 
                     }}
                 >
                     <Typography variant="h5" component="h2" sx={{ fontWeight: 700, color: '#1f2937', marginBottom: 4, borderBottom: '2px solid #d8b4fe', paddingBottom: 2 }}>
@@ -953,15 +911,15 @@ function App() {
                                     variant="outlined"
                                     sx={{
                                         '& .MuiOutlinedInput-root': {
-                                            borderRadius: '0.75rem', // rounded-xl
-                                            padding: '1rem', // p-4
+                                            borderRadius: '0.75rem', 
+                                            padding: '1rem', 
                                         },
                                         '& .Mui-focused fieldset': {
-                                            borderColor: '#9333ea', // focus:border-purple-500
-                                            boxShadow: '0 0 0 2px rgba(147, 51, 234, 0.25)', // focus:ring-purple-500
+                                            borderColor: '#9333ea', 
+                                            boxShadow: '0 0 0 2px rgba(147, 51, 234, 0.25)', 
                                         },
                                         '& .MuiInputBase-input::placeholder': {
-                                            color: '#9ca3af', // placeholder-gray-400
+                                            color: '#9ca3af', 
                                             opacity: 1,
                                         },
                                     }}
@@ -971,19 +929,19 @@ function App() {
                                     variant="contained"
                                     disabled={loading}
                                     sx={{
-                                        marginTop: 3, // mt-6
+                                        marginTop: 3, 
                                         width: '100%',
-                                        paddingX: 4, // px-8
-                                        paddingY: 2, // py-4
-                                        backgroundColor: '#16a34a', // bg-green-600
+                                        paddingX: 4, 
+                                        paddingY: 2, 
+                                        backgroundColor: '#16a34a', 
                                         color: '#fff',
                                         fontWeight: 700,
-                                        borderRadius: '0.75rem', // rounded-xl
-                                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', // shadow-lg
+                                        borderRadius: '0.75rem', 
+                                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', 
                                         textTransform: 'none',
                                         '&:hover': {
-                                            backgroundColor: '#15803d', // hover:bg-green-700
-                                            transform: 'scale(1.05)', // transform hover:scale-105
+                                            backgroundColor: '#15803d', 
+                                            transform: 'scale(1.05)', 
                                         },
                                         '&:disabled': {
                                             opacity: 0.5,
@@ -1004,15 +962,15 @@ function App() {
                                     <Paper
                                         elevation={0}
                                         sx={{
-                                            backgroundColor: '#f9fafb', // bg-gray-50
-                                            p: 4, // p-8
-                                            borderRadius: '0.75rem', // rounded-xl
-                                            boxShadow: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)', // shadow-inner
-                                            border: '1px solid #e5e7eb', // border border-gray-200
+                                            backgroundColor: '#f9fafb', 
+                                            p: 4, 
+                                            borderRadius: '0.75rem', 
+                                            boxShadow: 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)', 
+                                            border: '1px solid #e5e7eb', 
                                             whiteSpace: 'pre-wrap',
-                                            color: '#1f2937', // text-gray-800
-                                            lineHeight: '1.625', // leading-relaxed
-                                            fontSize: '1rem', // text-base
+                                            color: '#1f2937', 
+                                            lineHeight: '1.625', 
+                                            fontSize: '1rem', 
                                         }}
                                     >
                                         {generatedDocument || selectedProduct.discovery_document}
