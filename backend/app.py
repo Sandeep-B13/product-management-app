@@ -115,6 +115,9 @@ class ProductFeature(db.Model):
         }
 
 # --- IMPORTANT: Create database tables when the app is initialized by Gunicorn ---
+# This will create tables if they don't exist.
+# If tables exist but have changed, you will need to manually drop them in Neon
+# for changes to take effect.
 with app.app_context():
     db.create_all()
 
