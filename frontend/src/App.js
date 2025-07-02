@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } => 'react';
 import axios from 'axios';
 
 // Importing Material-UI components
@@ -25,7 +25,7 @@ import {
 } from '@mui/material';
 
 // Importing Lucide icons
-import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, ChevronLeft, ChevronRight, Search, CheckCircle } from 'lucide-react'; // Added CheckCircle import
 
 // Define the API URL for your backend.
 // In development, it will default to http://localhost:5000.
