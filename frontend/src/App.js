@@ -16,6 +16,7 @@ import {
     Alert,
     List,
     ListItem,
+    ListSubheader, // Added for sticky headers
     ListItemText,
     IconButton,
     InputAdornment,
@@ -149,11 +150,11 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                             </Typography>
                         </Box>
                         <Typography variant="h3" component="h1" sx={{ fontWeight: 'bold', lineHeight: 'tight', marginBottom: 3 }}>
-                            Product Management
-                            <Box component="span" sx={{ display: 'block', color: '#fde047' }}>On Autopilot</Box>
+                            Automate Your Entire Product Management
+                            <Box component="span" sx={{ display: 'block', color: '#fde047' }}>Lifecycle</Box>
                         </Typography>
                         <Typography variant="body1" sx={{ fontSize: '1.25rem', color: '#e0e7ff', marginBottom: 4, lineHeight: 'relaxed' }}>
-                            Streamline your product discovery process with AI-powered insights and automated documentation generation.
+                            Leverage AI-powered insights to streamline every stage of your product lifecycle, from ideation to launch and beyond, with automated documentation and enhanced collaboration.
                         </Typography>
                     </Box>
                     
@@ -161,15 +162,15 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
                             <Zap size={24} color="#fde047" style={{ marginRight: '0.75rem', flexShrink: 0 }} />
-                            <Typography variant="body2" sx={{ color: '#e0e7ff' }}>AI-Powered Discovery Documents</Typography>
+                            <Typography variant="body2" sx={{ color: '#e0e7ff' }}>AI-Driven Product Lifecycle Automation</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
                             <Users size={24} color="#fde047" style={{ marginRight: '0.75rem', flexShrink: 0 }} />
-                            <Typography variant="body2" sx={{ color: '#e0e7ff' }}>Team Collaboration Tools</Typography>
+                            <Typography variant="body2" sx={{ color: '#e0e7ff' }}>Seamless Team Collaboration</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
                             <BarChart3 size={24} color="#fde047" style={{ marginRight: '0.75rem', flexShrink: 0 }} />
-                            <Typography variant="body2" sx={{ color: '#e0e7ff' }}>Advanced Analytics & Insights</Typography>
+                            <Typography variant="body2" sx={{ color: '#e0e7ff' }}>Actionable Analytics & Strategic Insights</Typography>
                         </Box>
                     </Box>
                 </Box>
@@ -214,14 +215,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                                 : 'Get started with your free account today'
                             }
                         </Typography>
-                        {/* Demo credentials hint */}
-                        {isLoginMode && (
-                            <Box sx={{ marginTop: 2, padding: 1.5, backgroundColor: '#eff6ff', borderRadius: '0.5rem', border: '1px solid #bfdbfe' }}>
-                                <Typography variant="body2" sx={{ fontSize: '0.875rem', color: '#1d4ed8' }}>
-                                    <strong>Demo:</strong> demo@company.com / password
-                                </Typography>
-                            </Box>
-                        )}
+                        {/* Removed Demo credentials hint */}
                     </Box>
 
                     {/* Form */}
@@ -300,9 +294,9 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                             }}
                         />
 
-                        {/* Remember Me & Forgot Password */}
+                        {/* Remember Me (Forgot Password removed) */}
                         {isLoginMode && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}> {/* Changed justifyContent to flex-start */}
                                 <FormControlLabel
                                     control={
                                         <Checkbox
@@ -326,21 +320,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                                         </Typography>
                                     }
                                 />
-                                <Button
-                                    variant="text"
-                                    sx={{
-                                        fontSize: '0.875rem', // text-sm
-                                        color: '#4f46e5', // text-indigo-600
-                                        fontWeight: 500, // font-medium
-                                        textTransform: 'none',
-                                        '&:hover': {
-                                            color: '#6366f1', // hover:text-indigo-500
-                                            backgroundColor: 'transparent',
-                                        },
-                                    }}
-                                >
-                                    Forgot password?
-                                </Button>
+                                {/* The Forgot password button has been removed */}
                             </Box>
                         )}
 
