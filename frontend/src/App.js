@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 
 // Importing Material-UI components
@@ -7,7 +7,6 @@ import {
     Button, 
     TextField, 
     Typography, 
-    Container, 
     Paper, 
     Checkbox, 
     FormControlLabel, 
@@ -20,13 +19,21 @@ import {
     ListItemText,
     IconButton,
     InputAdornment,
-    Grid, // Specifically for layout
-    LinearProgress, // For progress bar
-    Collapse // For collapse/expand functionality
+    Grid, 
+    LinearProgress, 
+    Dialog, // For confirmation and add product popups
+    DialogActions,
+    DialogContent,
+    DialogContentText,
+    DialogTitle,
+    Select, // For sort dropdown
+    MenuItem, // For sort dropdown items
+    FormControl, // For select input
+    InputLabel // For select input label
 } from '@mui/material';
 
 // Importing Lucide icons
-import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, Archive, ArchiveRestore, MessageSquare, CheckCircle } from 'lucide-react'; // Re-added CheckCircle
+import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, Archive, ArchiveRestore, MessageSquare, CheckCircle, Search, SortAsc, SortDesc } from 'lucide-react'; 
 
 // Define the API URL for your backend.
 // In development, it will default to http://localhost:5000.
@@ -464,24 +471,36 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
 // --- Main App Component ---
 function App() {
     const [products, setProducts] = useState([
-        { id: 1, name: "Mobile App Redesign", discovery_document: "Sample discovery document for mobile app...", isArchived: false },
-        { id: 2, name: "API Gateway", discovery_document: null, isArchived: false },
-        { id: 3, name: "User Analytics Dashboard", discovery_document: "Comprehensive analytics solution...", isArchived: true } // Example archived
+        { id: 1, name: "Mobile App Redesign", discovery_document: "Sample discovery document for mobile app...", isArchived: false, created_at: "2023-01-01T10:00:00Z" },
+        { id: 2, name: "API Gateway", discovery_document: null, isArchived: false, created_at: "2023-01-05T11:30:00Z" },
+        { id: 3, name: "User Analytics Dashboard", discovery_document: "Comprehensive analytics solution...", isArchived: true, created_at: "2023-01-10T14:00:00Z" } 
     ]);
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [newProductName, setNewProductName] = useState('');
+    const [newProductDescription, setNewProductDescription] = useState(''); // For new product description
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [generatedDocument, setGeneratedDocument] = useState('');
     const [discoveryInput, setDiscoveryInput] = useState('');
-    const [showAiAssistant, setShowAiAssistant] = useState(false); // State to toggle AI Assistant panel
-    const [showArchivedView, setShowArchivedView] = useState(false); // New state to toggle between active and archived views
+    const [showAiAssistant, setShowAiAssistant] = useState(false); 
+    const [showArchivedView, setShowArchivedView] = useState(false); 
 
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [authMessage, setAuthMessage] = useState(''); 
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+
+    // State for new product modal
+    const [showAddProductModal, setShowAddProductModal] = useState(false);
+
+    // State for delete confirmation modal
+    const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+    const [productToDeleteId, setProductToDeleteId] = useState(null);
+
+    // State for search and sort
+    const [searchTerm, setSearchTerm] = useState('');
+    const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'alpha-asc', 'alpha-desc'
 
     const handleSnackbarClose = (event, reason) => {
         if (reason === 'clickaway') {
@@ -509,7 +528,6 @@ function App() {
                         Authorization: `Bearer ${localStorage.getItem('token')}`
                     }
                 });
-                // Assuming the backend returns products with an isArchived field
                 setProducts(response.data);
             } catch (err) {
                 console.error("Error fetching products:", err);
@@ -539,11 +557,13 @@ function App() {
         setLoading(true);
         setError(null);
         setSnackbarOpen(false);
+        setShowAddProductModal(false); // Close the modal
         try {
             const token = localStorage.getItem('token');
             const response = await axios.post(`${API_URL}/api/products`, {
                 name: newProductName,
-                isArchived: false // New products are not archived by default
+                discovery_document: newProductDescription, // Use the description for initial discovery_document
+                isArchived: false 
             }, {
                 headers: {
                     Authorization: `Bearer ${token}`
@@ -551,6 +571,7 @@ function App() {
             });
             setProducts([response.data, ...products]);
             setNewProductName('');
+            setNewProductDescription('');
             setSnackbarMessage("Product added successfully!");
             setSnackbarSeverity('success');
             setSnackbarOpen(true);
@@ -570,6 +591,7 @@ function App() {
         setSelectedProduct(product);
         setGeneratedDocument(product.discovery_document || '');
         setDiscoveryInput('');
+        setShowAiAssistant(false); // Close AI assistant when selecting a new product
         setSnackbarOpen(false);
     };
 
@@ -607,19 +629,25 @@ function App() {
         }
     };
 
-    const handleDeleteProduct = async (productId) => {
+    const confirmDeleteProduct = (productId) => {
+        setProductToDeleteId(productId);
+        setShowDeleteConfirmModal(true);
+    };
+
+    const handleDeleteProduct = async () => {
         setLoading(true);
         setError(null);
         setSnackbarOpen(false);
+        setShowDeleteConfirmModal(false); // Close confirmation modal
         try {
             const token = localStorage.getItem('token');
-            await axios.delete(`${API_URL}/api/products/${productId}`, {
+            await axios.delete(`${API_URL}/api/products/${productToDeleteId}`, {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
             });
-            setProducts(products.filter(p => p.id !== productId));
-            if (selectedProduct && selectedProduct.id === productId) {
+            setProducts(products.filter(p => p.id !== productToDeleteId));
+            if (selectedProduct && selectedProduct.id === productToDeleteId) {
                 setSelectedProduct(null);
                 setGeneratedDocument('');
                 setDiscoveryInput('');
@@ -636,6 +664,7 @@ function App() {
             setSnackbarOpen(true);
         } finally {
             setLoading(false);
+            setProductToDeleteId(null);
         }
     };
 
@@ -714,8 +743,35 @@ function App() {
         return <AuthPage setIsLoggedIn={setIsLoggedIn} setAuthMessage={setAuthMessage} />;
     }
 
-    const activeProducts = products.filter(p => !p.isArchived);
-    const archivedProducts = products.filter(p => p.isArchived);
+    // Filter and Sort Logic
+    const filteredAndSortedProducts = useMemo(() => {
+        let currentProducts = showArchivedView ? products.filter(p => p.isArchived) : products.filter(p => !p.isArchived);
+
+        // Apply search filter
+        if (searchTerm) {
+            currentProducts = currentProducts.filter(p => 
+                p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (p.discovery_document && p.discovery_document.toLowerCase().includes(searchTerm.toLowerCase()))
+            );
+        }
+
+        // Apply sort
+        currentProducts.sort((a, b) => {
+            if (sortBy === 'newest') {
+                return new Date(b.created_at) - new Date(a.created_at);
+            } else if (sortBy === 'oldest') {
+                return new Date(a.created_at) - new Date(b.created_at);
+            } else if (sortBy === 'alpha-asc') {
+                return a.name.localeCompare(b.name);
+            } else if (sortBy === 'alpha-desc') {
+                return b.name.localeCompare(a.name);
+            }
+            return 0;
+        });
+
+        return currentProducts;
+    }, [products, showArchivedView, searchTerm, sortBy]);
+
 
     return (
         <Box
@@ -723,8 +779,8 @@ function App() {
                 minHeight: '100vh',
                 background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)',
                 fontFamily: 'Inter, sans-serif',
-                display: 'flex', // Make App container a flex container
-                flexDirection: 'column', // Stack children vertically
+                display: 'flex', 
+                flexDirection: 'column', 
             }}
         >
             {/* Main Header */}
@@ -734,11 +790,11 @@ function App() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '1rem 2rem', // px-8 py-4
+                    padding: '1rem 2rem', 
                     backgroundColor: '#fff',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', // shadow-md
-                    borderRadius: '0.75rem', // rounded-xl
-                    margin: '1rem', // m-4
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', 
+                    borderRadius: '0.75rem', 
+                    margin: '1rem', 
                 }}
             >
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -753,19 +809,18 @@ function App() {
                     </Box>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    {/* Removed AI Assistant button from header */}
                     <Button
                         onClick={handleLogout}
                         variant="outlined"
                         sx={{
-                            borderColor: '#e5e7eb', // border-gray-200
-                            color: '#374151', // text-gray-700
+                            borderColor: '#e5e7eb', 
+                            color: '#374151', 
                             fontWeight: 600,
                             borderRadius: '0.5rem',
                             textTransform: 'none',
                             padding: '0.5rem 1rem',
                             '&:hover': {
-                                backgroundColor: '#f0f0f0', // Light hover background
+                                backgroundColor: '#f0f0f0', 
                                 borderColor: '#d1d5db',
                             },
                         }}
@@ -776,74 +831,80 @@ function App() {
             </Box>
 
             {/* Main Content Area: Sidebar + Kanban Board */}
-            <Box sx={{ flexGrow: 1, display: 'flex', padding: '1rem', gap: '1rem' }}> {/* flex-grow to fill remaining space */}
-                {/* Left Sidebar: New Item, Active Items, and Archived Items */}
+            <Box sx={{ flexGrow: 1, display: 'flex', padding: '1rem', gap: '1rem' }}> 
+                {/* Left Sidebar */}
                 <Paper
                     elevation={3}
                     sx={{
-                        width: '280px', // Fixed width for sidebar
-                        flexShrink: 0, // Prevent shrinking
+                        width: '280px', 
+                        flexShrink: 0, 
                         backgroundColor: '#fff',
-                        borderRadius: '1rem', // rounded-xl
+                        borderRadius: '1rem', 
                         boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
                         p: 2,
                         display: 'flex',
                         flexDirection: 'column',
-                        // Responsive adjustments for sidebar
                         '@media (max-width: 600px)': { 
                             width: '100%',
                             marginBottom: '1rem',
                         },
                     }}
                 >
-                    {/* New Item Input/Button */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: 4, gap: 2 }}>
+                    {/* Add New Item Button */}
+                    <Button
+                        variant="contained"
+                        startIcon={<Plus size={20} />}
+                        sx={{
+                            backgroundColor: '#9333ea', 
+                            '&:hover': { backgroundColor: '#7e22ce' }, 
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.75rem',
+                            textTransform: 'none',
+                            padding: '0.75rem 1rem',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                            marginBottom: 3,
+                        }}
+                        onClick={() => setShowAddProductModal(true)}
+                    >
+                        Add New Item
+                    </Button>
+
+                    {/* Search and Sort Controls */}
+                    <Box sx={{ marginBottom: 2 }}>
                         <TextField
-                            type="text"
-                            placeholder="New product/feature"
-                            value={newProductName}
-                            onChange={(e) => setNewProductName(e.target.value)}
-                            onKeyPress={(e) => {
-                                if (e.key === 'Enter') {
-                                    handleAddProduct();
-                                }
-                            }}
                             fullWidth
                             variant="outlined"
                             size="small"
-                            sx={{
-                                '& .MuiOutlinedInput-root': {
-                                    borderRadius: '0.5rem',
-                                },
-                                '& .MuiInputBase-input': {
-                                    padding: '0.75rem',
-                                    fontSize: '0.9rem',
-                                },
-                                '& .Mui-focused fieldset': {
-                                    borderColor: '#9333ea',
-                                    boxShadow: '0 0 0 2px rgba(147, 51, 234, 0.25)',
-                                },
+                            placeholder="Search items..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            InputProps={{
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <Search size={18} color="#9ca3af" />
+                                    </InputAdornment>
+                                ),
+                                sx: { borderRadius: '0.5rem' }
                             }}
+                            sx={{ marginBottom: 1 }}
                         />
-                        <Button
-                            onClick={handleAddProduct}
-                            variant="contained"
-                            disabled={loading}
-                            sx={{
-                                minWidth: 'auto', // Allow button to shrink
-                                padding: '0.75rem',
-                                backgroundColor: '#9333ea',
-                                color: '#fff',
-                                fontWeight: 700,
-                                borderRadius: '0.5rem',
-                                boxShadow: 'none',
-                                textTransform: 'none',
-                                '&:hover': { backgroundColor: '#7e22ce' },
-                                '&:disabled': { opacity: 0.5, color: '#fff' },
-                            }}
-                        >
-                            {loading ? <CircularProgress size={20} color="inherit" /> : <Plus size={20} />}
-                        </Button>
+                        <FormControl fullWidth variant="outlined" size="small">
+                            <InputLabel id="sort-by-label">Sort By</InputLabel>
+                            <Select
+                                labelId="sort-by-label"
+                                id="sort-by-select"
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value)}
+                                label="Sort By"
+                                sx={{ borderRadius: '0.5rem' }}
+                            >
+                                <MenuItem value="newest">Created Date (Newest First)</MenuItem>
+                                <MenuItem value="oldest">Created Date (Oldest First)</MenuItem>
+                                <MenuItem value="alpha-asc">Alphabetical (A-Z)</MenuItem>
+                                <MenuItem value="alpha-desc">Alphabetical (Z-A)</MenuItem>
+                            </Select>
+                        </FormControl>
                     </Box>
 
                     {/* Toggle Buttons for Active/Archived Items */}
@@ -889,135 +950,73 @@ function App() {
                     </Box>
 
                     {/* Conditional Rendering of Active/Archived Lists */}
-                    {showArchivedView ? (
-                        // Archived Items List
-                        <List
-                            subheader={
-                                <ListSubheader component="div" sx={{ 
-                                    backgroundColor: 'transparent', 
-                                    fontWeight: 'bold', 
-                                    fontSize: '1.125rem', 
-                                    color: '#1f2937', 
-                                    lineHeight: '1.75rem', 
-                                    paddingX: 0,
-                                    paddingY: 1,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                }}>
-                                    <Box sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#9ca3af', marginRight: '0.5rem' }} />
-                                    Archived Items
-                                </ListSubheader>
-                            }
-                            sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', maxHeight: 'calc(100vh - 250px)' }}
-                        >
-                            {loading && <Typography sx={{ color: '#9333ea', textAlign: 'center', marginY: 3, fontSize: '0.9rem', fontWeight: 500 }}>Loading...</Typography>}
-                            {error && <Alert severity="error" sx={{ marginY: 3, borderRadius: '0.5rem' }}>{error}</Alert>}
-                            {!loading && !error && archivedProducts.length === 0 ? (
-                                <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 3 }}>No archived products.</Typography>
-                            ) : (
-                                archivedProducts.map(product => (
-                                    <ListItem
-                                        key={product.id}
-                                        onClick={() => handleSelectProduct(product)}
-                                        sx={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            padding: 1.5,
-                                            borderRadius: '0.5rem',
-                                            marginBottom: '0.5rem',
-                                            backgroundColor: selectedProduct && selectedProduct.id === product.id ? '#f3e8ff' : '#f9fafb', // Lighter purple for archived selected
-                                            border: selectedProduct && selectedProduct.id === product.id ? '1px solid #d8b4fe' : '1px solid #e5e7eb',
-                                            '&:hover': { backgroundColor: '#ede9fe' },
-                                            transition: 'background-color 0.2s, border-color 0.2s',
-                                        }}
-                                    >
-                                        <ListItemText
-                                            primary={product.name}
-                                            secondary="Archived"
-                                            primaryTypographyProps={{ fontWeight: 'medium', color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                            secondaryTypographyProps={{ fontSize: '0.75rem', color: '#9ca3af' }}
-                                        />
-                                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                    <List
+                        subheader={
+                            <ListSubheader component="div" sx={{ 
+                                backgroundColor: 'transparent', 
+                                fontWeight: 'bold', 
+                                fontSize: '1.125rem', 
+                                color: '#1f2937', 
+                                lineHeight: '1.75rem', 
+                                paddingX: 0,
+                                paddingY: 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                            }}>
+                                <Box sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: showArchivedView ? '#9ca3af' : '#16a34a', marginRight: '0.5rem' }} />
+                                {showArchivedView ? 'Archived Items' : 'Active Items'}
+                            </ListSubheader>
+                        }
+                        sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', maxHeight: 'calc(100vh - 400px)' }} // Adjusted max height
+                    >
+                        {loading && <Typography sx={{ color: '#9333ea', textAlign: 'center', marginY: 3, fontSize: '0.9rem', fontWeight: 500 }}>Loading...</Typography>}
+                        {error && <Alert severity="error" sx={{ marginY: 3, borderRadius: '0.5rem' }}>{error}</Alert>}
+                        {!loading && !error && filteredAndSortedProducts.length === 0 ? (
+                            <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 3 }}>
+                                {showArchivedView ? 'No archived products.' : 'No active products.'}
+                            </Typography>
+                        ) : (
+                            filteredAndSortedProducts.map(product => (
+                                <ListItem
+                                    key={product.id}
+                                    onClick={() => handleSelectProduct(product)}
+                                    sx={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center',
+                                        padding: 1.5,
+                                        borderRadius: '0.5rem',
+                                        marginBottom: '0.5rem',
+                                        backgroundColor: selectedProduct && selectedProduct.id === product.id ? (showArchivedView ? '#f3e8ff' : '#eef2ff') : '#fff',
+                                        border: selectedProduct && selectedProduct.id === product.id ? (showArchivedView ? '1px solid #d8b4fe' : '1px solid #c7d2fe') : '1px solid #f3f4f6',
+                                        '&:hover': { backgroundColor: showArchivedView ? '#ede9fe' : '#e0e7ff' },
+                                        transition: 'background-color 0.2s, border-color 0.2s',
+                                    }}
+                                >
+                                    <ListItemText
+                                        primary={product.name}
+                                        secondary={product.discovery_document ? "Documented" : "Pending Doc"}
+                                        primaryTypographyProps={{ fontWeight: 'medium', color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                        secondaryTypographyProps={{ fontSize: '0.75rem', color: '#6b7280' }}
+                                    />
+                                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                        {showArchivedView ? (
                                             <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleArchiveProduct(product.id, false); }}>
                                                 <ArchiveRestore size={16} />
                                             </IconButton>
-                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}>
-                                                <Trash2 size={16} />
-                                            </IconButton>
-                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleSelectProduct(product); setShowAiAssistant(true); }}>
-                                                <MessageSquare size={16} />
-                                            </IconButton>
-                                        </Box>
-                                    </ListItem>
-                                ))
-                            )}
-                        </List>
-                    ) : (
-                        // Active Items List
-                        <List
-                            subheader={
-                                <ListSubheader component="div" sx={{ 
-                                    backgroundColor: 'transparent', 
-                                    fontWeight: 'bold', 
-                                    fontSize: '1.125rem', 
-                                    color: '#1f2937', 
-                                    lineHeight: '1.75rem', 
-                                    paddingX: 0,
-                                    paddingY: 1,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                }}>
-                                    <Box sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#16a34a', marginRight: '0.5rem' }} />
-                                    Active Items
-                                </ListSubheader>
-                            }
-                            sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', maxHeight: 'calc(100vh - 250px)' }}
-                        >
-                            {loading && <Typography sx={{ color: '#9333ea', textAlign: 'center', marginY: 3, fontSize: '0.9rem', fontWeight: 500 }}>Loading...</Typography>}
-                            {error && <Alert severity="error" sx={{ marginY: 3, borderRadius: '0.5rem' }}>{error}</Alert>}
-                            {!loading && !error && activeProducts.length === 0 ? (
-                                <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 3 }}>No active products.</Typography>
-                            ) : (
-                                activeProducts.map(product => (
-                                    <ListItem
-                                        key={product.id}
-                                        onClick={() => handleSelectProduct(product)}
-                                        sx={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            padding: 1.5,
-                                            borderRadius: '0.5rem',
-                                            marginBottom: '0.5rem',
-                                            backgroundColor: selectedProduct && selectedProduct.id === product.id ? '#eef2ff' : '#fff',
-                                            border: selectedProduct && selectedProduct.id === product.id ? '1px solid #c7d2fe' : '1px solid #f3f4f6',
-                                            '&:hover': { backgroundColor: '#e0e7ff' },
-                                            transition: 'background-color 0.2s, border-color 0.2s',
-                                        }}
-                                    >
-                                        <ListItemText
-                                            primary={product.name}
-                                            secondary={product.discovery_document ? "Documented" : "Pending Doc"}
-                                            primaryTypographyProps={{ fontWeight: 'medium', color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                            secondaryTypographyProps={{ fontSize: '0.75rem', color: '#6b7280' }}
-                                        />
-                                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                        ) : (
                                             <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleArchiveProduct(product.id, true); }}>
                                                 <Archive size={16} />
                                             </IconButton>
-                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}>
-                                                <Trash2 size={16} />
-                                            </IconButton>
-                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleSelectProduct(product); setShowAiAssistant(true); }}>
-                                                <MessageSquare size={16} />
-                                            </IconButton>
-                                        </Box>
-                                    </ListItem>
-                                ))
-                            )}
-                        </List>
-                    )}
+                                        )}
+                                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); confirmDeleteProduct(product.id); }}>
+                                            <Trash2 size={16} />
+                                        </IconButton>
+                                    </Box>
+                                </ListItem>
+                            ))
+                        )}
+                    </List>
                 </Paper>
 
                 {/* Right Main Content: Kanban Board */}
@@ -1028,13 +1027,13 @@ function App() {
                         sx={{
                             backgroundColor: '#fff',
                             p: 2,
-                            borderRadius: '1rem', // rounded-xl
+                            borderRadius: '1rem', 
                             boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            flexWrap: 'wrap', // Allow wrapping on smaller screens
-                            gap: 2, // Gap between items
+                            flexWrap: 'wrap', 
+                            gap: 2, 
                         }}
                     >
                         <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1f2937' }}>
@@ -1045,23 +1044,49 @@ function App() {
                                 <Typography variant="body2" sx={{ color: '#4b5563' }}>Progress: 60%</Typography>
                                 <LinearProgress variant="determinate" value={60} sx={{ width: 100, borderRadius: 5, height: 8, backgroundColor: '#e0e7ff', '& .MuiLinearProgress-bar': { backgroundColor: '#4f46e5' } }} />
                             </Box>
+                            {/* AI Assistant button in header, context-aware */}
+                            <Button
+                                variant="contained"
+                                startIcon={<MessageSquare size={20} />}
+                                sx={{
+                                    backgroundColor: '#4f46e5', 
+                                    '&:hover': { backgroundColor: '#4338ca' }, 
+                                    color: '#fff',
+                                    fontWeight: 600,
+                                    borderRadius: '0.5rem',
+                                    textTransform: 'none',
+                                    padding: '0.5rem 1rem',
+                                    boxShadow: 'none',
+                                }}
+                                onClick={() => {
+                                    if (selectedProduct) {
+                                        setShowAiAssistant(!showAiAssistant);
+                                    } else {
+                                        setSnackbarMessage("Please select a product/feature first to use the AI Assistant.");
+                                        setSnackbarSeverity('info');
+                                        setSnackbarOpen(true);
+                                    }
+                                }}
+                            >
+                                AI Assistant
+                            </Button>
                         </Box>
                     </Paper>
 
                     {/* Kanban Board Columns */}
-                    <Grid container spacing={2} sx={{ flexGrow: 1, alignItems: 'stretch' }}> {/* align-items: stretch to make columns equal height */}
+                    <Grid container spacing={2} sx={{ flexGrow: 1, alignItems: 'stretch' }}> 
                         {/* Research Column */}
-                        <Grid item xs={12} sm={6} md={4} lg={3}> {/* Responsive column sizing */}
+                        <Grid item xs={12} sm={6} md={4} lg={3}> 
                             <Paper
                                 elevation={1}
                                 sx={{
-                                    backgroundColor: '#f5f3ff', // bg-purple-50
+                                    backgroundColor: '#f5f3ff', 
                                     p: 2,
-                                    borderRadius: '0.75rem', // rounded-xl
-                                    minHeight: '200px', // Ensure minimum height for visual consistency
+                                    borderRadius: '0.75rem', 
+                                    minHeight: '200px', 
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    border: '1px solid #d8b4fe', // border-purple-300
+                                    border: '1px solid #d8b4fe', 
                                 }}
                             >
                                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
@@ -1069,7 +1094,6 @@ function App() {
                                         <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', display: 'inline-block', marginRight: '0.5rem' }} />
                                         Research
                                     </Typography>
-                                    {/* <IconButton size="small"><ChevronRight size={16} /></IconButton> */}
                                 </Box>
                                 <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                                     <Typography variant="body2" sx={{ color: '#374151' }}>Market analysis completed <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
@@ -1084,13 +1108,13 @@ function App() {
                             <Paper
                                 elevation={1}
                                 sx={{
-                                    backgroundColor: '#eef2ff', // bg-indigo-50
+                                    backgroundColor: '#eef2ff', 
                                     p: 2,
                                     borderRadius: '0.75rem',
                                     minHeight: '200px',
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    border: '1px solid #c7d2fe', // border-indigo-200
+                                    border: '1px solid #c7d2fe', 
                                 }}
                             >
                                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
@@ -1098,7 +1122,6 @@ function App() {
                                         <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#6366f1', display: 'inline-block', marginRight: '0.5rem' }} />
                                         Ideation
                                     </Typography>
-                                    {/* <IconButton size="small"><ChevronRight size={16} /></IconButton> */}
                                 </Box>
                                 <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                                     <Typography variant="body2" sx={{ color: '#374151' }}>Plan logic and expectations <Box component="span" sx={{ color: '#fde047', display: 'inline-flex', alignItems: 'center' }}><CircularProgress size={14} sx={{ marginLeft: '0.25rem', color: '#fde047' }} /></Box></Typography>
@@ -1126,7 +1149,6 @@ function App() {
                                         <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#9ca3af', display: 'inline-block', marginRight: '0.5rem' }} />
                                         Design
                                     </Typography>
-                                    {/* <IconButton size="small"><ChevronRight size={16} /></IconButton> */}
                                 </Box>
                                 <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                                     <Typography variant="body2" sx={{ color: '#374151' }}>PRD handover to design team <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
@@ -1140,7 +1162,7 @@ function App() {
                             <Paper
                                 elevation={1}
                                 sx={{
-                                    backgroundColor: '#f5f3ff', // bg-purple-50
+                                    backgroundColor: '#f5f3ff', 
                                     p: 2,
                                     borderRadius: '0.75rem',
                                     minHeight: '200px',
@@ -1154,7 +1176,6 @@ function App() {
                                         <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', display: 'inline-block', marginRight: '0.5rem' }} />
                                         Planning
                                     </Typography>
-                                    {/* <IconButton size="small"><ChevronRight size={16} /></IconButton> */}
                                 </Box>
                                 <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                                     <Typography variant="body2" sx={{ color: '#374151' }}>Timeline planning <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
@@ -1168,7 +1189,7 @@ function App() {
                             <Paper
                                 elevation={1}
                                 sx={{
-                                    backgroundColor: '#eef2ff', // bg-indigo-50
+                                    backgroundColor: '#eef2ff', 
                                     p: 2,
                                     borderRadius: '0.75rem',
                                     minHeight: '200px',
@@ -1182,7 +1203,6 @@ function App() {
                                         <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#6366f1', display: 'inline-block', marginRight: '0.5rem' }} />
                                         Development
                                     </Typography>
-                                    {/* <IconButton size="small"><ChevronRight size={16} /></IconButton> */}
                                 </Box>
                                 <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                                     <Typography variant="body2" sx={{ color: '#374151' }}>Frontend development <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
@@ -1211,7 +1231,6 @@ function App() {
                                         <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#9ca3af', display: 'inline-block', marginRight: '0.5rem' }} />
                                         Documentation
                                     </Typography>
-                                    {/* <IconButton size="small"><ChevronRight size={16} /></IconButton> */}
                                 </Box>
                                 <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                                     <Typography variant="body2" sx={{ color: '#374151' }}>Tech documentation handover <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
@@ -1223,24 +1242,131 @@ function App() {
                 </Box>
             </Box>
 
+            {/* Add Product Modal */}
+            <Dialog open={showAddProductModal} onClose={() => setShowAddProductModal(false)} PaperProps={{ sx: { borderRadius: '1rem' } }}>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#1f2937' }}>Add New Product/Feature</DialogTitle>
+                <DialogContent dividers>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        id="product-name"
+                        label="Product/Feature Name"
+                        type="text"
+                        fullWidth
+                        variant="outlined"
+                        value={newProductName}
+                        onChange={(e) => setNewProductName(e.target.value)}
+                        sx={{ marginBottom: 2 }}
+                    />
+                    <TextField
+                        margin="dense"
+                        id="product-description"
+                        label="Brief Description (Optional)"
+                        type="text"
+                        fullWidth
+                        multiline
+                        rows={4}
+                        variant="outlined"
+                        value={newProductDescription}
+                        onChange={(e) => setNewProductDescription(e.target.value)}
+                    />
+                </DialogContent>
+                <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
+                    <Button 
+                        onClick={() => setShowAddProductModal(false)} 
+                        sx={{ 
+                            textTransform: 'none', 
+                            color: '#6b7280', 
+                            borderRadius: '0.5rem', 
+                            '&:hover': { backgroundColor: '#f3f4f6' } 
+                        }}
+                    >
+                        Cancel
+                    </Button>
+                    <Button 
+                        onClick={handleAddProduct} 
+                        variant="contained" 
+                        disabled={loading || !newProductName.trim()}
+                        sx={{ 
+                            textTransform: 'none', 
+                            backgroundColor: '#4f46e5', 
+                            color: '#fff', 
+                            borderRadius: '0.5rem',
+                            '&:hover': { backgroundColor: '#4338ca' },
+                            '&:disabled': { opacity: 0.5, color: '#fff' }
+                        }}
+                    >
+                        Add Product
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Delete Confirmation Modal */}
+            <Dialog
+                open={showDeleteConfirmModal}
+                onClose={() => setShowDeleteConfirmModal(false)}
+                aria-labelledby="alert-dialog-title"
+                aria-describedby="alert-dialog-description"
+                PaperProps={{ sx: { borderRadius: '1rem' } }}
+            >
+                <DialogTitle id="alert-dialog-title" sx={{ fontWeight: 'bold', color: '#ef4444' }}>
+                    {"Confirm Deletion"}
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText id="alert-dialog-description" sx={{ color: '#4b5563' }}>
+                        Are you sure you want to delete this product/feature? This action cannot be undone.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
+                    <Button 
+                        onClick={() => setShowDeleteConfirmModal(false)} 
+                        sx={{ 
+                            textTransform: 'none', 
+                            color: '#6b7280', 
+                            borderRadius: '0.5rem', 
+                            '&:hover': { backgroundColor: '#f3f4f6' } 
+                        }}
+                    >
+                        Cancel
+                    </Button>
+                    <Button 
+                        onClick={handleDeleteProduct} 
+                        variant="contained" 
+                        color="error" 
+                        autoFocus
+                        disabled={loading}
+                        sx={{ 
+                            textTransform: 'none', 
+                            backgroundColor: '#ef4444', 
+                            color: '#fff', 
+                            borderRadius: '0.5rem',
+                            '&:hover': { backgroundColor: '#dc2626' },
+                            '&:disabled': { opacity: 0.5, color: '#fff' }
+                        }}
+                    >
+                        Delete
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
             {/* AI Assistant Panel (Conditional Rendering based on showAiAssistant state) */}
             {showAiAssistant && selectedProduct && (
                 <Paper
                     elevation={3}
                     sx={{
-                        position: 'fixed', // Fixed position to float above other content
+                        position: 'fixed', 
                         top: '50%',
                         right: '1rem',
                         transform: 'translateY(-50%)',
-                        width: { xs: '90%', sm: '400px' }, // Responsive width
-                        maxHeight: '80vh', // Max height to prevent overflow
-                        overflowY: 'auto', // Scroll if content overflows
+                        width: { xs: '90%', sm: '400px' }, 
+                        maxHeight: '80vh', 
+                        overflowY: 'auto', 
                         backgroundColor: '#fff',
                         p: 4, 
                         borderRadius: '1.5rem', 
                         boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', 
                         border: '1px solid #e5e7eb', 
-                        zIndex: 1000, // Ensure it's on top
+                        zIndex: 1000, 
                     }}
                 >
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
@@ -1248,7 +1374,7 @@ function App() {
                             AI Assistant
                         </Typography>
                         <IconButton onClick={() => setShowAiAssistant(false)} size="small">
-                            <Plus size={24} style={{ transform: 'rotate(45deg)' }} /> {/* Close icon */}
+                            <Plus size={24} style={{ transform: 'rotate(45deg)' }} /> 
                         </IconButton>
                     </Box>
                     
