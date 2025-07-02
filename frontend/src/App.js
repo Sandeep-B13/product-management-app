@@ -26,7 +26,7 @@ import {
 } from '@mui/material';
 
 // Importing Lucide icons
-import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, ChevronLeft, ChevronRight, Search, CheckCircle, Archive, ArchiveRestore } from 'lucide-react'; // Changed Unarchive to ArchiveRestore
+import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, Archive, ArchiveRestore, MessageSquare } from 'lucide-react'; // Removed ChevronLeft/Right, added MessageSquare
 
 // Define the API URL for your backend.
 // In development, it will default to http://localhost:5000.
@@ -475,8 +475,7 @@ function App() {
     const [generatedDocument, setGeneratedDocument] = useState('');
     const [discoveryInput, setDiscoveryInput] = useState('');
     const [showAiAssistant, setShowAiAssistant] = useState(false); // State to toggle AI Assistant panel
-    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); // State for sidebar collapse
-    const [isArchiveListCollapsed, setIsArchiveListCollapsed] = useState(true); // State for archived list collapse
+    const [showArchivedView, setShowArchivedView] = useState(false); // New state to toggle between active and archived views
 
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [authMessage, setAuthMessage] = useState(''); 
@@ -754,24 +753,7 @@ function App() {
                     </Box>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    {/* AI Assistant button remains in header */}
-                    <Button
-                        variant="contained"
-                        startIcon={<Sparkles size={20} />}
-                        sx={{
-                            backgroundColor: '#4f46e5', // bg-indigo-600
-                            '&:hover': { backgroundColor: '#4338ca' }, // hover:bg-indigo-700
-                            color: '#fff',
-                            fontWeight: 600,
-                            borderRadius: '0.5rem',
-                            textTransform: 'none',
-                            padding: '0.5rem 1rem',
-                            boxShadow: 'none',
-                        }}
-                        onClick={() => setShowAiAssistant(!showAiAssistant)} // Toggle AI Assistant
-                    >
-                        AI Assistant
-                    </Button>
+                    {/* Removed AI Assistant button from header */}
                     <Button
                         onClick={handleLogout}
                         variant="outlined"
@@ -795,11 +777,11 @@ function App() {
 
             {/* Main Content Area: Sidebar + Kanban Board */}
             <Box sx={{ flexGrow: 1, display: 'flex', padding: '1rem', gap: '1rem' }}> {/* flex-grow to fill remaining space */}
-                {/* Left Sidebar: Active Items & Archived Items */}
+                {/* Left Sidebar: New Item, Active Items, and Archived Items */}
                 <Paper
                     elevation={3}
                     sx={{
-                        width: isSidebarCollapsed ? '60px' : '280px', // Collapsed vs Expanded width
+                        width: '280px', // Fixed width for sidebar
                         flexShrink: 0, // Prevent shrinking
                         backgroundColor: '#fff',
                         borderRadius: '1rem', // rounded-xl
@@ -807,117 +789,197 @@ function App() {
                         p: 2,
                         display: 'flex',
                         flexDirection: 'column',
-                        transition: 'width 0.3s ease-in-out', // Smooth transition for width change
-                        overflow: 'hidden', // Hide overflow when collapsed
                         // Responsive adjustments for sidebar
-                        '@media (max-width: 600px)': { // For small screens, make it full width and potentially collapsible
+                        '@media (max-width: 600px)': { 
                             width: '100%',
                             marginBottom: '1rem',
-                            position: 'relative', // Adjust position for mobile if needed
                         },
                     }}
                 >
                     {/* New Item Input/Button */}
                     <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: 4, gap: 2 }}>
-                        {!isSidebarCollapsed ? (
-                            <>
-                                <TextField
-                                    type="text"
-                                    placeholder="New product/feature"
-                                    value={newProductName}
-                                    onChange={(e) => setNewProductName(e.target.value)}
-                                    onKeyPress={(e) => {
-                                        if (e.key === 'Enter') {
-                                            handleAddProduct();
-                                        }
-                                    }}
-                                    fullWidth
-                                    variant="outlined"
-                                    size="small"
-                                    sx={{
-                                        '& .MuiOutlinedInput-root': {
-                                            borderRadius: '0.5rem',
-                                        },
-                                        '& .MuiInputBase-input': {
-                                            padding: '0.75rem',
-                                            fontSize: '0.9rem',
-                                        },
-                                        '& .Mui-focused fieldset': {
-                                            borderColor: '#9333ea',
-                                            boxShadow: '0 0 0 2px rgba(147, 51, 234, 0.25)',
-                                        },
-                                    }}
-                                />
-                                <Button
-                                    onClick={handleAddProduct}
-                                    variant="contained"
-                                    disabled={loading}
-                                    sx={{
-                                        minWidth: 'auto', // Allow button to shrink
-                                        padding: '0.75rem',
-                                        backgroundColor: '#9333ea',
-                                        color: '#fff',
-                                        fontWeight: 700,
-                                        borderRadius: '0.5rem',
-                                        boxShadow: 'none',
-                                        textTransform: 'none',
-                                        '&:hover': { backgroundColor: '#7e22ce' },
-                                        '&:disabled': { opacity: 0.5, color: '#fff' },
-                                    }}
-                                >
-                                    {loading ? <CircularProgress size={20} color="inherit" /> : <Plus size={20} />}
-                                </Button>
-                            </>
-                        ) : (
-                            <IconButton
-                                onClick={handleAddProduct}
-                                disabled={loading}
-                                sx={{
-                                    backgroundColor: '#9333ea',
-                                    color: '#fff',
+                        <TextField
+                            type="text"
+                            placeholder="New product/feature"
+                            value={newProductName}
+                            onChange={(e) => setNewProductName(e.target.value)}
+                            onKeyPress={(e) => {
+                                if (e.key === 'Enter') {
+                                    handleAddProduct();
+                                }
+                            }}
+                            fullWidth
+                            variant="outlined"
+                            size="small"
+                            sx={{
+                                '& .MuiOutlinedInput-root': {
                                     borderRadius: '0.5rem',
-                                    '&:hover': { backgroundColor: '#7e22ce' },
-                                    '&:disabled': { opacity: 0.5, color: '#fff' },
-                                }}
-                            >
-                                {loading ? <CircularProgress size={20} color="inherit" /> : <Plus size={20} />}
-                            </IconButton>
-                        )}
+                                },
+                                '& .MuiInputBase-input': {
+                                    padding: '0.75rem',
+                                    fontSize: '0.9rem',
+                                },
+                                '& .Mui-focused fieldset': {
+                                    borderColor: '#9333ea',
+                                    boxShadow: '0 0 0 2px rgba(147, 51, 234, 0.25)',
+                                },
+                            }}
+                        />
+                        <Button
+                            onClick={handleAddProduct}
+                            variant="contained"
+                            disabled={loading}
+                            sx={{
+                                minWidth: 'auto', // Allow button to shrink
+                                padding: '0.75rem',
+                                backgroundColor: '#9333ea',
+                                color: '#fff',
+                                fontWeight: 700,
+                                borderRadius: '0.5rem',
+                                boxShadow: 'none',
+                                textTransform: 'none',
+                                '&:hover': { backgroundColor: '#7e22ce' },
+                                '&:disabled': { opacity: 0.5, color: '#fff' },
+                            }}
+                        >
+                            {loading ? <CircularProgress size={20} color="inherit" /> : <Plus size={20} />}
+                        </Button>
                     </Box>
 
-                    {/* Active Items List */}
-                    <List
-                        subheader={
-                            <ListSubheader component="div" sx={{
-                                backgroundColor: 'transparent',
-                                fontWeight: 'bold',
-                                fontSize: '1.125rem',
-                                color: '#1f2937',
-                                lineHeight: '1.75rem',
-                                paddingX: 0,
-                                paddingY: 1,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                            }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', opacity: isSidebarCollapsed ? 0 : 1, transition: 'opacity 0.3s ease-in-out' }}>
+                    {/* Toggle Buttons for Active/Archived Items */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-around', marginBottom: 2, gap: 1 }}>
+                        <Button
+                            variant={!showArchivedView ? "contained" : "outlined"}
+                            onClick={() => setShowArchivedView(false)}
+                            sx={{
+                                flexGrow: 1,
+                                textTransform: 'none',
+                                borderRadius: '0.5rem',
+                                fontWeight: 600,
+                                backgroundColor: !showArchivedView ? '#4f46e5' : 'transparent',
+                                color: !showArchivedView ? '#fff' : '#4f46e5',
+                                borderColor: '#4f46e5',
+                                '&:hover': {
+                                    backgroundColor: !showArchivedView ? '#4338ca' : '#eef2ff',
+                                    borderColor: '#4338ca',
+                                },
+                            }}
+                        >
+                            Active
+                        </Button>
+                        <Button
+                            variant={showArchivedView ? "contained" : "outlined"}
+                            onClick={() => setShowArchivedView(true)}
+                            sx={{
+                                flexGrow: 1,
+                                textTransform: 'none',
+                                borderRadius: '0.5rem',
+                                fontWeight: 600,
+                                backgroundColor: showArchivedView ? '#4f46e5' : 'transparent',
+                                color: showArchivedView ? '#fff' : '#4f46e5',
+                                borderColor: '#4f46e5',
+                                '&:hover': {
+                                    backgroundColor: showArchivedView ? '#4338ca' : '#eef2ff',
+                                    borderColor: '#4338ca',
+                                },
+                            }}
+                        >
+                            Archived
+                        </Button>
+                    </Box>
+
+                    {/* Conditional Rendering of Active/Archived Lists */}
+                    {showArchivedView ? (
+                        // Archived Items List
+                        <List
+                            subheader={
+                                <ListSubheader component="div" sx={{ 
+                                    backgroundColor: 'transparent', 
+                                    fontWeight: 'bold', 
+                                    fontSize: '1.125rem', 
+                                    color: '#1f2937', 
+                                    lineHeight: '1.75rem', 
+                                    paddingX: 0,
+                                    paddingY: 1,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                }}>
+                                    <Box sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#9ca3af', marginRight: '0.5rem' }} />
+                                    Archived Items
+                                </ListSubheader>
+                            }
+                            sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', maxHeight: 'calc(100vh - 250px)' }}
+                        >
+                            {loading && <Typography sx={{ color: '#9333ea', textAlign: 'center', marginY: 3, fontSize: '0.9rem', fontWeight: 500 }}>Loading...</Typography>}
+                            {error && <Alert severity="error" sx={{ marginY: 3, borderRadius: '0.5rem' }}>{error}</Alert>}
+                            {!loading && !error && archivedProducts.length === 0 ? (
+                                <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 3 }}>No archived products.</Typography>
+                            ) : (
+                                archivedProducts.map(product => (
+                                    <ListItem
+                                        key={product.id}
+                                        onClick={() => handleSelectProduct(product)}
+                                        sx={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            padding: 1.5,
+                                            borderRadius: '0.5rem',
+                                            marginBottom: '0.5rem',
+                                            backgroundColor: selectedProduct && selectedProduct.id === product.id ? '#f3e8ff' : '#f9fafb', // Lighter purple for archived selected
+                                            border: selectedProduct && selectedProduct.id === product.id ? '1px solid #d8b4fe' : '1px solid #e5e7eb',
+                                            '&:hover': { backgroundColor: '#ede9fe' },
+                                            transition: 'background-color 0.2s, border-color 0.2s',
+                                        }}
+                                    >
+                                        <ListItemText
+                                            primary={product.name}
+                                            secondary="Archived"
+                                            primaryTypographyProps={{ fontWeight: 'medium', color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                            secondaryTypographyProps={{ fontSize: '0.75rem', color: '#9ca3af' }}
+                                        />
+                                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleArchiveProduct(product.id, false); }}>
+                                                <ArchiveRestore size={16} />
+                                            </IconButton>
+                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}>
+                                                <Trash2 size={16} />
+                                            </IconButton>
+                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleSelectProduct(product); setShowAiAssistant(true); }}>
+                                                <MessageSquare size={16} />
+                                            </IconButton>
+                                        </Box>
+                                    </ListItem>
+                                ))
+                            )}
+                        </List>
+                    ) : (
+                        // Active Items List
+                        <List
+                            subheader={
+                                <ListSubheader component="div" sx={{ 
+                                    backgroundColor: 'transparent', 
+                                    fontWeight: 'bold', 
+                                    fontSize: '1.125rem', 
+                                    color: '#1f2937', 
+                                    lineHeight: '1.75rem', 
+                                    paddingX: 0,
+                                    paddingY: 1,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                }}>
                                     <Box sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#16a34a', marginRight: '0.5rem' }} />
                                     Active Items
-                                </Box>
-                                <Button size="small" sx={{ textTransform: 'none', color: '#4f46e5' }} onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}>
-                                    {isSidebarCollapsed ? <ChevronRight size={16} /> : <><ChevronLeft size={16} style={{ marginRight: '0.25rem' }} /> Collapse</>}
-                                </Button>
-                            </ListSubheader>
-                        }
-                        sx={{ width: '100%', bgcolor: 'background.paper', overflowX: 'hidden', overflowY: 'auto', maxHeight: 'calc(50vh - 100px)', transition: 'max-height 0.3s ease-in-out' }}
-                    >
-                        {loading && <Typography sx={{ color: '#9333ea', textAlign: 'center', marginY: 3, fontSize: '0.9rem', fontWeight: 500 }}>Loading...</Typography>}
-                        {error && <Alert severity="error" sx={{ marginY: 3, borderRadius: '0.5rem' }}>{error}</Alert>}
-                        {!loading && !error && activeProducts.length === 0 ? (
-                            <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 3 }}>No active products.</Typography>
-                        ) : (
-                            <Collapse in={!isSidebarCollapsed} timeout="auto" unmountOnExit>
-                                {activeProducts.map(product => (
+                                </ListSubheader>
+                            }
+                            sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', maxHeight: 'calc(100vh - 250px)' }}
+                        >
+                            {loading && <Typography sx={{ color: '#9333ea', textAlign: 'center', marginY: 3, fontSize: '0.9rem', fontWeight: 500 }}>Loading...</Typography>}
+                            {error && <Alert severity="error" sx={{ marginY: 3, borderRadius: '0.5rem' }}>{error}</Alert>}
+                            {!loading && !error && activeProducts.length === 0 ? (
+                                <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 3 }}>No active products.</Typography>
+                            ) : (
+                                activeProducts.map(product => (
                                     <ListItem
                                         key={product.id}
                                         onClick={() => handleSelectProduct(product)}
@@ -947,80 +1009,15 @@ function App() {
                                             <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}>
                                                 <Trash2 size={16} />
                                             </IconButton>
-                                        </Box>
-                                    </ListItem>
-                                ))}
-                            </Collapse>
-                        )}
-                    </List>
-
-                    {/* Archived Items List */}
-                    <List
-                        subheader={
-                            <ListSubheader component="div" sx={{
-                                backgroundColor: 'transparent',
-                                fontWeight: 'bold',
-                                fontSize: '1.125rem',
-                                color: '#1f2937',
-                                lineHeight: '1.75rem',
-                                paddingX: 0,
-                                paddingY: 1,
-                                marginTop: 4,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                            }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', opacity: isSidebarCollapsed ? 0 : 1, transition: 'opacity 0.3s ease-in-out' }}>
-                                    <Box sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#9ca3af', marginRight: '0.5rem' }} />
-                                    Archived Items
-                                </Box>
-                                <Button size="small" sx={{ textTransform: 'none', color: '#4f46e5' }} onClick={() => setIsArchiveListCollapsed(!isArchiveListCollapsed)}>
-                                    {isArchiveListCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-                                </Button>
-                            </ListSubheader>
-                        }
-                        sx={{ width: '100%', bgcolor: 'background.paper', overflowX: 'hidden', overflowY: 'auto', maxHeight: 'calc(50vh - 100px)', transition: 'max-height 0.3s ease-in-out' }}
-                    >
-                        {archivedProducts.length === 0 && !loading && !error ? (
-                            <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 3 }}>No archived products.</Typography>
-                        ) : (
-                            <Collapse in={!isArchiveListCollapsed && !isSidebarCollapsed} timeout="auto" unmountOnExit>
-                                {archivedProducts.map(product => (
-                                    <ListItem
-                                        key={product.id}
-                                        onClick={() => handleSelectProduct(product)}
-                                        sx={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            padding: 1.5,
-                                            borderRadius: '0.5rem',
-                                            marginBottom: '0.5rem',
-                                            backgroundColor: selectedProduct && selectedProduct.id === product.id ? '#f3e8ff' : '#f9fafb', // Lighter purple for archived selected
-                                            border: selectedProduct && selectedProduct.id === product.id ? '1px solid #d8b4fe' : '1px solid #e5e7eb',
-                                            '&:hover': { backgroundColor: '#ede9fe' },
-                                            transition: 'background-color 0.2s, border-color 0.2s',
-                                        }}
-                                    >
-                                        <ListItemText
-                                            primary={product.name}
-                                            secondary="Archived"
-                                            primaryTypographyProps={{ fontWeight: 'medium', color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                            secondaryTypographyProps={{ fontSize: '0.75rem', color: '#9ca3af' }}
-                                        />
-                                        <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleArchiveProduct(product.id, false); }}>
-                                                <ArchiveRestore size={16} /> {/* Changed Unarchive to ArchiveRestore */}
-                                            </IconButton>
-                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDeleteProduct(product.id); }}>
-                                                <Trash2 size={16} />
+                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleSelectProduct(product); setShowAiAssistant(true); }}>
+                                                <MessageSquare size={16} />
                                             </IconButton>
                                         </Box>
                                     </ListItem>
-                                ))}
-                            </Collapse>
-                        )}
-                    </List>
+                                ))
+                            )}
+                        </List>
+                    )}
                 </Paper>
 
                 {/* Right Main Content: Kanban Board */}
@@ -1072,7 +1069,7 @@ function App() {
                                         <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', display: 'inline-block', marginRight: '0.5rem' }} />
                                         Research
                                     </Typography>
-                                    <IconButton size="small"><ChevronRight size={16} /></IconButton>
+                                    {/* <IconButton size="small"><ChevronRight size={16} /></IconButton> */}
                                 </Box>
                                 <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                                     <Typography variant="body2" sx={{ color: '#374151' }}>Market analysis completed <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
@@ -1101,7 +1098,7 @@ function App() {
                                         <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#6366f1', display: 'inline-block', marginRight: '0.5rem' }} />
                                         Ideation
                                     </Typography>
-                                    <IconButton size="small"><ChevronRight size={16} /></IconButton>
+                                    {/* <IconButton size="small"><ChevronRight size={16} /></IconButton> */}
                                 </Box>
                                 <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                                     <Typography variant="body2" sx={{ color: '#374151' }}>Plan logic and expectations <Box component="span" sx={{ color: '#fde047', display: 'inline-flex', alignItems: 'center' }}><CircularProgress size={14} sx={{ marginLeft: '0.25rem', color: '#fde047' }} /></Box></Typography>
@@ -1129,7 +1126,7 @@ function App() {
                                         <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#9ca3af', display: 'inline-block', marginRight: '0.5rem' }} />
                                         Design
                                     </Typography>
-                                    <IconButton size="small"><ChevronRight size={16} /></IconButton>
+                                    {/* <IconButton size="small"><ChevronRight size={16} /></IconButton> */}
                                 </Box>
                                 <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                                     <Typography variant="body2" sx={{ color: '#374151' }}>PRD handover to design team <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
@@ -1157,7 +1154,7 @@ function App() {
                                         <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', display: 'inline-block', marginRight: '0.5rem' }} />
                                         Planning
                                     </Typography>
-                                    <IconButton size="small"><ChevronRight size={16} /></IconButton>
+                                    {/* <IconButton size="small"><ChevronRight size={16} /></IconButton> */}
                                 </Box>
                                 <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                                     <Typography variant="body2" sx={{ color: '#374151' }}>Timeline planning <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
@@ -1185,7 +1182,7 @@ function App() {
                                         <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#6366f1', display: 'inline-block', marginRight: '0.5rem' }} />
                                         Development
                                     </Typography>
-                                    <IconButton size="small"><ChevronRight size={16} /></IconButton>
+                                    {/* <IconButton size="small"><ChevronRight size={16} /></IconButton> */}
                                 </Box>
                                 <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                                     <Typography variant="body2" sx={{ color: '#374151' }}>Frontend development <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
@@ -1214,7 +1211,7 @@ function App() {
                                         <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#9ca3af', display: 'inline-block', marginRight: '0.5rem' }} />
                                         Documentation
                                     </Typography>
-                                    <IconButton size="small"><ChevronRight size={16} /></IconButton>
+                                    {/* <IconButton size="small"><ChevronRight size={16} /></IconButton> */}
                                 </Box>
                                 <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                                     <Typography variant="body2" sx={{ color: '#374151' }}>Tech documentation handover <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
