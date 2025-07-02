@@ -40,7 +40,7 @@ import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus,
 // In production (on Vercel), it will use the REACT_APP_API_URL environment variable.
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-// --- AuthPage Component (Frozen - No changes here) ---
+// --- AuthPage Component ---
 function AuthPage({ setIsLoggedIn, setAuthMessage }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -470,7 +470,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
 
 // --- Main App Component ---
 function App() {
-    // Removed mock data; products will be fetched from DB
+    // Products will be fetched from DB
     const [products, setProducts] = useState([]); 
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [newProductName, setNewProductName] = useState('');
@@ -1203,7 +1203,8 @@ function App() {
                                         backgroundColor: '#f5f3ff', // Base color, could vary by stage
                                         p: 2,
                                         borderRadius: '0.75rem', 
-                                        minHeight: '200px', 
+                                        minHeight: '200px', // Maintain minHeight
+                                        height: '100%', // Ensure all cards stretch to fill grid item height
                                         display: 'flex',
                                         flexDirection: 'column',
                                         border: '1px solid #d8b4fe', 
