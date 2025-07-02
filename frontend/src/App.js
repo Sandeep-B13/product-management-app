@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; // Corrected '=>' to 'from'
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 // Importing Material-UI components
@@ -1168,7 +1168,7 @@ function App() {
             )}
 
             <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
-                <Alert onClose={snackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+                <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
                     {snackbarMessage}
                 </Alert>
             </Snackbar>
