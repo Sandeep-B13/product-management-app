@@ -1538,14 +1538,14 @@ function App() {
                         ) : (
                             <Grid container spacing={2} sx={{ height: '100%', alignItems: 'stretch' }}> {/* Ensure Grid container stretches */}
                                 {kanbanStages.map(stage => (
-                                    <Grid item xs={12} sm={6} md={4} lg={3} key={stage} sx={{ display: 'flex' }}> {/* Ensure Grid item is flex to stretch child */}
+                                    <Grid item xs={12} sm={6} md={4} lg={3} key={stage} sx={{ display: 'flex', minHeight: '300px' }}> {/* Added minHeight here */}
                                         <Paper
                                             elevation={1}
                                             sx={{
                                                 backgroundColor: '#f5f3ff', // Base color, could vary by stage
                                                 p: 2,
                                                 borderRadius: '0.75rem', 
-                                                minHeight: '200px', 
+                                                // Removed minHeight here, rely on parent stretching
                                                 height: '100%', // Crucial for making all cards the same size
                                                 display: 'flex',
                                                 flexDirection: 'column',
