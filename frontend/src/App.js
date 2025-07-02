@@ -731,6 +731,7 @@ function App() {
             </Box>
 
             <Container maxWidth="xl" sx={{ marginX: 'auto', display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 5 }}>
+                {/* Product List Panel (Existing) */}
                 <Paper
                     elevation={3}
                     sx={{
@@ -875,6 +876,7 @@ function App() {
                     </Box>
                 </Paper>
 
+                {/* AI Assistant Panel (Existing) */}
                 <Paper
                     elevation={3}
                     sx={{
@@ -886,7 +888,7 @@ function App() {
                     }}
                 >
                     <Typography variant="h5" component="h2" sx={{ fontWeight: 700, color: '#1f2937', marginBottom: 4, borderBottom: '2px solid #d8b4fe', paddingBottom: 2 }}>
-                        AI Discovery Assistant
+                        AI Assistant
                     </Typography>
 
                     {selectedProduct ? (
@@ -897,7 +899,7 @@ function App() {
 
                             <Box sx={{ marginBottom: 4 }}>
                                 <Typography variant="body1" sx={{ color: '#374151', fontWeight: 700, marginBottom: 1.5 }}>
-                                    Details for Discovery Document:
+                                    Details for AI Generation:
                                 </Typography>
                                 <TextField
                                     id="discoveryInput"
@@ -950,7 +952,7 @@ function App() {
                                         },
                                     }}
                                 >
-                                    {loading ? <CircularProgress size={20} color="inherit" /> : 'Generate Discovery Document'}
+                                    {loading ? <CircularProgress size={20} color="inherit" /> : 'Generate Document'}
                                 </Button>
                             </Box>
 
@@ -979,8 +981,66 @@ function App() {
                             )}
                         </Box>
                     ) : (
-                        <Typography sx={{ color: '#6b7280', textAlign: 'center', paddingY: 6, fontSize: '1.125rem' }}>Select a product/feature from the left to generate a discovery document.</Typography>
+                        <Typography sx={{ color: '#6b7280', textAlign: 'center', paddingY: 6, fontSize: '1.125rem' }}>Select a product/feature from the left to generate a document.</Typography>
                     )}
+                </Paper>
+
+                {/* New: Roadmap Panel Placeholder */}
+                <Paper
+                    elevation={3}
+                    sx={{
+                        backgroundColor: '#fff',
+                        p: 4, 
+                        borderRadius: '1.5rem', 
+                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', 
+                        border: '1px solid #e5e7eb', 
+                        gridColumn: { xs: 'span 1', lg: 'span 2' } // Spans full width on small screens, and both columns on large
+                    }}
+                >
+                    <Typography variant="h5" component="h2" sx={{ fontWeight: 700, color: '#1f2937', marginBottom: 4, borderBottom: '2px solid #d8b4fe', paddingBottom: 2 }}>
+                        Product Roadmap
+                    </Typography>
+                    <Box sx={{ minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
+                        <Typography variant="h6">Roadmap visualization and planning tools coming soon!</Typography>
+                    </Box>
+                </Paper>
+
+                {/* New: Analytics Panel Placeholder */}
+                <Paper
+                    elevation={3}
+                    sx={{
+                        backgroundColor: '#fff',
+                        p: 4, 
+                        borderRadius: '1.5rem', 
+                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', 
+                        border: '1px solid #e5e7eb', 
+                    }}
+                >
+                    <Typography variant="h5" component="h2" sx={{ fontWeight: 700, color: '#1f2937', marginBottom: 4, borderBottom: '2px solid #d8b4fe', paddingBottom: 2 }}>
+                        Product Analytics
+                    </Typography>
+                    <Box sx={{ minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
+                        <Typography variant="h6">Detailed product analytics and insights coming soon!</Typography>
+                    </Box>
+                </Paper>
+
+                {/* New: Team Collaboration Panel Placeholder */}
+                <Paper
+                    elevation={3}
+                    sx={{
+                        backgroundColor: '#fff',
+                        p: 4, 
+                        borderRadius: '1.5rem', 
+                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', 
+                        border: '1px solid #e5e7eb', 
+                    }}
+                >
+                    <Typography variant="h5" component="h2" sx={{ fontWeight: 700, color: '#1f2937', marginBottom: 4, borderBottom: '2px solid #d8b4fe', paddingBottom: 2 }}>
+                        Team Collaboration
+                    </Typography>
+                    <Box sx={{ minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280' }}>
+                        <Typography variant="h6">Real-time collaboration tools coming soon!</Typography>
+                    </Box>
                 </Paper>
             </Container>
             <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
