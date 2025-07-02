@@ -33,7 +33,7 @@ import {
 } from '@mui/material';
 
 // Importing Lucide icons
-import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, Archive, ArchiveRestore, MessageSquare, CheckCircle, Search, SortAsc, SortDesc } from 'lucide-react'; 
+import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, Archive, ArchiveRestore, MessageSquare, CheckCircle, Search } from 'lucide-react'; 
 
 // Define the API URL for your backend.
 // In development, it will default to http://localhost:5000.
@@ -470,14 +470,11 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
 
 // --- Main App Component ---
 function App() {
-    const [products, setProducts] = useState([
-        { id: 1, name: "Mobile App Redesign", discovery_document: "Sample discovery document for mobile app...", isArchived: false, created_at: "2023-01-01T10:00:00Z" },
-        { id: 2, name: "API Gateway", discovery_document: null, isArchived: false, created_at: "2023-01-05T11:30:00Z" },
-        { id: 3, name: "User Analytics Dashboard", discovery_document: "Comprehensive analytics solution...", isArchived: true, created_at: "2023-01-10T14:00:00Z" } 
-    ]);
+    // Removed mock data; products will be fetched from DB
+    const [products, setProducts] = useState([]); 
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [newProductName, setNewProductName] = useState('');
-    const [newProductDescription, setNewProductDescription] = useState(''); // For new product description
+    const [newProductDescription, setNewProductDescription] = useState(''); 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [generatedDocument, setGeneratedDocument] = useState('');
@@ -498,9 +495,22 @@ function App() {
     const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
     const [productToDeleteId, setProductToDeleteId] = useState(null);
 
-    // State for search and sort
+    // State for search and sort/filter
     const [searchTerm, setSearchTerm] = useState('');
-    const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'alpha-asc', 'alpha-desc'
+    const [sortBy, setSortBy] = useState('newest'); 
+    const [filterByStage, setFilterByStage] = useState('All'); // New state for filtering by stage
+
+    // Define possible Kanban stages and their associated progress percentages
+    const kanbanStages = ['Research', 'Ideation', 'Design', 'Planning', 'Development', 'Documentation'];
+    const stageProgressMap = {
+        'Research': 20,
+        'Ideation': 40,
+        'Design': 60,
+        'Planning': 70,
+        'Development': 90,
+        'Documentation': 100,
+    };
+
 
     const handleSnackbarClose = (event, reason) => {
         if (reason === 'clickaway') {
@@ -523,15 +533,18 @@ function App() {
             setLoading(true);
             setError(null);
             try {
+                const token = localStorage.getItem('token');
                 const response = await axios.get(`${API_URL}/api/products`, {
                     headers: {
-                        Authorization: `Bearer ${localStorage.getItem('token')}`
+                        Authorization: `Bearer ${token}` // Send token for authentication
                     }
                 });
                 setProducts(response.data);
             } catch (err) {
                 console.error("Error fetching products:", err);
-                const errorMessage = "Failed to load products. Please check the backend server or your login status.";
+                const errorMessage = err.response && err.response.data && err.response.data.message 
+                                    ? err.response.data.message 
+                                    : "Failed to load products. Please check the backend server or your login status.";
                 setError(errorMessage);
                 setSnackbarMessage(errorMessage);
                 setSnackbarSeverity('error');
@@ -547,7 +560,7 @@ function App() {
         fetchProducts();
     }, [isLoggedIn]);
 
-    // Filter and Sort Logic - Moved outside the conditional rendering
+    // Filter and Sort Logic
     const filteredAndSortedProducts = useMemo(() => {
         let currentProducts = showArchivedView ? products.filter(p => p.isArchived) : products.filter(p => !p.isArchived);
 
@@ -557,6 +570,11 @@ function App() {
                 p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (p.discovery_document && p.discovery_document.toLowerCase().includes(searchTerm.toLowerCase()))
             );
+        }
+
+        // Apply stage filter
+        if (filterByStage !== 'All') {
+            currentProducts = currentProducts.filter(p => p.stage === filterByStage);
         }
 
         // Apply sort
@@ -569,12 +587,16 @@ function App() {
                 return a.name.localeCompare(b.name);
             } else if (sortBy === 'alpha-desc') {
                 return b.name.localeCompare(a.name);
+            } else if (sortBy === 'progress-asc') {
+                return a.progress - b.progress;
+            } else if (sortBy === 'progress-desc') {
+                return b.progress - a.progress;
             }
             return 0;
         });
 
         return currentProducts;
-    }, [products, showArchivedView, searchTerm, sortBy]);
+    }, [products, showArchivedView, searchTerm, sortBy, filterByStage]);
 
 
     const handleAddProduct = async () => {
@@ -587,19 +609,21 @@ function App() {
         setLoading(true);
         setError(null);
         setSnackbarOpen(false);
-        setShowAddProductModal(false); // Close the modal
+        setShowAddProductModal(false); 
         try {
             const token = localStorage.getItem('token');
             const response = await axios.post(`${API_URL}/api/products`, {
                 name: newProductName,
-                discovery_document: newProductDescription, // Use the description for initial discovery_document
-                isArchived: false 
+                discovery_document: newProductDescription, 
+                isArchived: false,
+                progress: 0, // Default progress for new product
+                stage: 'Research' // Default stage for new product
             }, {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
             });
-            setProducts([response.data, ...products]);
+            setProducts([response.data, ...products]); // Add new product to the top
             setNewProductName('');
             setNewProductDescription('');
             setSnackbarMessage("Product added successfully!");
@@ -607,7 +631,9 @@ function App() {
             setSnackbarOpen(true);
         } catch (err) {
             console.error("Error creating product:", err);
-            const errorMessage = "Failed to add product. Please try again.";
+            const errorMessage = err.response && err.response.data && err.response.data.message 
+                                ? err.response.data.message 
+                                : "Failed to add product. Please try again.";
             setError(errorMessage);
             setSnackbarMessage(errorMessage);
             setSnackbarSeverity('error');
@@ -621,7 +647,7 @@ function App() {
         setSelectedProduct(product);
         setGeneratedDocument(product.discovery_document || '');
         setDiscoveryInput('');
-        setShowAiAssistant(false); // Close AI assistant when selecting a new product
+        setShowAiAssistant(false); 
         setSnackbarOpen(false);
     };
 
@@ -668,7 +694,7 @@ function App() {
         setLoading(true);
         setError(null);
         setSnackbarOpen(false);
-        setShowDeleteConfirmModal(false); // Close confirmation modal
+        setShowDeleteConfirmModal(false); 
         try {
             const token = localStorage.getItem('token');
             await axios.delete(`${API_URL}/api/products/${productToDeleteId}`, {
@@ -729,6 +755,7 @@ function App() {
             const doc = response.data.discovery_document;
             setGeneratedDocument(doc);
 
+            // Update the product in the backend with the generated document
             await axios.put(`${API_URL}/api/products/${selectedProduct.id}`, {
                 discovery_document: doc
             }, {
@@ -736,6 +763,7 @@ function App() {
                     Authorization: `Bearer ${token}`
                 }
             });
+            // Update local state for products and selectedProduct
             setProducts(products.map(p =>
                 p.id === selectedProduct.id ? { ...p, discovery_document: doc } : p
             ));
@@ -768,6 +796,44 @@ function App() {
         setSnackbarSeverity('info');
         setSnackbarOpen(true);
     };
+
+    // Function to update product stage and progress (example for Kanban interaction)
+    const updateProductStageAndProgress = async (productId, newStage, newProgress) => {
+        setLoading(true);
+        setError(null);
+        setSnackbarOpen(false);
+        try {
+            const token = localStorage.getItem('token');
+            const updatedProduct = {
+                stage: newStage,
+                progress: newProgress
+            };
+            const response = await axios.put(`${API_URL}/api/products/${productId}`, updatedProduct, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+            setProducts(products.map(p =>
+                p.id === productId ? response.data : p
+            ));
+            if (selectedProduct && selectedProduct.id === productId) {
+                setSelectedProduct(response.data);
+            }
+            setSnackbarMessage(`Product stage updated to ${newStage}!`);
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Error updating product stage:", err);
+            const errorMessage = "Failed to update product stage. Please try again.";
+            setError(errorMessage);
+            setSnackbarMessage(errorMessage);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
     if (!isLoggedIn) {
         return <AuthPage setIsLoggedIn={setIsLoggedIn} setAuthMessage={setAuthMessage} />;
@@ -870,8 +936,8 @@ function App() {
                         Add New Item
                     </Button>
 
-                    {/* Search and Sort Controls */}
-                    <Box sx={{ marginBottom: 2 }}>
+                    {/* Search and Sort/Filter Controls */}
+                    <Box sx={{ marginBottom: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
                         <TextField
                             fullWidth
                             variant="outlined"
@@ -887,24 +953,43 @@ function App() {
                                 ),
                                 sx: { borderRadius: '0.5rem' }
                             }}
-                            sx={{ marginBottom: 1 }}
                         />
-                        <FormControl fullWidth variant="outlined" size="small">
-                            <InputLabel id="sort-by-label">Sort By</InputLabel>
-                            <Select
-                                labelId="sort-by-label"
-                                id="sort-by-select"
-                                value={sortBy}
-                                onChange={(e) => setSortBy(e.target.value)}
-                                label="Sort By"
-                                sx={{ borderRadius: '0.5rem' }}
-                            >
-                                <MenuItem value="newest">Created Date (Newest First)</MenuItem>
-                                <MenuItem value="oldest">Created Date (Oldest First)</MenuItem>
-                                <MenuItem value="alpha-asc">Alphabetical (A-Z)</MenuItem>
-                                <MenuItem value="alpha-desc">Alphabetical (Z-A)</MenuItem>
-                            </Select>
-                        </FormControl>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                            <FormControl fullWidth variant="outlined" size="small">
+                                <InputLabel id="sort-by-label">Sort By</InputLabel>
+                                <Select
+                                    labelId="sort-by-label"
+                                    id="sort-by-select"
+                                    value={sortBy}
+                                    onChange={(e) => setSortBy(e.target.value)}
+                                    label="Sort By"
+                                    sx={{ borderRadius: '0.5rem' }}
+                                >
+                                    <MenuItem value="newest">Created Date (Newest First)</MenuItem>
+                                    <MenuItem value="oldest">Created Date (Oldest First)</MenuItem>
+                                    <MenuItem value="alpha-asc">Alphabetical (A-Z)</MenuItem>
+                                    <MenuItem value="alpha-desc">Alphabetical (Z-A)</MenuItem>
+                                    <MenuItem value="progress-asc">Progress (Low to High)</MenuItem>
+                                    <MenuItem value="progress-desc">Progress (High to Low)</MenuItem>
+                                </Select>
+                            </FormControl>
+                            <FormControl fullWidth variant="outlined" size="small">
+                                <InputLabel id="filter-by-stage-label">Filter By Stage</InputLabel>
+                                <Select
+                                    labelId="filter-by-stage-label"
+                                    id="filter-by-stage-select"
+                                    value={filterByStage}
+                                    onChange={(e) => setFilterByStage(e.target.value)}
+                                    label="Filter By Stage"
+                                    sx={{ borderRadius: '0.5rem' }}
+                                >
+                                    <MenuItem value="All">All Stages</MenuItem>
+                                    {kanbanStages.map(stage => (
+                                        <MenuItem key={stage} value={stage}>{stage}</MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        </Box>
                     </Box>
 
                     {/* Toggle Buttons for Active/Archived Items */}
@@ -967,13 +1052,13 @@ function App() {
                                 {showArchivedView ? 'Archived Items' : 'Active Items'}
                             </ListSubheader>
                         }
-                        sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', maxHeight: 'calc(100vh - 400px)' }} // Adjusted max height
+                        sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', maxHeight: 'calc(100vh - 450px)' }} // Adjusted max height
                     >
                         {loading && <Typography sx={{ color: '#9333ea', textAlign: 'center', marginY: 3, fontSize: '0.9rem', fontWeight: 500 }}>Loading...</Typography>}
                         {error && <Alert severity="error" sx={{ marginY: 3, borderRadius: '0.5rem' }}>{error}</Alert>}
                         {!loading && !error && filteredAndSortedProducts.length === 0 ? (
                             <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 3 }}>
-                                {showArchivedView ? 'No archived products.' : 'No active products.'}
+                                {showArchivedView ? 'No archived products matching criteria.' : 'No active products matching criteria.'}
                             </Typography>
                         ) : (
                             filteredAndSortedProducts.map(product => (
@@ -995,9 +1080,25 @@ function App() {
                                 >
                                     <ListItemText
                                         primary={product.name}
-                                        secondary={product.discovery_document ? "Documented" : "Pending Doc"}
+                                        secondary={
+                                            <Box>
+                                                <Typography component="span" variant="body2" sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                                                    Stage: {product.stage} | Progress: {product.progress}%
+                                                </Typography>
+                                                <LinearProgress 
+                                                    variant="determinate" 
+                                                    value={product.progress} 
+                                                    sx={{ 
+                                                        width: '100%', 
+                                                        borderRadius: 5, 
+                                                        height: 4, 
+                                                        backgroundColor: '#e0e7ff', 
+                                                        '& .MuiLinearProgress-bar': { backgroundColor: '#4f46e5' } 
+                                                    }} 
+                                                />
+                                            </Box>
+                                        }
                                         primaryTypographyProps={{ fontWeight: 'medium', color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                        secondaryTypographyProps={{ fontSize: '0.75rem', color: '#6b7280' }}
                                     />
                                     <Box sx={{ display: 'flex', gap: 0.5 }}>
                                         {showArchivedView ? (
@@ -1036,14 +1137,33 @@ function App() {
                             gap: 2, 
                         }}
                     >
-                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1f2937' }}>
-                            AI Chat Integration <Typography component="span" variant="body2" sx={{ color: '#6b7280' }}>Development Stage</Typography>
-                        </Typography>
+                        <Box>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1f2937' }}>
+                                {selectedProduct ? selectedProduct.name : "Select a Product/Feature"} 
+                                <Typography component="span" variant="body2" sx={{ color: '#6b7280', marginLeft: 1 }}>
+                                    {selectedProduct ? `(${selectedProduct.stage} Stage)` : ""}
+                                </Typography>
+                            </Typography>
+                            {selectedProduct && (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 1 }}>
+                                    <Typography variant="body2" sx={{ color: '#4b5563' }}>
+                                        Progress: {selectedProduct.progress}%
+                                    </Typography>
+                                    <LinearProgress 
+                                        variant="determinate" 
+                                        value={selectedProduct.progress} 
+                                        sx={{ 
+                                            width: 100, 
+                                            borderRadius: 5, 
+                                            height: 8, 
+                                            backgroundColor: '#e0e7ff', 
+                                            '& .MuiLinearProgress-bar': { backgroundColor: '#4f46e5' } 
+                                        }} 
+                                    />
+                                </Box>
+                            )}
+                        </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Typography variant="body2" sx={{ color: '#4b5563' }}>Progress: 60%</Typography>
-                                <LinearProgress variant="determinate" value={60} sx={{ width: 100, borderRadius: 5, height: 8, backgroundColor: '#e0e7ff', '& .MuiLinearProgress-bar': { backgroundColor: '#4f46e5' } }} />
-                            </Box>
                             {/* AI Assistant button in header, context-aware */}
                             <Button
                                 variant="contained"
@@ -1075,169 +1195,111 @@ function App() {
 
                     {/* Kanban Board Columns */}
                     <Grid container spacing={2} sx={{ flexGrow: 1, alignItems: 'stretch' }}> 
-                        {/* Research Column */}
-                        <Grid item xs={12} sm={6} md={4} lg={3}> 
-                            <Paper
-                                elevation={1}
-                                sx={{
-                                    backgroundColor: '#f5f3ff', 
-                                    p: 2,
-                                    borderRadius: '0.75rem', 
-                                    minHeight: '200px', 
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    border: '1px solid #d8b4fe', 
-                                }}
-                            >
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
-                                        <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', display: 'inline-block', marginRight: '0.5rem' }} />
-                                        Research
-                                    </Typography>
-                                </Box>
-                                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                    <Typography variant="body2" sx={{ color: '#374151' }}>Market analysis completed <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
-                                    <Typography variant="body2" sx={{ color: '#374151' }}>Competitor analysis <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
-                                    <Button variant="outlined" startIcon={<Plus size={16} />} sx={{ marginTop: 'auto', textTransform: 'none', color: '#4f46e5', borderColor: '#d8b4fe', '&:hover': { borderColor: '#9333ea', backgroundColor: '#f0eaff' } }}>Add Task</Button>
-                                </Box>
-                            </Paper>
-                        </Grid>
+                        {kanbanStages.map(stage => (
+                            <Grid item xs={12} sm={6} md={4} lg={3} key={stage}> 
+                                <Paper
+                                    elevation={1}
+                                    sx={{
+                                        backgroundColor: '#f5f3ff', // Base color, could vary by stage
+                                        p: 2,
+                                        borderRadius: '0.75rem', 
+                                        minHeight: '200px', 
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        border: '1px solid #d8b4fe', 
+                                        // Highlight current selected product's stage
+                                        ...(selectedProduct && selectedProduct.stage === stage && {
+                                            border: '2px solid #4f46e5',
+                                            boxShadow: '0 0 0 3px rgba(79, 70, 229, 0.3)',
+                                        })
+                                    }}
+                                >
+                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
+                                            <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', display: 'inline-block', marginRight: '0.5rem' }} />
+                                            {stage}
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                        {/* Display the selected product's details if its stage matches the column */}
+                                        {selectedProduct && selectedProduct.stage === stage && (
+                                            <Box sx={{ 
+                                                backgroundColor: '#e0e7ff', // Light indigo background for selected product in its stage
+                                                p: 1.5, 
+                                                borderRadius: '0.5rem', 
+                                                border: '1px solid #c7d2fe',
+                                                marginBottom: 1
+                                            }}>
+                                                <Typography variant="body2" sx={{ fontWeight: 'medium', color: '#374151' }}>
+                                                    {selectedProduct.name}
+                                                </Typography>
+                                                <Typography variant="caption" sx={{ color: '#6b7280', fontSize: '0.7rem' }}>
+                                                    Progress: {selectedProduct.progress}%
+                                                </Typography>
+                                            </Box>
+                                        )}
 
-                        {/* Ideation Column */}
-                        <Grid item xs={12} sm={6} md={4} lg={3}>
-                            <Paper
-                                elevation={1}
-                                sx={{
-                                    backgroundColor: '#eef2ff', 
-                                    p: 2,
-                                    borderRadius: '0.75rem',
-                                    minHeight: '200px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    border: '1px solid #c7d2fe', 
-                                }}
-                            >
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#6366f1' }}>
-                                        <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#6366f1', display: 'inline-block', marginRight: '0.5rem' }} />
-                                        Ideation
-                                    </Typography>
-                                </Box>
-                                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                    <Typography variant="body2" sx={{ color: '#374151' }}>Plan logic and expectations <Box component="span" sx={{ color: '#fde047', display: 'inline-flex', alignItems: 'center' }}><CircularProgress size={14} sx={{ marginLeft: '0.25rem', color: '#fde047' }} /></Box></Typography>
-                                    <Button variant="outlined" startIcon={<Plus size={16} />} sx={{ marginTop: 'auto', textTransform: 'none', color: '#6366f1', borderColor: '#c7d2fe', '&:hover': { borderColor: '#4f46e5', backgroundColor: '#e0e7ff' } }}>Add Task</Button>
-                                </Box>
-                            </Paper>
-                        </Grid>
-
-                        {/* Design Column */}
-                        <Grid item xs={12} sm={6} md={4} lg={3}>
-                            <Paper
-                                elevation={1}
-                                sx={{
-                                    backgroundColor: '#fff',
-                                    p: 2,
-                                    borderRadius: '0.75rem',
-                                    minHeight: '200px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    border: '1px solid #e5e7eb',
-                                }}
-                            >
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#4b5563' }}>
-                                        <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#9ca3af', display: 'inline-block', marginRight: '0.5rem' }} />
-                                        Design
-                                    </Typography>
-                                </Box>
-                                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                    <Typography variant="body2" sx={{ color: '#374151' }}>PRD handover to design team <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
-                                    <Button variant="outlined" startIcon={<Plus size={16} />} sx={{ marginTop: 'auto', textTransform: 'none', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#9ca3af', backgroundColor: '#f3f4f6' } }}>Add Task</Button>
-                                </Box>
-                            </Paper>
-                        </Grid>
-
-                        {/* Planning Column */}
-                        <Grid item xs={12} sm={6} md={4} lg={3}>
-                            <Paper
-                                elevation={1}
-                                sx={{
-                                    backgroundColor: '#f5f3ff', 
-                                    p: 2,
-                                    borderRadius: '0.75rem',
-                                    minHeight: '200px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    border: '1px solid #d8b4fe',
-                                }}
-                            >
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
-                                        <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', display: 'inline-block', marginRight: '0.5rem' }} />
-                                        Planning
-                                    </Typography>
-                                </Box>
-                                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                    <Typography variant="body2" sx={{ color: '#374151' }}>Timeline planning <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
-                                    <Button variant="outlined" startIcon={<Plus size={16} />} sx={{ marginTop: 'auto', textTransform: 'none', color: '#4f46e5', borderColor: '#d8b4fe', '&:hover': { borderColor: '#9333ea', backgroundColor: '#f0eaff' } }}>Add Task</Button>
-                                </Box>
-                            </Paper>
-                        </Grid>
-
-                        {/* Development Column */}
-                        <Grid item xs={12} sm={6} md={4} lg={3}>
-                            <Paper
-                                elevation={1}
-                                sx={{
-                                    backgroundColor: '#eef2ff', 
-                                    p: 2,
-                                    borderRadius: '0.75rem',
-                                    minHeight: '200px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    border: '1px solid #c7d2fe',
-                                }}
-                            >
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#6366f1' }}>
-                                        <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#6366f1', display: 'inline-block', marginRight: '0.5rem' }} />
-                                        Development
-                                    </Typography>
-                                </Box>
-                                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                    <Typography variant="body2" sx={{ color: '#374151' }}>Frontend development <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
-                                    <Typography variant="body2" sx={{ color: '#374151' }}>Backend API integration <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
-                                    <Button variant="outlined" startIcon={<Plus size={16} />} sx={{ marginTop: 'auto', textTransform: 'none', color: '#6366f1', borderColor: '#c7d2fe', '&:hover': { borderColor: '#4f46e5', backgroundColor: '#e0e7ff' } }}>Add Task</Button>
-                                </Box>
-                            </Paper>
-                        </Grid>
-
-                        {/* Documentation Column */}
-                        <Grid item xs={12} sm={6} md={4} lg={3}>
-                            <Paper
-                                elevation={1}
-                                sx={{
-                                    backgroundColor: '#fff',
-                                    p: 2,
-                                    borderRadius: '0.75rem',
-                                    minHeight: '200px',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    border: '1px solid #e5e7eb',
-                                }}
-                            >
-                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
-                                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#4b5563' }}>
-                                        <Box component="span" sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#9ca3af', display: 'inline-block', marginRight: '0.5rem' }} />
-                                        Documentation
-                                    </Typography>
-                                </Box>
-                                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                    <Typography variant="body2" sx={{ color: '#374151' }}>Tech documentation handover <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
-                                    <Button variant="outlined" startIcon={<Plus size={16} />} sx={{ marginTop: 'auto', textTransform: 'none', color: '#4b5563', borderColor: '#d1d5db', '&:hover': { borderColor: '#9ca3af', backgroundColor: '#f3f4f6' } }}>Add Task</Button>
-                                </Box>
-                            </Paper>
-                        </Grid>
+                                        {/* Example static tasks - these would ideally come from DB and be filterable by product */}
+                                        {stage === 'Research' && (
+                                            <>
+                                                <Typography variant="body2" sx={{ color: '#374151' }}>Market analysis completed <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
+                                                <Typography variant="body2" sx={{ color: '#374151' }}>Competitor analysis <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
+                                            </>
+                                        )}
+                                        {stage === 'Ideation' && (
+                                            <>
+                                                <Typography variant="body2" sx={{ color: '#374151' }}>Plan logic and expectations <Box component="span" sx={{ color: '#fde047', display: 'inline-flex', alignItems: 'center' }}><CircularProgress size={14} sx={{ marginLeft: '0.25rem', color: '#fde047' }} /></Box></Typography>
+                                            </>
+                                        )}
+                                        {stage === 'Design' && (
+                                            <>
+                                                <Typography variant="body2" sx={{ color: '#374151' }}>PRD handover to design team <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                            </>
+                                        )}
+                                        {stage === 'Planning' && (
+                                            <>
+                                                <Typography variant="body2" sx={{ color: '#374151' }}>Timeline planning <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                            </>
+                                        )}
+                                        {stage === 'Development' && (
+                                            <>
+                                                <Typography variant="body2" sx={{ color: '#374151' }}>Frontend development <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                                <Typography variant="body2" sx={{ color: '#374151' }}>Backend API integration <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                            </>
+                                        )}
+                                        {stage === 'Documentation' && (
+                                            <>
+                                                <Typography variant="body2" sx={{ color: '#374151' }}>Tech documentation handover <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                            </>
+                                        )}
+                                        {/* Add button to add task to this stage (future enhancement) */}
+                                        <Button 
+                                            variant="outlined" 
+                                            startIcon={<Plus size={16} />} 
+                                            sx={{ 
+                                                marginTop: 'auto', 
+                                                textTransform: 'none', 
+                                                color: '#4f46e5', 
+                                                borderColor: '#d8b4fe', 
+                                                '&:hover': { borderColor: '#9333ea', backgroundColor: '#f0eaff' } 
+                                            }}
+                                            onClick={() => {
+                                                if (selectedProduct) {
+                                                    const newProgress = stageProgressMap[stage];
+                                                    updateProductStageAndProgress(selectedProduct.id, stage, newProgress);
+                                                } else {
+                                                    setSnackbarMessage("Please select a product/feature first to add tasks or set stage.");
+                                                    setSnackbarSeverity('info');
+                                                    setSnackbarOpen(true);
+                                                }
+                                            }}
+                                        >
+                                            Add Task / Set Stage
+                                        </Button>
+                                    </Box>
+                                </Paper>
+                            </Grid>
+                        ))}
                     </Grid>
                 </Box>
             </Box>
