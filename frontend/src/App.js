@@ -31,11 +31,13 @@ import {
     FormControl, // For select input
     InputLabel, // For select input label
     Tabs, // New: For tabbed navigation
-    Tab // New: For individual tabs
+    Tab, // New: For individual tabs
+    Menu, // For profile dropdown menu
+    Collapse // For collapsible archived section
 } from '@mui/material';
 
 // Importing Lucide icons
-import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, Archive, ArchiveRestore, MessageSquare, CheckCircle, Search } from 'lucide-react'; 
+import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, Archive, ArchiveRestore, MessageSquare, CheckCircle, Search, User, Settings, LogOut, ChevronDown, ChevronUp } from 'lucide-react'; 
 
 // Define the API URL for your backend.
 // In development, it will default to http://localhost:5000.
@@ -47,7 +49,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState(''); 
-    const [isLoginMode, setIsLoginMode] = useState(true); // Corrected: Added useState hook
+    const [isLoginMode, setIsLoginMode] = useState(true); 
     const [loading, setLoading] = useState(false);
     const [authError, setAuthError] = useState(null);
     const [rememberMe, setRememberMe] = useState(false);
@@ -481,8 +483,9 @@ function App() {
     const [error, setError] = useState(null);
     const [generatedDocument, setGeneratedDocument] = useState('');
     const [discoveryInput, setDiscoveryInput] = useState('');
-    const [showAiAssistant, setShowAiAssistant] = useState(false); 
-    const [showArchivedView, setShowArchivedView] = useState(false); 
+    const [showFeatureAssistant, setShowFeatureAssistant] = useState(false); // Renamed from showAiAssistant
+    const [showActiveView, setShowActiveView] = useState(true); // New state for Active/Completed toggle
+    const [showArchivedSection, setShowArchivedSection] = useState(false); // State for archived collapsible section
 
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [authMessage, setAuthMessage] = useState(''); 
@@ -501,6 +504,17 @@ function App() {
     const [searchTerm, setSearchTerm] = useState('');
     const [sortBy, setSortBy] = useState('newest'); 
     const [filterByStage, setFilterByStage] = useState('All'); // New state for filtering by stage
+
+    // State for Profile Menu
+    const [anchorElProfileMenu, setAnchorElProfileMenu] = useState(null);
+    const openProfileMenu = Boolean(anchorElProfileMenu);
+
+    // State for Settings Modal
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const [profilePicUrl, setProfilePicUrl] = useState('https://placehold.co/40x40/e0e7ff/4f46e5?text=U'); // Default profile pic
+    const [userName, setUserName] = useState('User Name');
+    const [userTimezone, setUserTimezone] = useState('UTC');
+
 
     // Ref for Lottie animation container
     const lottieContainer = useRef(null);
@@ -879,7 +893,14 @@ function App() {
 
     // Filter and Sort Logic
     const filteredAndSortedProducts = useMemo(() => {
-        let currentProducts = showArchivedView ? products.filter(p => p.isArchived) : products.filter(p => !p.isArchived);
+        let currentProducts = [];
+        if (showActiveView) {
+            // Active products are not archived AND not in the 'Documentation' (completed) stage
+            currentProducts = products.filter(p => !p.isArchived && p.stage !== 'Documentation');
+        } else { // showCompletedView is true
+            // Completed products are in the 'Documentation' stage AND not archived
+            currentProducts = products.filter(p => p.stage === 'Documentation' && !p.isArchived);
+        }
 
         // Apply search filter
         if (searchTerm) {
@@ -889,8 +910,8 @@ function App() {
             );
         }
 
-        // Apply stage filter
-        if (filterByStage !== 'All') {
+        // Apply stage filter (only for Active/Completed views, not archived section)
+        if (filterByStage !== 'All' && (showActiveView || !showActiveView)) { // Apply to both active and completed lists
             currentProducts = currentProducts.filter(p => p.stage === filterByStage);
         }
 
@@ -913,7 +934,12 @@ function App() {
         });
 
         return currentProducts;
-    }, [products, showArchivedView, searchTerm, sortBy, filterByStage]);
+    }, [products, showActiveView, searchTerm, sortBy, filterByStage]);
+
+    // Separate memoized list for archived products
+    const archivedProducts = useMemo(() => {
+        return products.filter(p => p.isArchived);
+    }, [products]);
 
 
     const handleAddProduct = async () => {
@@ -964,7 +990,7 @@ function App() {
         setSelectedProduct(product);
         setGeneratedDocument(product.discovery_document || '');
         setDiscoveryInput('');
-        setShowAiAssistant(false); 
+        setShowFeatureAssistant(false); // Renamed state
         setSnackbarOpen(false);
         // Set the selected Kanban tab to the index of the selected product's stage
         const stageIndex = kanbanStages.indexOf(product.stage);
@@ -1052,7 +1078,7 @@ function App() {
             return;
         }
         if (!discoveryInput.trim()) {
-            setSnackbarMessage("Please enter details for the AI Discovery Assistant.");
+            setSnackbarMessage("Please enter details for the Feature Assistant.");
             setSnackbarSeverity('warning');
             setSnackbarOpen(true);
             return;
@@ -1115,6 +1141,7 @@ function App() {
         setSnackbarMessage('You have been logged out.');
         setSnackbarSeverity('info');
         setSnackbarOpen(true);
+        setAnchorElProfileMenu(null); // Close profile menu on logout
     };
 
     // Function to update product stage and progress (example for Kanban interaction)
@@ -1194,6 +1221,32 @@ function App() {
         );
     };
 
+    const handleProfileMenuOpen = (event) => {
+        setAnchorElProfileMenu(event.currentTarget);
+    };
+
+    const handleProfileMenuClose = () => {
+        setAnchorElProfileMenu(null);
+    };
+
+    const handleOpenSettings = () => {
+        setShowSettingsModal(true);
+        handleProfileMenuClose();
+    };
+
+    const handleCloseSettings = () => {
+        setShowSettingsModal(false);
+    };
+
+    const handleSaveSettings = () => {
+        // In a real app, you would send these to your backend
+        // For now, just close the modal
+        setSnackbarMessage("Profile settings saved (frontend only).");
+        setSnackbarSeverity('info');
+        setSnackbarOpen(true);
+        setShowSettingsModal(false);
+    };
+
 
     if (!isLoggedIn) {
         return <AuthPage setIsLoggedIn={setIsLoggedIn} setAuthMessage={setAuthMessage} />;
@@ -1204,7 +1257,10 @@ function App() {
             sx={{
                 display: 'flex',
                 flexDirection: 'column',
-                height: '100vh', // Make the entire app fill the viewport height
+                height: '125vh', // Compensate for scaling
+                width: '125vw', // Compensate for scaling
+                transform: 'scale(0.8)', // Simulate 80% zoom
+                transformOrigin: 'top left', // Scale from top-left corner
                 fontFamily: 'Inter, sans-serif',
                 background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)',
             }}
@@ -1236,24 +1292,61 @@ function App() {
                     </Box>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <Button
-                        onClick={handleLogout}
-                        variant="outlined"
-                        sx={{
-                            borderColor: '#e5e7eb', 
-                            color: '#374151', 
-                            fontWeight: 600,
-                            borderRadius: '0.5rem',
-                            textTransform: 'none',
-                            padding: '0.5rem 1rem',
-                            '&:hover': {
-                                backgroundColor: '#f0f0f0', 
-                                borderColor: '#d1d5db',
-                            },
+                    {/* Profile Icon and Menu */}
+                    <IconButton
+                        aria-label="profile menu"
+                        aria-controls="profile-menu"
+                        aria-haspopup="true"
+                        onClick={handleProfileMenuOpen}
+                        sx={{ p: 0 }}
+                    >
+                        <Box
+                            component="img"
+                            src={profilePicUrl}
+                            alt="Profile"
+                            sx={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: '50%',
+                                objectFit: 'cover',
+                                border: '2px solid #4f46e5',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                            }}
+                        />
+                    </IconButton>
+                    <Menu
+                        id="profile-menu"
+                        anchorEl={anchorElProfileMenu}
+                        open={openProfileMenu}
+                        onClose={handleProfileMenuClose}
+                        MenuListProps={{
+                            'aria-labelledby': 'profile-button',
+                        }}
+                        anchorOrigin={{
+                            vertical: 'bottom',
+                            horizontal: 'right',
+                        }}
+                        transformOrigin={{
+                            vertical: 'top',
+                            horizontal: 'right',
+                        }}
+                        PaperProps={{
+                            sx: {
+                                borderRadius: '0.75rem',
+                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                                minWidth: 180,
+                            }
                         }}
                     >
-                        Logout
-                    </Button>
+                        <MenuItem onClick={handleOpenSettings} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.5 }}>
+                            <Settings size={18} />
+                            <Typography variant="body2" fontWeight="medium">Settings</Typography>
+                        </MenuItem>
+                        <MenuItem onClick={handleLogout} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.5 }}>
+                            <LogOut size={18} />
+                            <Typography variant="body2" fontWeight="medium">Logout</Typography>
+                        </MenuItem>
+                    </Menu>
                 </Box>
             </Box>
 
@@ -1356,21 +1449,21 @@ function App() {
                         </Box>
                     </Box>
 
-                    {/* Toggle Buttons for Active/Archived Items */}
+                    {/* Toggle Buttons for Active/Completed Items */}
                     <Box sx={{ display: 'flex', justifyContent: 'space-around', marginBottom: 2, gap: 1 }}>
                         <Button
-                            variant={!showArchivedView ? "contained" : "outlined"}
-                            onClick={() => setShowArchivedView(false)}
+                            variant={showActiveView ? "contained" : "outlined"}
+                            onClick={() => setShowActiveView(true)}
                             sx={{
                                 flexGrow: 1,
                                 textTransform: 'none',
                                 borderRadius: '0.5rem',
                                 fontWeight: 600,
-                                backgroundColor: !showArchivedView ? '#4f46e5' : 'transparent',
-                                color: !showArchivedView ? '#fff' : '#4f46e5',
+                                backgroundColor: showActiveView ? '#4f46e5' : 'transparent',
+                                color: showActiveView ? '#fff' : '#4f46e5',
                                 borderColor: '#4f46e5',
                                 '&:hover': {
-                                    backgroundColor: !showArchivedView ? '#4338ca' : '#eef2ff',
+                                    backgroundColor: showActiveView ? '#4338ca' : '#eef2ff',
                                     borderColor: '#4338ca',
                                 },
                             }}
@@ -1378,27 +1471,27 @@ function App() {
                             Active
                         </Button>
                         <Button
-                            variant={showArchivedView ? "contained" : "outlined"}
-                            onClick={() => setShowArchivedView(true)}
+                            variant={!showActiveView ? "contained" : "outlined"}
+                            onClick={() => setShowActiveView(false)}
                             sx={{
                                 flexGrow: 1,
                                 textTransform: 'none',
                                 borderRadius: '0.5rem',
                                 fontWeight: 600,
-                                backgroundColor: showArchivedView ? '#4f46e5' : 'transparent',
-                                color: showArchivedView ? '#fff' : '#4f46e5',
+                                backgroundColor: !showActiveView ? '#4f46e5' : 'transparent',
+                                color: !showActiveView ? '#fff' : '#4f46e5',
                                 borderColor: '#4f46e5',
                                 '&:hover': {
-                                    backgroundColor: showArchivedView ? '#4338ca' : '#eef2ff',
+                                    backgroundColor: !showActiveView ? '#4338ca' : '#eef2ff',
                                     borderColor: '#4338ca',
                                 },
                             }}
                         >
-                            Archived
+                            Completed
                         </Button>
                     </Box>
 
-                    {/* Conditional Rendering of Active/Archived Lists */}
+                    {/* Conditional Rendering of Active/Completed Lists */}
                     <List
                         subheader={
                             <ListSubheader component="div" sx={{ 
@@ -1412,8 +1505,8 @@ function App() {
                                 display: 'flex',
                                 alignItems: 'center',
                             }}>
-                                <Box sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: showArchivedView ? '#9ca3af' : '#16a34a', marginRight: '0.5rem' }} />
-                                {showArchivedView ? 'Archived Items' : 'Active Items'}
+                                <Box sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: showActiveView ? '#16a34a' : '#4f46e5', marginRight: '0.5rem' }} />
+                                {showActiveView ? 'Active Items' : 'Completed Items'}
                             </ListSubheader>
                         }
                         sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', flexGrow: 1 }} // Allow list to scroll
@@ -1422,7 +1515,7 @@ function App() {
                         {error && <Alert severity="error" sx={{ marginY: 3, borderRadius: '0.5rem' }}>{error}</Alert>}
                         {!loading && !error && filteredAndSortedProducts.length === 0 ? (
                             <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 3 }}>
-                                {showArchivedView ? 'No archived products matching criteria.' : 'No active products matching criteria.'}
+                                {showActiveView ? 'No active products matching criteria.' : 'No completed products matching criteria.'}
                             </Typography>
                         ) : (
                             filteredAndSortedProducts.map(product => (
@@ -1436,9 +1529,9 @@ function App() {
                                         padding: 1.5,
                                         borderRadius: '0.5rem',
                                         marginBottom: '0.5rem',
-                                        backgroundColor: selectedProduct && selectedProduct.id === product.id ? (showArchivedView ? '#f3e8ff' : '#eef2ff') : '#fff',
-                                        border: selectedProduct && selectedProduct.id === product.id ? (showArchivedView ? '1px solid #d8b4fe' : '1px solid #c7d2fe') : '1px solid #f3f4f6',
-                                        '&:hover': { backgroundColor: showArchivedView ? '#ede9fe' : '#e0e7ff' },
+                                        backgroundColor: selectedProduct && selectedProduct.id === product.id ? '#eef2ff' : '#fff',
+                                        border: selectedProduct && selectedProduct.id === product.id ? '1px solid #c7d2fe' : '1px solid #f3f4f6',
+                                        '&:hover': { backgroundColor: '#e0e7ff' },
                                         transition: 'background-color 0.2s, border-color 0.2s',
                                     }}
                                 >
@@ -1465,15 +1558,10 @@ function App() {
                                         primaryTypographyProps={{ fontWeight: 'medium', color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                                     />
                                     <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                        {showArchivedView ? (
-                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleArchiveProduct(product.id, false); }}>
-                                                <ArchiveRestore size={16} />
-                                            </IconButton>
-                                        ) : (
-                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleArchiveProduct(product.id, true); }}>
-                                                <Archive size={16} />
-                                            </IconButton>
-                                        )}
+                                        {/* Archive/Delete buttons always visible for active/completed */}
+                                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleArchiveProduct(product.id, true); }}>
+                                            <Archive size={16} />
+                                        </IconButton>
                                         <IconButton size="small" onClick={(e) => { e.stopPropagation(); confirmDeleteProduct(product.id); }}>
                                             <Trash2 size={16} />
                                         </IconButton>
@@ -1482,6 +1570,69 @@ function App() {
                             ))
                         )}
                     </List>
+
+                    {/* Archived Items Section (Collapsible) */}
+                    <Box sx={{ marginTop: 3, borderTop: '1px solid #e5e7eb', paddingTop: 2 }}>
+                        <Button
+                            onClick={() => setShowArchivedSection(!showArchivedSection)}
+                            fullWidth
+                            sx={{
+                                textTransform: 'none',
+                                fontWeight: 'bold',
+                                color: '#4b5563',
+                                justifyContent: 'space-between',
+                                '&:hover': { backgroundColor: '#f3f4f6' },
+                                borderRadius: '0.5rem',
+                                padding: '0.5rem 1rem',
+                            }}
+                            endIcon={showArchivedSection ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                        >
+                            Archived Items ({archivedProducts.length})
+                        </Button>
+                        <Collapse in={showArchivedSection}>
+                            <List dense sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', maxHeight: 200, marginTop: 1 }}>
+                                {archivedProducts.length === 0 ? (
+                                    <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 1 }}>
+                                        No archived products.
+                                    </Typography>
+                                ) : (
+                                    archivedProducts.map(product => (
+                                        <ListItem
+                                            key={product.id}
+                                            onClick={() => handleSelectProduct(product)}
+                                            sx={{
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                padding: 1,
+                                                borderRadius: '0.5rem',
+                                                marginBottom: '0.5rem',
+                                                backgroundColor: selectedProduct && selectedProduct.id === product.id ? '#f3e8ff' : '#fff',
+                                                border: selectedProduct && selectedProduct.id === product.id ? '1px solid #d8b4fe' : '1px solid #f3f4f6',
+                                                '&:hover': { backgroundColor: '#ede9fe' },
+                                                transition: 'background-color 0.2s, border-color 0.2s',
+                                            }}
+                                        >
+                                            <ListItemText
+                                                primary={product.name}
+                                                secondary={`Stage: ${product.stage} | Progress: ${product.progress}%`}
+                                                primaryTypographyProps={{ fontWeight: 'medium', color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                                secondaryTypographyProps={{ fontSize: '0.75rem', color: '#6b7280' }}
+                                            />
+                                            <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                                <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleArchiveProduct(product.id, false); }}>
+                                                    <ArchiveRestore size={16} />
+                                                </IconButton>
+                                                <IconButton size="small" onClick={(e) => { e.stopPropagation(); confirmDeleteProduct(product.id); }}>
+                                                    <Trash2 size={16} />
+                                                </IconButton>
+                                            </Box>
+                                        </ListItem>
+                                    ))
+                                )}
+                            </List>
+                        </Collapse>
+                    </Box>
                 </Paper>
 
                 {/* Right Main Content: Kanban Board (now tabbed) */}
@@ -1529,7 +1680,7 @@ function App() {
                             )}
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                            {/* AI Assistant button in header, context-aware */}
+                            {/* Feature Assistant button in header, context-aware */}
                             <Button
                                 variant="contained"
                                 startIcon={<MessageSquare size={20} />}
@@ -1545,18 +1696,18 @@ function App() {
                                 }}
                                 onClick={() => {
                                     if (selectedProduct) {
-                                        // When AI Assistant is toggled, ensure we're on the current product's stage tab
+                                        // When Feature Assistant is toggled, ensure we're on the current product's stage tab
                                         const stageIndex = kanbanStages.indexOf(selectedProduct.stage);
                                         setSelectedKanbanTab(stageIndex >= 0 ? stageIndex : 0);
-                                        setShowAiAssistant(!showAiAssistant);
+                                        setShowFeatureAssistant(!showFeatureAssistant);
                                     } else {
-                                        setSnackbarMessage("Please select a product/feature first to use the AI Assistant.");
+                                        setSnackbarMessage("Please select a product/feature first to use the Feature Assistant.");
                                         setSnackbarSeverity('info');
                                         setSnackbarOpen(true);
                                     }
                                 }}
                             >
-                                AI Assistant
+                                Feature Assistant
                             </Button>
                         </Box>
                     </Paper>
@@ -1633,8 +1784,8 @@ function App() {
                                 {kanbanStages.map((stage, index) => (
                                     <TabPanel value={selectedKanbanTab} index={index} key={stage}>
                                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flexGrow: 1 }}>
-                                            {/* AI Assistant section, now within the active tab */}
-                                            {showAiAssistant && (
+                                            {/* Feature Assistant section, now within the active tab */}
+                                            {showFeatureAssistant && (
                                                 <Paper
                                                     elevation={1}
                                                     sx={{
@@ -1648,7 +1799,7 @@ function App() {
                                                     }}
                                                 >
                                                     <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151' }}>
-                                                        AI Discovery Assistant for {stage}
+                                                        Feature Assistant for {stage}
                                                     </Typography>
                                                     <TextField
                                                         id={`discoveryInput-${stage}`}
@@ -1875,6 +2026,86 @@ function App() {
                         }}
                     >
                         Delete
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Settings Modal */}
+            <Dialog open={showSettingsModal} onClose={handleCloseSettings} PaperProps={{ sx: { borderRadius: '1rem' } }}>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#1f2937' }}>Profile Settings</DialogTitle>
+                <DialogContent dividers>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 3 }}>
+                        <Box
+                            component="img"
+                            src={profilePicUrl}
+                            alt="Profile"
+                            sx={{
+                                width: 80,
+                                height: 80,
+                                borderRadius: '50%',
+                                objectFit: 'cover',
+                                border: '3px solid #4f46e5',
+                                marginBottom: 2
+                            }}
+                        />
+                        <TextField
+                            margin="dense"
+                            id="profile-pic-url"
+                            label="Profile Picture URL"
+                            type="url"
+                            fullWidth
+                            variant="outlined"
+                            value={profilePicUrl}
+                            onChange={(e) => setProfilePicUrl(e.target.value)}
+                            sx={{ marginBottom: 2 }}
+                        />
+                    </Box>
+                    <TextField
+                        margin="dense"
+                        id="user-name"
+                        label="Your Name"
+                        type="text"
+                        fullWidth
+                        variant="outlined"
+                        value={userName}
+                        onChange={(e) => setUserName(e.target.value)}
+                        sx={{ marginBottom: 2 }}
+                    />
+                    <TextField
+                        margin="dense"
+                        id="user-timezone"
+                        label="Timezone"
+                        type="text"
+                        fullWidth
+                        variant="outlined"
+                        value={userTimezone}
+                        onChange={(e) => setUserTimezone(e.target.value)}
+                    />
+                </DialogContent>
+                <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
+                    <Button 
+                        onClick={handleCloseSettings} 
+                        sx={{ 
+                            textTransform: 'none', 
+                            color: '#6b7280', 
+                            borderRadius: '0.5rem', 
+                            '&:hover': { backgroundColor: '#f3f4f6' } 
+                        }}
+                    >
+                        Cancel
+                    </Button>
+                    <Button 
+                        onClick={handleSaveSettings} 
+                        variant="contained" 
+                        sx={{ 
+                            textTransform: 'none', 
+                            backgroundColor: '#4f46e5', 
+                            color: '#fff', 
+                            borderRadius: '0.5rem',
+                            '&:hover': { backgroundColor: '#4338ca' }
+                        }}
+                    >
+                        Save Changes
                     </Button>
                 </DialogActions>
             </Dialog>
