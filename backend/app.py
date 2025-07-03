@@ -220,6 +220,12 @@ def approve_user(user_id):
     app.logger.info(f"User {user.email} (ID: {user.id}) has been approved by app owner.")
     return jsonify({"message": f"User {user.email} has been approved."}), 200
 
+@app.route('/api/user/profile', methods=['GET'])
+@token_required
+def get_profile(current_user):
+    """Fetches the authenticated user's profile information."""
+    return jsonify(current_user.to_dict()), 200
+
 @app.route('/api/user/profile', methods=['PUT'])
 @token_required
 def update_profile(current_user):
