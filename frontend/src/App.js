@@ -45,7 +45,7 @@ import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus,
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 // --- AuthPage Component ---
-function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName }) {
+function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName, setProfilePicUrl: setAppProfilePicUrl, setUserTimezone: setAppUserTimezone }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState(''); 
@@ -98,8 +98,9 @@ function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName }
             if (isLoginMode) {
                 response = await axios.post(`${API_URL}/api/login`, { email, password });
                 localStorage.setItem('token', response.data.token);
-                // Assuming username is returned upon login
-                setAppUserName(response.data.username || 'User Name'); // Update app-level username
+                setAppUserName(response.data.username || 'User Name');
+                setAppProfilePicUrl(response.data.profile_pic_url || ''); // Set profile pic from login response
+                setAppUserTimezone(response.data.timezone || 'UTC+05:30 (Chennai)'); // Set timezone from login response
                 setIsLoggedIn(true);
                 setAuthMessage(response.data.message); 
             } else {
@@ -572,7 +573,7 @@ function SettingsPage({
 
     // Determine the profile image source
     const displayProfileImage = useMemo(() => {
-        if (profilePicUrl && profilePicUrl !== 'https://placehold.co/40x40/e0e7ff/4f46e5?text=U') {
+        if (profilePicUrl) {
             return profilePicUrl;
         }
         // If no custom image, use initial of username
@@ -738,27 +739,29 @@ function App() {
 
     // State for Quote of the Day
     const [quoteOfTheDay, setQuoteOfTheDay] = useState('');
+    const [quoteEmoji, setQuoteEmoji] = useState('💡'); // Emoji for the quote
 
     // Array of quotes for Product Managers
     const productManagerQuotes = useMemo(() => [
-        "The only way to do great work is to love what you do. – Steve Jobs",
-        "Your most unhappy customers are your greatest source of learning. – Bill Gates",
-        "If you're not embarrassed by the first version of your product, you've launched too late. – Reid Hoffman",
-        "Design is not just what it looks like and feels like. Design is how it works. – Steve Jobs",
-        "The goal is to build a product that people use, not a product that people like. – Marty Cagan",
-        "Innovation is saying no to a thousand things. – Steve Jobs",
-        "Good product managers are the CEOs of their products. – Ben Horowitz",
-        "The best products are built by teams who are obsessed with their customers. – Jeff Bezos",
-        "You can't just ask customers what they want and then try to give that to them. By the time you get it built, they'll want something new. – Steve Jobs",
-        "Focus on the user and all else will follow. – Google's Ten Things We Know to Be True"
+        { quote: "The only way to do great work is to love what you do.", author: "Steve Jobs", emoji: "🍎" },
+        { quote: "Your most unhappy customers are your greatest source of learning.", author: "Bill Gates", emoji: "📚" },
+        { quote: "If you're not embarrassed by the first version of your product, you've launched too late.", author: "Reid Hoffman", emoji: "🚀" },
+        { quote: "Design is not just what it looks like and feels like. Design is how it works.", author: "Steve Jobs", emoji: "🎨" },
+        { quote: "The goal is to build a product that people use, not a product that people like.", author: "Marty Cagan", emoji: "🎯" },
+        { quote: "Innovation is saying no to a thousand things.", author: "Steve Jobs", emoji: "💡" },
+        { quote: "Good product managers are the CEOs of their products.", author: "Ben Horowitz", emoji: "👑" },
+        { quote: "The best products are built by teams who are obsessed with their customers.", author: "Jeff Bezos", emoji: "🤝" },
+        { quote: "You can't just ask customers what they want and then try to give that to them. By the time you get it built, they'll want something new.", author: "Steve Jobs", emoji: "🔮" },
+        { quote: "Focus on the user and all else will follow.", author: "Google's Ten Things We Know to Be True", emoji: "🔍" }
     ], []);
 
     // Effect to set the quote of the day
     useEffect(() => {
         const today = new Date();
         const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
-        const quoteIndex = dayOfYear % productManagerQuotes.length;
-        setQuoteOfTheDay(productManagerQuotes[quoteIndex]);
+        const quoteData = productManagerQuotes[dayOfYear % productManagerQuotes.length];
+        setQuoteOfTheDay(quoteData.quote + " – " + quoteData.author);
+        setQuoteEmoji(quoteData.emoji);
     }, [productManagerQuotes]);
 
 
@@ -1100,19 +1103,28 @@ function App() {
         const token = localStorage.getItem('token');
         if (token) {
             setIsLoggedIn(true);
-            // In a real app, you'd fetch user details (including username) from backend
-            // For now, let's assume it's part of the token or a separate fetch
-            // For demonstration, let's try to decode the token to get the username
-            try {
-                const decodedToken = JSON.parse(atob(token.split('.')[1])); // Basic JWT decode (not secure for validation)
-                if (decodedToken && decodedToken.username) {
-                    setUserName(decodedToken.username);
+            // Fetch user profile data when logged in
+            const fetchUserProfile = async () => {
+                try {
+                    const response = await axios.get(`${API_URL}/api/user/profile`, {
+                        headers: {
+                            Authorization: `Bearer ${token}`
+                        }
+                    });
+                    setUserName(response.data.username || 'User');
+                    setProfilePicUrl(response.data.profile_pic_url || '');
+                    setUserTimezone(response.data.timezone || 'UTC+05:30 (Chennai)');
+                } catch (err) {
+                    console.error("Error fetching user profile:", err);
+                    setSnackbarMessage("Failed to load user profile. Please try logging in again.");
+                    setSnackbarSeverity('error');
+                    setSnackbarOpen(true);
+                    handleLogout(); // Log out if profile fetch fails
                 }
-            } catch (e) {
-                console.error("Error decoding token:", e);
-            }
+            };
+            fetchUserProfile();
         }
-    }, []);
+    }, [isLoggedIn]); // Depend on isLoggedIn to refetch on login/logout
 
     useEffect(() => {
         const fetchProducts = async () => {
@@ -1167,8 +1179,8 @@ function App() {
             );
         }
 
-        // Apply stage filter (only for Active/Completed views, not archived section)
-        if (filterByStage !== 'All') { // Apply to both active and completed lists
+        // Apply stage filter (only for Active/Completed lists)
+        if (filterByStage !== 'All') {
             currentProducts = currentProducts.filter(p => p.stage === filterByStage);
         }
 
@@ -1402,6 +1414,7 @@ function App() {
         setCurrentPage('dashboard'); // Go back to dashboard view
         setUserName('User'); // Reset username on logout
         setProfilePicUrl(''); // Reset profile pic on logout
+        setUserTimezone('UTC+05:30 (Chennai)'); // Reset timezone on logout
     };
 
     // Function to update product stage and progress (example for Kanban interaction)
@@ -1494,13 +1507,35 @@ function App() {
         handleProfileMenuClose();
     };
 
-    const handleSaveSettings = () => {
-        // In a real app, you would send these to your backend
-        // For now, just close the modal
-        setSnackbarMessage("Profile settings saved (frontend only).");
-        setSnackbarSeverity('info');
-        setSnackbarOpen(true);
-        setCurrentPage('dashboard'); // Go back to dashboard after saving
+    const handleSaveSettings = async () => {
+        setLoading(true);
+        setSnackbarOpen(false);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.put(`${API_URL}/api/user/profile`, {
+                username: userName,
+                profile_pic_url: profilePicUrl,
+                timezone: userTimezone
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`
+                }
+            });
+            setSnackbarMessage(response.data.message);
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+            setCurrentPage('dashboard'); // Go back to dashboard after saving
+        } catch (err) {
+            console.error("Error saving profile settings:", err);
+            const errorMessage = err.response && err.response.data && err.response.data.message 
+                                ? err.response.data.message 
+                                : "Failed to save profile settings. Please try again.";
+            setSnackbarMessage(errorMessage);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Determine the profile image source for the header
@@ -1515,7 +1550,13 @@ function App() {
 
 
     if (!isLoggedIn) {
-        return <AuthPage setIsLoggedIn={setIsLoggedIn} setAuthMessage={setAuthMessage} setUserName={setUserName} />;
+        return <AuthPage 
+            setIsLoggedIn={setIsLoggedIn} 
+            setAuthMessage={setAuthMessage} 
+            setUserName={setUserName} 
+            setProfilePicUrl={setProfilePicUrl} 
+            setUserTimezone={setUserTimezone} 
+        />;
     }
 
     if (currentPage === 'settings') {
@@ -1579,17 +1620,22 @@ function App() {
                     <Box sx={{ 
                         textAlign: 'right', 
                         marginRight: 3,
-                        '@keyframes fadeInOut': {
-                            '0%': { opacity: 0 },
-                            '50%': { opacity: 1 },
-                            '100%': { opacity: 0 },
+                        '@keyframes slideIn': {
+                            '0%': { opacity: 0, transform: 'translateX(20px)' },
+                            '10%': { opacity: 1, transform: 'translateX(0)' },
+                            '90%': { opacity: 1, transform: 'translateX(0)' },
+                            '100%': { opacity: 0, transform: 'translateX(-20px)' },
                         },
-                        animation: 'fadeInOut 10s infinite ease-in-out', // Subtle animation
+                        animation: 'slideIn 15s infinite ease-in-out', // Slower, more distinct animation
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
                     }}>
                         <Typography variant="body2" sx={{ color: '#4f46e5', fontWeight: 'bold', fontSize: '0.9rem' }}>
                             Hey {userName}, quote of the day for you:
                         </Typography>
-                        <Typography variant="body2" sx={{ color: '#6b7280', fontStyle: 'italic', fontSize: '0.8rem' }}>
+                        <Typography variant="body2" sx={{ color: '#6b7280', fontStyle: 'italic', fontSize: '0.8rem', display: 'flex', alignItems: 'center' }}>
+                            <Box component="span" sx={{ fontSize: '1.2em', marginRight: '0.3em' }}>{quoteEmoji}</Box>
                             "{quoteOfTheDay}"
                         </Typography>
                     </Box>
