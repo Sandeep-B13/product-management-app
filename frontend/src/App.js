@@ -45,10 +45,11 @@ import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus,
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 // --- AuthPage Component ---
-function AuthPage({ setIsLoggedIn, setAuthMessage }) {
+function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState(''); 
+    const [username, setUsername] = useState(''); // New: Username state
     const [isLoginMode, setIsLoginMode] = useState(true); 
     const [loading, setLoading] = useState(false);
     const [authError, setAuthError] = useState(null);
@@ -82,6 +83,14 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                 setLoading(false);
                 return;
             }
+            if (!username.trim()) { // New: Validate username for signup
+                setAuthError("Username is required for signup.");
+                setSnackbarMessage("Username is required for signup.");
+                setSnackbarSeverity('error');
+                setSnackbarOpen(true);
+                setLoading(false);
+                return;
+            }
         }
 
         try {
@@ -89,10 +98,12 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
             if (isLoginMode) {
                 response = await axios.post(`${API_URL}/api/login`, { email, password });
                 localStorage.setItem('token', response.data.token);
+                // Assuming username is returned upon login
+                setAppUserName(response.data.username || 'User Name'); // Update app-level username
                 setIsLoggedIn(true);
                 setAuthMessage(response.data.message); 
             } else {
-                response = await axios.post(`${API_URL}/api/signup`, { email, password });
+                response = await axios.post(`${API_URL}/api/signup`, { email, password, username }); // Pass username
                 setAuthMessage(response.data.message);
                 setSnackbarMessage(response.data.message);
                 setSnackbarSeverity('success');
@@ -259,6 +270,38 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                                 },
                             }}
                         />
+
+                        {/* Username Input (only for signup mode) */}
+                        {!isLoginMode && (
+                            <TextField
+                                label="Your Name"
+                                id="username"
+                                type="text"
+                                placeholder="e.g., Sandeep"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                required // Made mandatory
+                                fullWidth
+                                variant="outlined"
+                                sx={{
+                                    '& .MuiOutlinedInput-root': {
+                                        borderRadius: '0.5rem',
+                                        '&.Mui-focused fieldset': {
+                                            borderColor: '#6366f1', 
+                                            boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)', 
+                                        },
+                                    },
+                                    '& .MuiInputLabel-root': {
+                                        fontWeight: 600, 
+                                        color: '#374151', 
+                                    },
+                                    '& .MuiInputBase-input::placeholder': {
+                                        color: '#9ca3af', 
+                                        opacity: 1, 
+                                    },
+                                }}
+                            />
+                        )}
 
                         {/* Password Input */}
                         <TextField
@@ -440,6 +483,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
                                     setEmail('');
                                     setPassword('');
                                     setConfirmPassword(''); 
+                                    setUsername(''); // Clear username on mode change
                                     setSnackbarOpen(false);
                                 }}
                                 sx={{
@@ -526,6 +570,16 @@ function SettingsPage({
         }
     };
 
+    // Determine the profile image source
+    const displayProfileImage = useMemo(() => {
+        if (profilePicUrl && profilePicUrl !== 'https://placehold.co/40x40/e0e7ff/4f46e5?text=U') {
+            return profilePicUrl;
+        }
+        // If no custom image, use initial of username
+        const initial = userName ? userName.charAt(0).toUpperCase() : 'U';
+        return `https://placehold.co/100x100/e0e7ff/4f46e5?text=${initial}`;
+    }, [profilePicUrl, userName]);
+
     return (
         <Box sx={{ 
             display: 'flex', 
@@ -565,7 +619,7 @@ function SettingsPage({
                         <IconButton onClick={() => fileInputRef.current.click()} sx={{ p: 0 }}>
                             <Box
                                 component="img"
-                                src={profilePicUrl}
+                                src={displayProfileImage} // Use displayProfileImage here
                                 alt="Profile"
                                 sx={{
                                     width: 100,
@@ -678,9 +732,34 @@ function App() {
     const [currentPage, setCurrentPage] = useState('dashboard'); // 'dashboard' or 'settings'
 
     // State for Settings Modal (now for actual settings page)
-    const [profilePicUrl, setProfilePicUrl] = useState('https://placehold.co/40x40/e0e7ff/4f46e5?text=U'); // Default profile pic
-    const [userName, setUserName] = useState('User Name');
+    const [profilePicUrl, setProfilePicUrl] = useState(''); // Default to empty string
+    const [userName, setUserName] = useState('User'); // Default to 'User'
     const [userTimezone, setUserTimezone] = useState('UTC+05:30 (Chennai)'); // Default to Chennai timezone
+
+    // State for Quote of the Day
+    const [quoteOfTheDay, setQuoteOfTheDay] = useState('');
+
+    // Array of quotes for Product Managers
+    const productManagerQuotes = useMemo(() => [
+        "The only way to do great work is to love what you do. – Steve Jobs",
+        "Your most unhappy customers are your greatest source of learning. – Bill Gates",
+        "If you're not embarrassed by the first version of your product, you've launched too late. – Reid Hoffman",
+        "Design is not just what it looks like and feels like. Design is how it works. – Steve Jobs",
+        "The goal is to build a product that people use, not a product that people like. – Marty Cagan",
+        "Innovation is saying no to a thousand things. – Steve Jobs",
+        "Good product managers are the CEOs of their products. – Ben Horowitz",
+        "The best products are built by teams who are obsessed with their customers. – Jeff Bezos",
+        "You can't just ask customers what they want and then try to give that to them. By the time you get it built, they'll want something new. – Steve Jobs",
+        "Focus on the user and all else will follow. – Google's Ten Things We Know to Be True"
+    ], []);
+
+    // Effect to set the quote of the day
+    useEffect(() => {
+        const today = new Date();
+        const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
+        const quoteIndex = dayOfYear % productManagerQuotes.length;
+        setQuoteOfTheDay(productManagerQuotes[quoteIndex]);
+    }, [productManagerQuotes]);
 
 
     // Ref for Lottie animation container
@@ -1021,6 +1100,17 @@ function App() {
         const token = localStorage.getItem('token');
         if (token) {
             setIsLoggedIn(true);
+            // In a real app, you'd fetch user details (including username) from backend
+            // For now, let's assume it's part of the token or a separate fetch
+            // For demonstration, let's try to decode the token to get the username
+            try {
+                const decodedToken = JSON.parse(atob(token.split('.')[1])); // Basic JWT decode (not secure for validation)
+                if (decodedToken && decodedToken.username) {
+                    setUserName(decodedToken.username);
+                }
+            } catch (e) {
+                console.error("Error decoding token:", e);
+            }
         }
     }, []);
 
@@ -1310,6 +1400,8 @@ function App() {
         setSnackbarOpen(true);
         setAnchorElProfileMenu(null); // Close profile menu on logout
         setCurrentPage('dashboard'); // Go back to dashboard view
+        setUserName('User'); // Reset username on logout
+        setProfilePicUrl(''); // Reset profile pic on logout
     };
 
     // Function to update product stage and progress (example for Kanban interaction)
@@ -1411,9 +1503,19 @@ function App() {
         setCurrentPage('dashboard'); // Go back to dashboard after saving
     };
 
+    // Determine the profile image source for the header
+    const displayHeaderProfileImage = useMemo(() => {
+        if (profilePicUrl) {
+            return profilePicUrl;
+        }
+        // If no custom image, use initial of username
+        const initial = userName ? userName.charAt(0).toUpperCase() : 'U';
+        return `https://placehold.co/40x40/e0e7ff/4f46e5?text=${initial}`;
+    }, [profilePicUrl, userName]);
+
 
     if (!isLoggedIn) {
-        return <AuthPage setIsLoggedIn={setIsLoggedIn} setAuthMessage={setAuthMessage} />;
+        return <AuthPage setIsLoggedIn={setIsLoggedIn} setAuthMessage={setAuthMessage} setUserName={setUserName} />;
     }
 
     if (currentPage === 'settings') {
@@ -1473,6 +1575,25 @@ function App() {
                     </Box>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    {/* Personalized Quote of the Day */}
+                    <Box sx={{ 
+                        textAlign: 'right', 
+                        marginRight: 3,
+                        '@keyframes fadeInOut': {
+                            '0%': { opacity: 0 },
+                            '50%': { opacity: 1 },
+                            '100%': { opacity: 0 },
+                        },
+                        animation: 'fadeInOut 10s infinite ease-in-out', // Subtle animation
+                    }}>
+                        <Typography variant="body2" sx={{ color: '#4f46e5', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                            Hey {userName}, quote of the day for you:
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#6b7280', fontStyle: 'italic', fontSize: '0.8rem' }}>
+                            "{quoteOfTheDay}"
+                        </Typography>
+                    </Box>
+
                     {/* Profile Icon and Menu */}
                     <IconButton
                         aria-label="profile menu"
@@ -1483,7 +1604,7 @@ function App() {
                     >
                         <Box
                             component="img"
-                            src={profilePicUrl}
+                            src={displayHeaderProfileImage} // Use the dynamically determined image source
                             alt="Profile"
                             sx={{
                                 width: 40,
@@ -2052,7 +2173,7 @@ function App() {
                                                 )}
                                                 {stage === 'Design' && (
                                                     <>
-                                                        <Typography variant="body2" sx={{ color: '#374151' }}>PRD handover to design team <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                                        <Typography variant="body2" sx={{ color: '#374151' }>PRD handover to design team <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
                                                     </>
                                                 )}
                                                 {stage === 'Planning' && (

@@ -70,6 +70,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     is_approved = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    username = db.Column(db.String(80), unique=False, nullable=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -154,31 +155,29 @@ def token_required(f):
 
 @app.route('/api/signup', methods=['POST'])
 def signup():
-    """Registers a new user. User is unapproved by default."""
     data = request.json
     email = data.get('email')
     password = data.get('password')
+    username = data.get('username') # Get username from request
 
-    if not email or not password:
-        return jsonify({"message": "Email and password are required"}), 400
+    if not email or not password or not username: # Make username mandatory
+        return jsonify({"message": "Email, password, and username are required"}), 400
 
     if User.query.filter_by(email=email).first():
         return jsonify({"message": "Email already registered. Please log in or use a different email."}), 409
 
-    new_user = User(email=email)
-    new_user.set_password(password) # Hash the password
-    # is_approved defaults to False
+    new_user = User(email=email, username=username) # Pass username to User constructor
+    new_user.set_password(password)
 
     db.session.add(new_user)
     db.session.commit()
 
-    app.logger.info(f"New user signed up: {email}. Awaiting approval by app owner.")
-
+    app.logger.info(f"New user signed up: {email} (Username: {username}). Awaiting approval by app owner.")
     return jsonify({"message": "Sign up successful! Your account is awaiting approval by the app owner."}), 201
 
+# In backend/app.py
 @app.route('/api/login', methods=['POST'])
 def login():
-    """Logs in a user and provides a JWT if approved."""
     data = request.json
     email = data.get('email')
     password = data.get('password')
@@ -191,7 +190,7 @@ def login():
     if not user:
         return jsonify({"message": "User not found. Please sign up first."}), 404
 
-    if not user.check_password(password): # Check hashed password
+    if not user.check_password(password):
         return jsonify({"message": "Invalid credentials. Please check your email and password."}), 401
 
     if not user.is_approved:
@@ -202,11 +201,12 @@ def login():
         'user_id': user.id,
         'email': user.email,
         'is_approved': user.is_approved,
+        'username': user.username, # Include username in JWT payload
         'exp': datetime.utcnow() + timedelta(hours=24) # Token expires in 24 hours
     }
     token = jwt.encode(token_payload, app.config['SECRET_KEY'], algorithm='HS256')
 
-    return jsonify({"message": "Login successful!", "token": token}), 200
+    return jsonify({"message": "Login successful!", "token": token, "username": user.username}), 200 # Also return username directly
 
 @app.route('/api/admin/approve_user/<int:user_id>', methods=['POST'])
 def approve_user(user_id):
