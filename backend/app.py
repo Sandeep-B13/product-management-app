@@ -7,6 +7,7 @@ import google.generativeai as genai
 from datetime import datetime, timedelta # Import timedelta for JWT expiration
 from werkzeug.security import generate_password_hash, check_password_hash # For password hashing
 import jwt # For JSON Web Tokens
+from functools import wraps # Import wraps for decorator
 
 # Load environment variables from .env file
 load_dotenv()
@@ -58,7 +59,9 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    username = db.Column(db.String(80), unique=False, nullable=True) # New: Added username column
+    username = db.Column(db.String(80), unique=False, nullable=True)
+    profile_pic_url = db.Column(db.String(255), nullable=True) # New: Added profile picture URL column
+    timezone = db.Column(db.String(100), nullable=True) # New: Added timezone column
     is_approved = db.Column(db.Boolean, default=False, nullable=False) # Approval status
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -72,7 +75,9 @@ class User(db.Model):
         return {
             'id': self.id,
             'email': self.email,
-            'username': self.username, # Include username in dictionary representation
+            'username': self.username,
+            'profile_pic_url': self.profile_pic_url, # Include in dictionary representation
+            'timezone': self.timezone, # Include in dictionary representation
             'is_approved': self.is_approved,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
@@ -102,6 +107,30 @@ class ProductFeature(db.Model):
 with app.app_context():
     db.create_all()
 
+# --- Authentication Decorator ---
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'Authorization' in request.headers:
+            token = request.headers['Authorization'].split(" ")[1]
+
+        if not token:
+            return jsonify({'message': 'Token is missing!'}), 401
+
+        try:
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            current_user = User.query.filter_by(id=data['user_id']).first()
+            if not current_user:
+                return jsonify({'message': 'User not found!'}), 401
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token has expired!'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Token is invalid!'}), 401
+
+        return f(current_user, *args, **kwargs)
+    return decorated
+
 # --- Authentication Endpoints ---
 
 @app.route('/api/signup', methods=['POST'])
@@ -110,15 +139,15 @@ def signup():
     data = request.json
     email = data.get('email')
     password = data.get('password')
-    username = data.get('username') # New: Get username from request
+    username = data.get('username')
 
-    if not email or not password or not username: # New: Validate username
+    if not email or not password or not username:
         return jsonify({"message": "Email, password, and username are required"}), 400
 
     if User.query.filter_by(email=email).first():
         return jsonify({"message": "Email already registered. Please log in or use a different email."}), 409
 
-    new_user = User(email=email, username=username) # New: Pass username to User constructor
+    new_user = User(email=email, username=username)
     new_user.set_password(password)
     # is_approved defaults to False as per requirements
 
@@ -155,13 +184,21 @@ def login():
     token_payload = {
         'user_id': user.id,
         'email': user.email,
-        'username': user.username, # Include username in JWT payload
+        'username': user.username,
+        'profile_pic_url': user.profile_pic_url, # Include profile_pic_url in JWT payload
+        'timezone': user.timezone, # Include timezone in JWT payload
         'is_approved': user.is_approved,
         'exp': datetime.utcnow() + timedelta(hours=24) # Token expires in 24 hours
     }
     token = jwt.encode(token_payload, app.config['SECRET_KEY'], algorithm='HS256')
 
-    return jsonify({"message": "Login successful!", "token": token, "username": user.username}), 200 # Return username
+    return jsonify({
+        "message": "Login successful!",
+        "token": token,
+        "username": user.username,
+        "profile_pic_url": user.profile_pic_url, # Return profile_pic_url directly
+        "timezone": user.timezone # Return timezone directly
+    }), 200
 
 @app.route('/api/admin/approve_user/<int:user_id>', methods=['POST'])
 def approve_user(user_id):
@@ -182,6 +219,22 @@ def approve_user(user_id):
     db.session.commit()
     app.logger.info(f"User {user.email} (ID: {user.id}) has been approved by app owner.")
     return jsonify({"message": f"User {user.email} has been approved."}), 200
+
+@app.route('/api/user/profile', methods=['PUT'])
+@token_required
+def update_profile(current_user):
+    """Updates the authenticated user's profile information."""
+    data = request.json
+
+    if 'username' in data:
+        current_user.username = data['username']
+    if 'profile_pic_url' in data:
+        current_user.profile_pic_url = data['profile_pic_url']
+    if 'timezone' in data:
+        current_user.timezone = data['timezone']
+
+    db.session.commit()
+    return jsonify({"message": "Profile updated successfully", "user": current_user.to_dict()}), 200
 
 
 # --- API Routes for Product Management (will be protected later) ---
