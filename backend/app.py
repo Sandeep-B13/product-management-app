@@ -29,6 +29,15 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_super_secret_key_change_this_in_production')
 
+# --- Add SQLAlchemy Engine Options for Connection Pooling ---
+# These options help manage database connections more robustly,
+# especially with cloud databases like Neon that might close idle connections.
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    "pool_recycle": 299, # Recycle connections after 299 seconds (less than Neon's typical 300s idle timeout)
+    "pool_timeout": 30,  # Give up connecting after 30 seconds
+    "pool_pre_ping": True # Test connections before use to ensure they are live
+}
+
 # --- CORS Configuration ---
 CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "https://product-management-app-zeta.vercel.app"]}})
 
