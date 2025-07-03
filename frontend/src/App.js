@@ -1584,7 +1584,7 @@ function App() {
                 flexDirection: 'column',
                 height: '100vh', // Full viewport height
                 width: '100vw',  // Full viewport width
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: 'Inter',
                 background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)',
                 overflow: 'hidden', // Prevent main page scrollbars
             }}
@@ -1620,13 +1620,13 @@ function App() {
                     <Box sx={{ 
                         textAlign: 'right', 
                         marginRight: 3,
-                        '@keyframes slideIn': {
-                            '0%': { opacity: 0, transform: 'translateX(20px)' },
-                            '10%': { opacity: 1, transform: 'translateX(0)' },
-                            '90%': { opacity: 1, transform: 'translateX(0)' },
-                            '100%': { opacity: 0, transform: 'translateX(-20px)' },
+                        '@keyframes fadeInOut': {
+                            '0%': { opacity: 0, transform: 'translateY(10px)' },
+                            '5%': { opacity: 1, transform: 'translateY(0)' },
+                            '95%': { opacity: 1, transform: 'translateY(0)' },
+                            '100%': { opacity: 0, transform: 'translateY(-10px)' },
                         },
-                        animation: 'slideIn 15s infinite ease-in-out', // Slower, more distinct animation
+                        animation: 'fadeInOut 15s infinite', // Slower, more distinct animation
                         display: 'flex',
                         alignItems: 'center',
                         gap: 1,
