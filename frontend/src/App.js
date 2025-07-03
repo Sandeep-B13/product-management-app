@@ -2173,23 +2173,23 @@ function App() {
                                                 )}
                                                 {stage === 'Design' && (
                                                     <>
-                                                        <Typography variant="body2" sx={{ color: '#374151' }>PRD handover to design team <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                                        <Typography variant="body2" sx={{ color: '#374151' }}>PRD handover to design team <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto' }}>Pending</Alert></Box></Typography>
                                                     </>
                                                 )}
                                                 {stage === 'Planning' && (
                                                     <>
-                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Timeline planning <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Timeline planning <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto' }}>Pending</Alert></Box></Typography>
                                                     </>
                                                 )}
                                                 {stage === 'Development' && (
                                                     <>
-                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Frontend development <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
-                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Backend API integration <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Frontend development <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto' }}>Pending</Alert></Box></Typography>
+                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Backend API integration <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto' }}>Pending</Alert></Box></Typography>
                                                     </>
                                                 )}
                                                 {stage === 'Documentation' && (
                                                     <>
-                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Tech documentation handover <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto', '.MuiAlert-message': { padding: 0 } }}>Pending</Alert></Box></Typography>
+                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Tech documentation handover <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto' }}>Pending</Alert></Box></Typography>
                                                     </>
                                                 )}
                                                 <Button 
