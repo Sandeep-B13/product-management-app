@@ -37,7 +37,7 @@ import {
 } from '@mui/material';
 
 // Importing Lucide icons
-import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, Archive, ArchiveRestore, MessageSquare, CheckCircle, Search, User, Settings, LogOut, ChevronDown, ChevronUp } from 'lucide-react'; 
+import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, Archive, ArchiveRestore, MessageSquare, CheckCircle, Search, User, Settings, LogOut, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react'; 
 
 // Define the API URL for your backend.
 // In development, it will default to http://localhost:5000.
@@ -472,6 +472,171 @@ function AuthPage({ setIsLoggedIn, setAuthMessage }) {
     );
 }
 
+// --- SettingsPage Component ---
+function SettingsPage({ 
+    setCurrentPage, 
+    profilePicUrl, 
+    setProfilePicUrl, 
+    userName, 
+    setUserName, 
+    userTimezone, 
+    setUserTimezone, 
+    handleSaveSettings,
+    setSnackbarMessage,
+    setSnackbarSeverity,
+    setSnackbarOpen
+}) {
+    const fileInputRef = useRef(null);
+
+    const timezones = [
+        "UTC-12:00 (Baker Island)", "UTC-11:00 (Niue)", "UTC-10:00 (Hawaii)", "UTC-09:00 (Alaska)",
+        "UTC-08:00 (Pacific Time)", "UTC-07:00 (Mountain Time)", "UTC-06:00 (Central Time)",
+        "UTC-05:00 (Eastern Time)", "UTC-04:00 (Atlantic Time)", "UTC-03:00 (Buenos Aires)",
+        "UTC-02:00 (Fernando de Noronha)", "UTC-01:00 (Azores)", "UTC+00:00 (London)",
+        "UTC+01:00 (Berlin)", "UTC+02:00 (Athens)", "UTC+03:00 (Moscow)", "UTC+03:30 (Tehran)",
+        "UTC+04:00 (Dubai)", "UTC+04:30 (Kabul)", "UTC+05:00 (Karachi)", "UTC+05:30 (Chennai)",
+        "UTC+05:45 (Kathmandu)", "UTC+06:00 (Dhaka)", "UTC+06:30 (Yangon)", "UTC+07:00 (Bangkok)",
+        "UTC+08:00 (Beijing)", "UTC+08:45 (Eucla)", "UTC+09:00 (Tokyo)", "UTC+09:30 (Adelaide)",
+        "UTC+10:00 (Sydney)", "UTC+10:30 (Lord Howe Island)", "UTC+11:00 (Solomon Islands)",
+        "UTC+12:00 (Fiji)", "UTC+12:45 (Chatham Islands)", "UTC+13:00 (Tonga)", "UTC+14:00 (Kiritimati)"
+    ];
+
+    const handleProfilePicUpload = (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            if (file.size > 5 * 1024 * 1024) { // 5MB limit
+                setSnackbarMessage("File size exceeds 5MB limit.");
+                setSnackbarSeverity('error');
+                setSnackbarOpen(true);
+                return;
+            }
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setProfilePicUrl(reader.result); // Store as base64 for display
+                setSnackbarMessage("Profile picture updated locally!");
+                setSnackbarSeverity('success');
+                setSnackbarOpen(true);
+            };
+            reader.onerror = () => {
+                setSnackbarMessage("Failed to read file.");
+                setSnackbarSeverity('error');
+                setSnackbarOpen(true);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    return (
+        <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            height: '100vh', 
+            fontFamily: 'Inter, sans-serif', 
+            background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)',
+            p: 3,
+            overflowY: 'auto' // Allow scrolling for settings content if it overflows
+        }}>
+            <Paper
+                elevation={3}
+                sx={{
+                    maxWidth: '800px',
+                    margin: 'auto',
+                    p: { xs: 3, sm: 5 },
+                    borderRadius: '1rem',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                    backgroundColor: '#fff',
+                    width: '100%',
+                }}
+            >
+                <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
+                    <IconButton onClick={() => setCurrentPage('dashboard')} sx={{ marginRight: 2, color: '#4f46e5' }}>
+                        <ArrowLeft size={24} />
+                    </IconButton>
+                    <Typography variant="h5" component="h2" sx={{ fontWeight: 'bold', color: '#111827' }}>
+                        Settings
+                    </Typography>
+                </Box>
+
+                <Box sx={{ marginBottom: 4 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 2 }}>
+                        Profile Settings
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 3 }}>
+                        <IconButton onClick={() => fileInputRef.current.click()} sx={{ p: 0 }}>
+                            <Box
+                                component="img"
+                                src={profilePicUrl}
+                                alt="Profile"
+                                sx={{
+                                    width: 100,
+                                    height: 100,
+                                    borderRadius: '50%',
+                                    objectFit: 'cover',
+                                    border: '3px solid #4f46e5',
+                                    marginBottom: 1,
+                                    cursor: 'pointer',
+                                    transition: 'transform 0.2s',
+                                    '&:hover': { transform: 'scale(1.05)' }
+                                }}
+                            />
+                        </IconButton>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            ref={fileInputRef}
+                            onChange={handleProfilePicUpload}
+                            style={{ display: 'none' }}
+                        />
+                        <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.875rem' }}>Click to upload profile picture (Max 5MB)</Typography>
+                    </Box>
+                    <TextField
+                        margin="normal"
+                        id="user-name"
+                        label="Your Name"
+                        type="text"
+                        fullWidth
+                        variant="outlined"
+                        value={userName}
+                        onChange={(e) => setUserName(e.target.value)}
+                        sx={{ marginBottom: 2 }}
+                    />
+                    <FormControl fullWidth margin="normal">
+                        <InputLabel id="timezone-select-label">Timezone</InputLabel>
+                        <Select
+                            labelId="timezone-select-label"
+                            id="user-timezone"
+                            value={userTimezone}
+                            label="Timezone"
+                            onChange={(e) => setUserTimezone(e.target.value)}
+                        >
+                            {timezones.map((tz) => (
+                                <MenuItem key={tz} value={tz}>{tz}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </Box>
+
+                <Box sx={{ textAlign: 'right', marginTop: 4 }}>
+                    <Button 
+                        onClick={handleSaveSettings} 
+                        variant="contained" 
+                        sx={{ 
+                            textTransform: 'none', 
+                            backgroundColor: '#4f46e5', 
+                            color: '#fff', 
+                            borderRadius: '0.5rem',
+                            padding: '0.75rem 1.5rem',
+                            '&:hover': { backgroundColor: '#4338ca' }
+                        }}
+                    >
+                        Save Changes
+                    </Button>
+                </Box>
+            </Paper>
+        </Box>
+    );
+}
+
 // --- Main App Component ---
 function App() {
     // Products will be fetched from DB
@@ -483,7 +648,7 @@ function App() {
     const [error, setError] = useState(null);
     const [generatedDocument, setGeneratedDocument] = useState('');
     const [discoveryInput, setDiscoveryInput] = useState('');
-    const [showFeatureAssistant, setShowFeatureAssistant] = useState(false); // Renamed from showAiAssistant
+    const [showFeatureAssistant, setShowFeatureAssistant] = useState(false); 
     const [showActiveView, setShowActiveView] = useState(true); // New state for Active/Completed toggle
     const [showArchivedSection, setShowArchivedSection] = useState(false); // State for archived collapsible section
 
@@ -509,11 +674,13 @@ function App() {
     const [anchorElProfileMenu, setAnchorElProfileMenu] = useState(null);
     const openProfileMenu = Boolean(anchorElProfileMenu);
 
-    // State for Settings Modal
-    const [showSettingsModal, setShowSettingsModal] = useState(false);
+    // State for Settings Page navigation
+    const [currentPage, setCurrentPage] = useState('dashboard'); // 'dashboard' or 'settings'
+
+    // State for Settings Modal (now for actual settings page)
     const [profilePicUrl, setProfilePicUrl] = useState('https://placehold.co/40x40/e0e7ff/4f46e5?text=U'); // Default profile pic
     const [userName, setUserName] = useState('User Name');
-    const [userTimezone, setUserTimezone] = useState('UTC');
+    const [userTimezone, setUserTimezone] = useState('UTC+05:30 (Chennai)'); // Default to Chennai timezone
 
 
     // Ref for Lottie animation container
@@ -911,7 +1078,7 @@ function App() {
         }
 
         // Apply stage filter (only for Active/Completed views, not archived section)
-        if (filterByStage !== 'All' && (showActiveView || !showActiveView)) { // Apply to both active and completed lists
+        if (filterByStage !== 'All') { // Apply to both active and completed lists
             currentProducts = currentProducts.filter(p => p.stage === filterByStage);
         }
 
@@ -990,7 +1157,7 @@ function App() {
         setSelectedProduct(product);
         setGeneratedDocument(product.discovery_document || '');
         setDiscoveryInput('');
-        setShowFeatureAssistant(false); // Renamed state
+        setShowFeatureAssistant(false); 
         setSnackbarOpen(false);
         // Set the selected Kanban tab to the index of the selected product's stage
         const stageIndex = kanbanStages.indexOf(product.stage);
@@ -1142,6 +1309,7 @@ function App() {
         setSnackbarSeverity('info');
         setSnackbarOpen(true);
         setAnchorElProfileMenu(null); // Close profile menu on logout
+        setCurrentPage('dashboard'); // Go back to dashboard view
     };
 
     // Function to update product stage and progress (example for Kanban interaction)
@@ -1230,12 +1398,8 @@ function App() {
     };
 
     const handleOpenSettings = () => {
-        setShowSettingsModal(true);
+        setCurrentPage('settings'); // Navigate to settings page
         handleProfileMenuClose();
-    };
-
-    const handleCloseSettings = () => {
-        setShowSettingsModal(false);
     };
 
     const handleSaveSettings = () => {
@@ -1244,7 +1408,7 @@ function App() {
         setSnackbarMessage("Profile settings saved (frontend only).");
         setSnackbarSeverity('info');
         setSnackbarOpen(true);
-        setShowSettingsModal(false);
+        setCurrentPage('dashboard'); // Go back to dashboard after saving
     };
 
 
@@ -1252,17 +1416,34 @@ function App() {
         return <AuthPage setIsLoggedIn={setIsLoggedIn} setAuthMessage={setAuthMessage} />;
     }
 
+    if (currentPage === 'settings') {
+        return (
+            <SettingsPage 
+                setCurrentPage={setCurrentPage}
+                profilePicUrl={profilePicUrl}
+                setProfilePicUrl={setProfilePicUrl}
+                userName={userName}
+                setUserName={setUserName}
+                userTimezone={userTimezone}
+                setUserTimezone={setUserTimezone}
+                handleSaveSettings={handleSaveSettings}
+                setSnackbarMessage={setSnackbarMessage}
+                setSnackbarSeverity={setSnackbarSeverity}
+                setSnackbarOpen={setSnackbarOpen}
+            />
+        );
+    }
+
     return (
         <Box
             sx={{
                 display: 'flex',
                 flexDirection: 'column',
-                height: '125vh', // Compensate for scaling
-                width: '125vw', // Compensate for scaling
-                transform: 'scale(0.8)', // Simulate 80% zoom
-                transformOrigin: 'top left', // Scale from top-left corner
+                height: '100vh', // Full viewport height
+                width: '100vw',  // Full viewport width
                 fontFamily: 'Inter, sans-serif',
                 background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)',
+                overflow: 'hidden', // Prevent main page scrollbars
             }}
         >
             {/* Main Header */}
@@ -2026,86 +2207,6 @@ function App() {
                         }}
                     >
                         Delete
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Settings Modal */}
-            <Dialog open={showSettingsModal} onClose={handleCloseSettings} PaperProps={{ sx: { borderRadius: '1rem' } }}>
-                <DialogTitle sx={{ fontWeight: 'bold', color: '#1f2937' }}>Profile Settings</DialogTitle>
-                <DialogContent dividers>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 3 }}>
-                        <Box
-                            component="img"
-                            src={profilePicUrl}
-                            alt="Profile"
-                            sx={{
-                                width: 80,
-                                height: 80,
-                                borderRadius: '50%',
-                                objectFit: 'cover',
-                                border: '3px solid #4f46e5',
-                                marginBottom: 2
-                            }}
-                        />
-                        <TextField
-                            margin="dense"
-                            id="profile-pic-url"
-                            label="Profile Picture URL"
-                            type="url"
-                            fullWidth
-                            variant="outlined"
-                            value={profilePicUrl}
-                            onChange={(e) => setProfilePicUrl(e.target.value)}
-                            sx={{ marginBottom: 2 }}
-                        />
-                    </Box>
-                    <TextField
-                        margin="dense"
-                        id="user-name"
-                        label="Your Name"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={userName}
-                        onChange={(e) => setUserName(e.target.value)}
-                        sx={{ marginBottom: 2 }}
-                    />
-                    <TextField
-                        margin="dense"
-                        id="user-timezone"
-                        label="Timezone"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={userTimezone}
-                        onChange={(e) => setUserTimezone(e.target.value)}
-                    />
-                </DialogContent>
-                <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
-                    <Button 
-                        onClick={handleCloseSettings} 
-                        sx={{ 
-                            textTransform: 'none', 
-                            color: '#6b7280', 
-                            borderRadius: '0.5rem', 
-                            '&:hover': { backgroundColor: '#f3f4f6' } 
-                        }}
-                    >
-                        Cancel
-                    </Button>
-                    <Button 
-                        onClick={handleSaveSettings} 
-                        variant="contained" 
-                        sx={{ 
-                            textTransform: 'none', 
-                            backgroundColor: '#4f46e5', 
-                            color: '#fff', 
-                            borderRadius: '0.5rem',
-                            '&:hover': { backgroundColor: '#4338ca' }
-                        }}
-                    >
-                        Save Changes
                     </Button>
                 </DialogActions>
             </Dialog>
