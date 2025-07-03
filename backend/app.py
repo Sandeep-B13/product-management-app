@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 from functools import wraps
+from sqlalchemy.exc import SQLAlchemyError # Import SQLAlchemyError for specific error handling
 
 # SQLAlchemy imports for models
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text
@@ -15,7 +16,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
-# Pydantic imports for schemas
+# Pydantic imports for schemas (these are implicitly defined by Flask-SQLAlchemy now)
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 
@@ -77,9 +78,9 @@ class User(db.Model):
 
     id = db.Column(Integer, primary_key=True, index=True)
     email = db.Column(String(120), unique=True, index=True, nullable=False)
-    password_hash = db.Column(String(255), nullable=False) # Renamed from hashed_password for consistency with existing code
-    username = db.Column(String(80), nullable=True) # Max length 80
-    profile_pic_url = db.Column(Text, nullable=True) # Changed to Text to accommodate long base64 strings
+    password_hash = db.Column(String(255), nullable=False)
+    username = db.Column(String(80), nullable=True)
+    # profile_pic_url = db.Column(Text, nullable=True) # REMOVED: No longer storing profile pictures
     timezone = db.Column(String(100), default="UTC+05:30 (Chennai)", nullable=True)
     is_approved = db.Column(Boolean, default=False, nullable=False)
     created_at = db.Column(DateTime, default=datetime.utcnow)
@@ -98,7 +99,7 @@ class User(db.Model):
             'id': self.id,
             'email': self.email,
             'username': self.username,
-            'profile_pic_url': self.profile_pic_url,
+            # 'profile_pic_url': self.profile_pic_url, # REMOVED from dict
             'timezone': self.timezone,
             'is_approved': self.is_approved,
             'created_at': self.created_at.isoformat() if self.created_at else None
@@ -106,19 +107,18 @@ class User(db.Model):
 
 
 class Product(db.Model):
-    __tablename__ = "products" # Changed from product_feature for clarity and consistency
+    __tablename__ = "products"
 
     id = db.Column(Integer, primary_key=True, index=True)
     name = db.Column(String(255), index=True, nullable=False)
-    discovery_document = db.Column(Text, nullable=True) # Use Text for potentially large documents
+    discovery_document = db.Column(Text, nullable=True)
     is_archived = db.Column(Boolean, default=False)
     progress = db.Column(Integer, default=0)
-    stage = db.Column(String(50), default="Research") # Increased string length for stage
-    created_at = db.Column(DateTime, default=datetime.utcnow) # Changed from server_default=func.now() for consistency
-    updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow) # Changed for consistency
+    stage = db.Column(String(50), default="Research")
+    created_at = db.Column(DateTime, default=datetime.utcnow)
+    updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # New: Foreign Key to link products to users
-    user_id = db.Column(Integer, ForeignKey("users.id"), nullable=False) # Made nullable=False
+    user_id = db.Column(Integer, ForeignKey("users.id"), nullable=False)
     owner = relationship("User", back_populates="products")
 
     def to_dict(self):
@@ -129,12 +129,12 @@ class Product(db.Model):
             'is_archived': self.is_archived,
             'progress': self.progress,
             'stage': self.stage,
-            'user_id': self.user_id, # Include user_id
+            'user_id': self.user_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
-# --- Pydantic Schemas ---
+# --- Pydantic Schemas (Adjusted for profile_pic_url removal) ---
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
@@ -148,7 +148,7 @@ class UserResponse(BaseModel):
     id: int
     email: EmailStr
     username: Optional[str] = None
-    profile_pic_url: Optional[str] = None
+    # profile_pic_url: Optional[str] = None # REMOVED
     timezone: Optional[str] = None
     is_approved: bool
     
@@ -157,7 +157,7 @@ class UserResponse(BaseModel):
 
 class UserProfileUpdate(BaseModel):
     username: Optional[str] = None
-    profile_pic_url: Optional[str] = None
+    # profile_pic_url: Optional[str] = None # REMOVED
     timezone: Optional[str] = None
 
 class ProductBase(BaseModel):
@@ -197,7 +197,7 @@ class Token(BaseModel):
     access_token: str
     token_type: str
     username: Optional[str] = None
-    profile_pic_url: Optional[str] = None
+    # profile_pic_url: Optional[str] = None # REMOVED
     timezone: Optional[str] = None
 
 class TokenData(BaseModel):
@@ -292,7 +292,7 @@ def login():
         'user_id': user.id,
         'email': user.email,
         'username': user.username,
-        'profile_pic_url': user.profile_pic_url,
+        # 'profile_pic_url': user.profile_pic_url, # REMOVED from token payload
         'timezone': user.timezone,
         'is_approved': user.is_approved,
         'exp': datetime.utcnow() + timedelta(hours=24) # Token expires in 24 hours
@@ -303,7 +303,7 @@ def login():
         "message": "Login successful!",
         "token": token,
         "username": user.username,
-        "profile_pic_url": user.profile_pic_url,
+        # "profile_pic_url": user.profile_pic_url, # REMOVED from login response
         "timezone": user.timezone
     }), 200
 
@@ -331,6 +331,7 @@ def approve_user(user_id):
 @token_required
 def get_profile(current_user):
     """Fetches the authenticated user's profile information."""
+    # The to_dict method on User model already excludes profile_pic_url
     return jsonify(current_user.to_dict()), 200
 
 @app.route('/api/user/profile', methods=['PUT'])
@@ -341,13 +342,22 @@ def update_profile(current_user):
 
     if 'username' in data:
         current_user.username = data['username']
-    if 'profile_pic_url' in data:
-        current_user.profile_pic_url = data['profile_pic_url']
+    # if 'profile_pic_url' in data: # REMOVED: No longer accepting profile picture updates
+    #     current_user.profile_pic_url = data['profile_pic_url']
     if 'timezone' in data:
         current_user.timezone = data['timezone']
 
-    db.session.commit()
-    return jsonify({"message": "Profile updated successfully", "user": current_user.to_dict()}), 200
+    try:
+        db.session.commit()
+        return jsonify({"message": "Profile updated successfully", "user": current_user.to_dict()}), 200
+    except SQLAlchemyError as e:
+        db.session.rollback() # Rollback in case of error
+        app.logger.error(f"Database error updating profile for user {current_user.id}: {e}")
+        return jsonify({"message": "Failed to update profile due to a database error. Please try again."}), 500
+    except Exception as e:
+        db.session.rollback() # Rollback in case of error
+        app.logger.error(f"An unexpected error occurred while updating profile for user {current_user.id}: {e}")
+        return jsonify({"message": "An unexpected error occurred while updating profile. Please try again."}), 500
 
 
 # --- API Routes for Product Management ---

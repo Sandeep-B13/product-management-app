@@ -44,8 +44,17 @@ import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus,
 // In production (on Vercel), it will use the REACT_APP_API_URL environment variable.
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
+// Define keyframes for the pulse animation
+const pulseAnimation = `
+    @keyframes pulse-initial {
+        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.7); }
+        70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(79, 70, 229, 0); }
+        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
+    }
+`;
+
 // --- AuthPage Component ---
-function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName, setProfilePicUrl: setAppProfilePicUrl, setUserTimezone: setAppUserTimezone }) {
+function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName, setUserTimezone: setAppUserTimezone }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState(''); 
@@ -99,7 +108,6 @@ function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName, 
                 response = await axios.post(`${API_URL}/api/login`, { email, password });
                 localStorage.setItem('token', response.data.token);
                 setAppUserName(response.data.username || 'User Name');
-                setAppProfilePicUrl(response.data.profile_pic_url || ''); // Set profile pic from login response
                 setAppUserTimezone(response.data.timezone || 'UTC+05:30 (Chennai)'); // Set timezone from login response
                 setIsLoggedIn(true);
                 setAuthMessage(response.data.message); 
@@ -290,18 +298,18 @@ function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName, 
                                         '&.Mui-focused fieldset': {
                                             borderColor: '#6366f1', 
                                             boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)', 
-                                        },
                                     },
-                                    '& .MuiInputLabel-root': {
-                                        fontWeight: 600, 
-                                        color: '#374151', 
-                                    },
-                                    '& .MuiInputBase-input::placeholder': {
-                                        color: '#9ca3af', 
-                                        opacity: 1, 
-                                    },
-                                }}
-                            />
+                                },
+                                '& .MuiInputLabel-root': {
+                                    fontWeight: 600, 
+                                    color: '#374151', 
+                                },
+                                '& .MuiInputBase-input::placeholder': {
+                                    color: '#9ca3af', 
+                                    opacity: 1, 
+                                },
+                            }}
+                        />
                         )}
 
                         {/* Password Input */}
@@ -520,8 +528,6 @@ function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName, 
 // --- SettingsPage Component ---
 function SettingsPage({ 
     setCurrentPage, 
-    profilePicUrl, 
-    setProfilePicUrl, 
     userName, 
     setUserName, 
     userTimezone, 
@@ -531,7 +537,8 @@ function SettingsPage({
     setSnackbarSeverity,
     setSnackbarOpen
 }) {
-    const fileInputRef = useRef(null);
+    // No file input needed anymore
+    // const fileInputRef = useRef(null); 
 
     const timezones = [
         "UTC-12:00 (Baker Island)", "UTC-11:00 (Niue)", "UTC-10:00 (Hawaii)", "UTC-09:00 (Alaska)",
@@ -546,40 +553,12 @@ function SettingsPage({
         "UTC+12:00 (Fiji)", "UTC+12:45 (Chatham Islands)", "UTC+13:00 (Tonga)", "UTC+14:00 (Kiritimati)"
     ];
 
-    const handleProfilePicUpload = (event) => {
-        const file = event.target.files[0];
-        if (file) {
-            if (file.size > 5 * 1024 * 1024) { // 5MB limit
-                setSnackbarMessage("File size exceeds 5MB limit.");
-                setSnackbarSeverity('error');
-                setSnackbarOpen(true);
-                return;
-            }
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setProfilePicUrl(reader.result); // Store as base64 for display
-                setSnackbarMessage("Profile picture updated locally!");
-                setSnackbarSeverity('success');
-                setSnackbarOpen(true);
-            };
-            reader.onerror = () => {
-                setSnackbarMessage("Failed to read file.");
-                setSnackbarSeverity('error');
-                setSnackbarOpen(true);
-            };
-            reader.readAsDataURL(file);
-        }
-    };
+    // Removed handleProfilePicUpload
 
-    // Determine the profile image source
-    const displayProfileImage = useMemo(() => {
-        if (profilePicUrl) {
-            return profilePicUrl;
-        }
-        // If no custom image, use initial of username
-        const initial = userName ? userName.charAt(0).toUpperCase() : 'U';
-        return `https://placehold.co/100x100/e0e7ff/4f46e5?text=${initial}`;
-    }, [profilePicUrl, userName]);
+    // Determine the profile image source (always an initial now)
+    const displayProfileInitial = useMemo(() => {
+        return userName ? userName.charAt(0).toUpperCase() : 'U';
+    }, [userName]);
 
     return (
         <Box sx={{ 
@@ -617,32 +596,29 @@ function SettingsPage({
                         Profile Settings
                     </Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 3 }}>
-                        <IconButton onClick={() => fileInputRef.current.click()} sx={{ p: 0 }}>
-                            <Box
-                                component="img"
-                                src={displayProfileImage} // Use displayProfileImage here
-                                alt="Profile"
-                                sx={{
-                                    width: 100,
-                                    height: 100,
-                                    borderRadius: '50%',
-                                    objectFit: 'cover',
-                                    border: '3px solid #4f46e5',
-                                    marginBottom: 1,
-                                    cursor: 'pointer',
-                                    transition: 'transform 0.2s',
-                                    '&:hover': { transform: 'scale(1.05)' }
-                                }}
-                            />
-                        </IconButton>
-                        <input
-                            type="file"
-                            accept="image/*"
-                            ref={fileInputRef}
-                            onChange={handleProfilePicUpload}
-                            style={{ display: 'none' }}
-                        />
-                        <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.875rem' }}>Click to upload profile picture (Max 5MB)</Typography>
+                        {/* Display Initial Placeholder */}
+                        <Box
+                            sx={{
+                                width: 100,
+                                height: 100,
+                                borderRadius: '50%',
+                                backgroundColor: '#e0e7ff', // Light blue background
+                                color: '#4f46e5', // Dark blue text
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '3rem',
+                                fontWeight: 'bold',
+                                border: '3px solid #4f46e5',
+                                marginBottom: 1,
+                                transition: 'transform 0.2s',
+                                animation: 'pulse-initial 2s infinite', // Apply pulse animation
+                                '&:hover': { transform: 'scale(1.05)' }
+                            }}
+                        >
+                            {displayProfileInitial}
+                        </Box>
+                        <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.875rem' }}>Your profile initial</Typography>
                     </Box>
                     <TextField
                         margin="normal"
@@ -733,7 +709,7 @@ function App() {
     const [currentPage, setCurrentPage] = useState('dashboard'); // 'dashboard' or 'settings'
 
     // State for Settings Modal (now for actual settings page)
-    const [profilePicUrl, setProfilePicUrl] = useState(''); // Default to empty string
+    // profilePicUrl state removed, as it's no longer stored/used
     const [userName, setUserName] = useState('User'); // Default to 'User'
     const [userTimezone, setUserTimezone] = useState('UTC+05:30 (Chennai)'); // Default to Chennai timezone
 
@@ -1111,8 +1087,9 @@ function App() {
                             Authorization: `Bearer ${token}`
                         }
                     });
+                    console.log("Fetched user profile data:", response.data); // Log profile data
                     setUserName(response.data.username || 'User');
-                    setProfilePicUrl(response.data.profile_pic_url || '');
+                    // profilePicUrl is no longer fetched/set
                     setUserTimezone(response.data.timezone || 'UTC+05:30 (Chennai)');
                 } catch (err) {
                     console.error("Error fetching user profile:", err);
@@ -1360,7 +1337,8 @@ function App() {
             const token = localStorage.getItem('token');
             const response = await axios.post(`${API_URL}/api/generate-discovery-document`, {
                 product_name: selectedProduct.name,
-                details: discoveryInput
+                details: discoveryInput,
+                product_id: selectedProduct.id // Pass product_id to backend
             }, {
                 headers: {
                     Authorization: `Bearer ${token}`
@@ -1413,7 +1391,7 @@ function App() {
         setAnchorElProfileMenu(null); // Close profile menu on logout
         setCurrentPage('dashboard'); // Go back to dashboard view
         setUserName('User'); // Reset username on logout
-        setProfilePicUrl(''); // Reset profile pic on logout
+        // profilePicUrl is no longer set/reset here
         setUserTimezone('UTC+05:30 (Chennai)'); // Reset timezone on logout
     };
 
@@ -1514,7 +1492,7 @@ function App() {
             const token = localStorage.getItem('token');
             const response = await axios.put(`${API_URL}/api/user/profile`, {
                 username: userName,
-                profile_pic_url: profilePicUrl,
+                // profile_pic_url: profilePicUrl, // REMOVED from payload
                 timezone: userTimezone
             }, {
                 headers: {
@@ -1538,15 +1516,10 @@ function App() {
         }
     };
 
-    // Determine the profile image source for the header
-    const displayHeaderProfileImage = useMemo(() => {
-        if (profilePicUrl) {
-            return profilePicUrl;
-        }
-        // If no custom image, use initial of username
-        const initial = userName ? userName.charAt(0).toUpperCase() : 'U';
-        return `https://placehold.co/40x40/e0e7ff/4f46e5?text=${initial}`;
-    }, [profilePicUrl, userName]);
+    // Determine the profile image source for the header (always an initial now)
+    const displayHeaderProfileInitial = useMemo(() => {
+        return userName ? userName.charAt(0).toUpperCase() : 'U';
+    }, [userName]);
 
 
     if (!isLoggedIn) {
@@ -1554,7 +1527,7 @@ function App() {
             setIsLoggedIn={setIsLoggedIn} 
             setAuthMessage={setAuthMessage} 
             setUserName={setUserName} 
-            setProfilePicUrl={setProfilePicUrl} 
+            // setProfilePicUrl={setProfilePicUrl} // Removed prop
             setUserTimezone={setUserTimezone} 
         />;
     }
@@ -1563,8 +1536,8 @@ function App() {
         return (
             <SettingsPage 
                 setCurrentPage={setCurrentPage}
-                profilePicUrl={profilePicUrl}
-                setProfilePicUrl={setProfilePicUrl}
+                // profilePicUrl={profilePicUrl} // Removed prop
+                // setProfilePicUrl={setProfilePicUrl} // Removed prop
                 userName={userName}
                 setUserName={setUserName}
                 userTimezone={userTimezone}
@@ -1589,6 +1562,9 @@ function App() {
                 overflow: 'hidden', // Prevent main page scrollbars
             }}
         >
+            {/* Inject the keyframes for the pulse animation */}
+            <style>{pulseAnimation}</style>
+
             {/* Main Header */}
             <Box
                 component="header"
@@ -1640,7 +1616,7 @@ function App() {
                         </Typography>
                     </Box>
 
-                    {/* Profile Icon and Menu */}
+                    {/* Profile Initial and Menu */}
                     <IconButton
                         aria-label="profile menu"
                         aria-controls="profile-menu"
@@ -1649,18 +1625,24 @@ function App() {
                         sx={{ p: 0 }}
                     >
                         <Box
-                            component="img"
-                            src={displayHeaderProfileImage} // Use the dynamically determined image source
-                            alt="Profile"
                             sx={{
                                 width: 40,
                                 height: 40,
                                 borderRadius: '50%',
-                                objectFit: 'cover',
+                                backgroundColor: '#e0e7ff', // Light blue background
+                                color: '#4f46e5', // Dark blue text
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '1.2rem',
+                                fontWeight: 'bold',
                                 border: '2px solid #4f46e5',
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                animation: 'pulse-initial 2s infinite', // Apply pulse animation
                             }}
-                        />
+                        >
+                            {displayHeaderProfileInitial}
+                        </Box>
                     </IconButton>
                     <Menu
                         id="profile-menu"
