@@ -4,10 +4,9 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import google.generativeai as genai
-from datetime import datetime, timedelta
-from werkzeug.security import generate_password_hash, check_password_hash
-import jwt
-from functools import wraps
+from datetime import datetime, timedelta # Import timedelta for JWT expiration
+from werkzeug.security import generate_password_hash, check_password_hash # For password hashing
+import jwt # For JSON Web Tokens
 
 # Load environment variables from .env file
 load_dotenv()
@@ -15,21 +14,12 @@ load_dotenv()
 app = Flask(__name__)
 
 # --- Configuration ---
-# Ensure DATABASE_URL includes ?sslmode=require for Render PostgreSQL
-db_url = os.environ.get('DATABASE_URL')
-if db_url and "postgresql://" in db_url and not ("sslmode=" in db_url):
-    # Append sslmode=require if not already present for PostgreSQL connections
-    if "?" in db_url:
-        db_url += "&sslmode=require"
-    else:
-        db_url += "?sslmode=require"
-
-app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_super_secret_key_change_this_in_production') # Used for JWT signing
+# Add a secret key for JWT signing. Generate a strong one!
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_super_secret_key_change_this_in_production')
 
 # --- CORS Configuration ---
-# Ensure this includes the exact URL of your Vercel frontend deployment
 CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "https://product-management-app-zeta.vercel.app"]}})
 
 # --- Google Gemini API Configuration ---
@@ -63,14 +53,14 @@ db = SQLAlchemy(app)
 # --- Database Models ---
 
 class User(db.Model):
-    __tablename__ = 'users'
+    __tablename__ = 'users' # Table name for users
 
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    is_approved = db.Column(db.Boolean, default=False, nullable=False)
+    username = db.Column(db.String(80), unique=False, nullable=True) # New: Added username column
+    is_approved = db.Column(db.Boolean, default=False, nullable=False) # Approval status
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    username = db.Column(db.String(80), unique=False, nullable=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -82,102 +72,67 @@ class User(db.Model):
         return {
             'id': self.id,
             'email': self.email,
+            'username': self.username, # Include username in dictionary representation
             'is_approved': self.is_approved,
-            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None
+            'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
 class ProductFeature(db.Model):
     __tablename__ = 'product_feature'
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False) # Link to User
     name = db.Column(db.String(255), nullable=False)
     discovery_document = db.Column(db.Text, nullable=True)
-    is_archived = db.Column(db.Boolean, default=False)
-    progress = db.Column(db.Integer, default=0)
-    stage = db.Column(db.String(50), default='Research')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # Define relationship to User
-    user = db.relationship('User', backref=db.backref('product_features', lazy=True))
+    # Add a user_id to link products to users (optional for now, but good for future)
+    # user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    # user = db.relationship('User', backref='product_features') # If you uncomment user_id
 
     def to_dict(self):
         return {
             'id': self.id,
-            'user_id': self.user_id,
             'name': self.name,
             'discovery_document': self.discovery_document,
-            'isArchived': self.is_archived,
-            'progress': self.progress,
-            'stage': self.stage,
-            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() + 'Z' if self.updated_at else None
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
 # --- IMPORTANT: Create database tables when the app is initialized by Gunicorn ---
-# This will create tables if they don't exist.
-# If tables exist but have changed, you will need to manually drop them in Neon
-# for changes to take effect.
 with app.app_context():
     db.create_all()
-
-# --- Authentication Decorator ---
-def token_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = None
-        if 'Authorization' in request.headers:
-            token = request.headers['Authorization'].split(" ")[1]
-
-        if not token:
-            return jsonify({"message": "Token is missing!"}), 401
-
-        try:
-            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-            current_user = User.query.get(data['user_id'])
-            if not current_user:
-                return jsonify({"message": "User not found!"}), 401
-            if not current_user.is_approved:
-                return jsonify({"message": "Account not approved. Please contact support."}), 403
-        except jwt.ExpiredSignatureError:
-            return jsonify({"message": "Token has expired!"}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({"message": "Token is invalid!"}), 401
-        except Exception as e:
-            app.logger.error(f"Error decoding token: {e}")
-            return jsonify({"message": "An error occurred during token validation."}), 500
-
-        return f(current_user, *args, **kwargs)
-    return decorated
 
 # --- Authentication Endpoints ---
 
 @app.route('/api/signup', methods=['POST'])
 def signup():
+    """Registers a new user. User is unapproved by default."""
     data = request.json
     email = data.get('email')
     password = data.get('password')
-    username = data.get('username') # Get username from request
+    username = data.get('username') # New: Get username from request
 
-    if not email or not password or not username: # Make username mandatory
+    if not email or not password or not username: # New: Validate username
         return jsonify({"message": "Email, password, and username are required"}), 400
 
     if User.query.filter_by(email=email).first():
         return jsonify({"message": "Email already registered. Please log in or use a different email."}), 409
 
-    new_user = User(email=email, username=username) # Pass username to User constructor
+    new_user = User(email=email, username=username) # New: Pass username to User constructor
     new_user.set_password(password)
+    # is_approved defaults to False as per requirements
 
     db.session.add(new_user)
     db.session.commit()
 
-    app.logger.info(f"New user signed up: {email} (Username: {username}). Awaiting approval by app owner.")
+    # Placeholder for owner notification (no actual email sent)
+    app.logger.info(f"New user signed up: {email}. Awaiting approval by app owner.")
+
     return jsonify({"message": "Sign up successful! Your account is awaiting approval by the app owner."}), 201
 
-# In backend/app.py
 @app.route('/api/login', methods=['POST'])
 def login():
+    """Logs in a user and provides a JWT if approved."""
     data = request.json
     email = data.get('email')
     password = data.get('password')
@@ -200,13 +155,13 @@ def login():
     token_payload = {
         'user_id': user.id,
         'email': user.email,
-        'is_approved': user.is_approved,
         'username': user.username, # Include username in JWT payload
+        'is_approved': user.is_approved,
         'exp': datetime.utcnow() + timedelta(hours=24) # Token expires in 24 hours
     }
     token = jwt.encode(token_payload, app.config['SECRET_KEY'], algorithm='HS256')
 
-    return jsonify({"message": "Login successful!", "token": token, "username": user.username}), 200 # Also return username directly
+    return jsonify({"message": "Login successful!", "token": token, "username": user.username}), 200 # Return username
 
 @app.route('/api/admin/approve_user/<int:user_id>', methods=['POST'])
 def approve_user(user_id):
@@ -229,83 +184,56 @@ def approve_user(user_id):
     return jsonify({"message": f"User {user.email} has been approved."}), 200
 
 
-# --- API Routes for Product Management ---
+# --- API Routes for Product Management (will be protected later) ---
 
 @app.route('/api/products', methods=['GET'])
-@token_required
-def get_products(current_user):
-    """Fetches all product features for the current user, ordered by creation date."""
-    products = ProductFeature.query.filter_by(user_id=current_user.id).order_by(ProductFeature.created_at.desc()).all()
+def get_products():
+    """Fetches all product features from the database, ordered by creation date."""
+    products = ProductFeature.query.order_by(ProductFeature.created_at.desc()).all()
     return jsonify([product.to_dict() for product in products])
 
 @app.route('/api/products', methods=['POST'])
-@token_required
-def create_product(current_user):
-    """Creates a new product feature for the current user in the database."""
+def create_product():
+    """Creates a new product feature in the database."""
     data = request.json
     if not data or 'name' not in data:
         return jsonify({"error": "Product name is required"}), 400
 
-    new_product = ProductFeature(
-        user_id=current_user.id, # Assign product to the current user
-        name=data['name'],
-        discovery_document=data.get('discovery_document'),
-        is_archived=data.get('isArchived', False),
-        progress=data.get('progress', 0),
-        stage=data.get('stage', 'Research')
-    )
+    new_product = ProductFeature(name=data['name'])
     db.session.add(new_product)
     db.session.commit()
     return jsonify(new_product.to_dict()), 201
 
 @app.route('/api/products/<int:product_id>', methods=['GET'])
-@token_required
-def get_product(current_user, product_id):
-    """Fetches a single product feature by ID for the current user."""
-    product = ProductFeature.query.filter_by(id=product_id, user_id=current_user.id).first()
-    if not product:
-        return jsonify({"error": "Product not found or unauthorized"}), 404
+def get_product(product_id):
+    """Fetches a single product feature by ID."""
+    product = ProductFeature.query.get_or_404(product_id)
     return jsonify(product.to_dict())
 
 @app.route('/api/products/<int:product_id>', methods=['PUT'])
-@token_required
-def update_product(current_user, product_id):
-    """Updates an existing product feature by ID for the current user."""
-    product = ProductFeature.query.filter_by(id=product_id, user_id=current_user.id).first()
-    if not product:
-        return jsonify({"error": "Product not found or unauthorized"}), 404
-    
+def update_product(product_id):
+    """Updates an existing product feature by ID."""
+    product = ProductFeature.query.get_or_404(product_id)
     data = request.json
 
     if 'name' in data:
         product.name = data['name']
     if 'discovery_document' in data:
         product.discovery_document = data['discovery_document']
-    if 'isArchived' in data:
-        product.is_archived = data['isArchived']
-    if 'progress' in data:
-        product.progress = data['progress']
-    if 'stage' in data:
-        product.stage = data['stage']
 
     db.session.commit()
     return jsonify(product.to_dict())
 
 @app.route('/api/products/<int:product_id>', methods=['DELETE'])
-@token_required
-def delete_product(current_user, product_id):
-    """Deletes a product feature by ID for the current user."""
-    product = ProductFeature.query.filter_by(id=product_id, user_id=current_user.id).first()
-    if not product:
-        return jsonify({"error": "Product not found or unauthorized"}), 404
-    
+def delete_product(product_id):
+    """Deletes a product feature by ID."""
+    product = ProductFeature.query.get_or_404(product_id)
     db.session.delete(product)
     db.session.commit()
     return jsonify({"message": "Product deleted successfully"}), 204
 
 @app.route('/api/generate-discovery-document', methods=['POST'])
-@token_required
-def generate_discovery_document(current_user):
+def generate_discovery_document():
     """
     Generates a product discovery document using Google Gemini Flash based on user input.
     Expects JSON with 'product_name' and 'details'.
@@ -332,5 +260,6 @@ def generate_discovery_document(current_user):
             return jsonify({"error": f"Failed to generate discovery document: {e.response.text}"}), 500
         return jsonify({"error": "Failed to generate discovery document. Please try again later."}), 500
 
+# This block only runs when you execute app.py directly (e.g., for local development)
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
