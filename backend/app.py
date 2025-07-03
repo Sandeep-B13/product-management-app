@@ -4,10 +4,20 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import google.generativeai as genai
-from datetime import datetime, timedelta # Import timedelta for JWT expiration
-from werkzeug.security import generate_password_hash, check_password_hash # For password hashing
-import jwt # For JSON Web Tokens
-from functools import wraps # Import wraps for decorator
+from datetime import datetime, timedelta
+from werkzeug.security import generate_password_hash, check_password_hash
+import jwt
+from functools import wraps
+
+# SQLAlchemy imports for models
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
+
+# Pydantic imports for schemas
+from pydantic import BaseModel, EmailStr
+from typing import Optional, List
 
 # Load environment variables from .env file
 load_dotenv()
@@ -17,7 +27,6 @@ app = Flask(__name__)
 # --- Configuration ---
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# Add a secret key for JWT signing. Generate a strong one!
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your_super_secret_key_change_this_in_production')
 
 # --- CORS Configuration ---
@@ -51,19 +60,23 @@ model = genai.GenerativeModel(
 
 db = SQLAlchemy(app)
 
-# --- Database Models ---
+# --- Database Models (SQLAlchemy) ---
+Base = declarative_base() # Re-declare Base here for consistency, though SQLAlchemy(app) might handle it
 
 class User(db.Model):
-    __tablename__ = 'users' # Table name for users
+    __tablename__ = "users"
 
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-    username = db.Column(db.String(80), unique=False, nullable=True)
-    profile_pic_url = db.Column(db.String(255), nullable=True) # New: Added profile picture URL column
-    timezone = db.Column(db.String(100), nullable=True) # New: Added timezone column
-    is_approved = db.Column(db.Boolean, default=False, nullable=False) # Approval status
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    id = db.Column(Integer, primary_key=True, index=True)
+    email = db.Column(String(120), unique=True, index=True, nullable=False)
+    password_hash = db.Column(String(255), nullable=False) # Renamed from hashed_password for consistency with existing code
+    username = db.Column(String(80), nullable=True) # Max length 80
+    profile_pic_url = db.Column(Text, nullable=True) # Changed to Text to accommodate long base64 strings
+    timezone = db.Column(String(100), default="UTC+05:30 (Chennai)", nullable=True)
+    is_approved = db.Column(Boolean, default=False, nullable=False)
+    created_at = db.Column(DateTime, default=datetime.utcnow)
+
+    # Establish a relationship with the Product model
+    products = relationship("Product", back_populates="owner")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -76,32 +89,112 @@ class User(db.Model):
             'id': self.id,
             'email': self.email,
             'username': self.username,
-            'profile_pic_url': self.profile_pic_url, # Include in dictionary representation
-            'timezone': self.timezone, # Include in dictionary representation
+            'profile_pic_url': self.profile_pic_url,
+            'timezone': self.timezone,
             'is_approved': self.is_approved,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
-class ProductFeature(db.Model):
-    __tablename__ = 'product_feature'
 
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255), nullable=False)
-    discovery_document = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    # Add a user_id to link products to users (optional for now, but good for future)
-    # user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    # user = db.relationship('User', backref='product_features') # If you uncomment user_id
+class Product(db.Model):
+    __tablename__ = "products" # Changed from product_feature for clarity and consistency
+
+    id = db.Column(Integer, primary_key=True, index=True)
+    name = db.Column(String(255), index=True, nullable=False)
+    discovery_document = db.Column(Text, nullable=True) # Use Text for potentially large documents
+    is_archived = db.Column(Boolean, default=False)
+    progress = db.Column(Integer, default=0)
+    stage = db.Column(String(50), default="Research") # Increased string length for stage
+    created_at = db.Column(DateTime, default=datetime.utcnow) # Changed from server_default=func.now() for consistency
+    updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow) # Changed for consistency
+
+    # New: Foreign Key to link products to users
+    user_id = db.Column(Integer, ForeignKey("users.id"), nullable=False) # Made nullable=False
+    owner = relationship("User", back_populates="products")
 
     def to_dict(self):
         return {
             'id': self.id,
             'name': self.name,
             'discovery_document': self.discovery_document,
+            'is_archived': self.is_archived,
+            'progress': self.progress,
+            'stage': self.stage,
+            'user_id': self.user_id, # Include user_id
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+# --- Pydantic Schemas ---
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    username: str
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserResponse(BaseModel):
+    id: int
+    email: EmailStr
+    username: Optional[str] = None
+    profile_pic_url: Optional[str] = None
+    timezone: Optional[str] = None
+    is_approved: bool
+    
+    class Config:
+        from_attributes = True
+
+class UserProfileUpdate(BaseModel):
+    username: Optional[str] = None
+    profile_pic_url: Optional[str] = None
+    timezone: Optional[str] = None
+
+class ProductBase(BaseModel):
+    name: str
+    discovery_document: Optional[str] = None
+    is_archived: Optional[bool] = False
+    progress: Optional[int] = 0
+    stage: Optional[str] = "Research"
+
+class ProductCreate(ProductBase):
+    pass
+
+class ProductUpdate(ProductBase):
+    name: Optional[str] = None
+    progress: Optional[int] = None
+    stage: Optional[str] = None
+    is_archived: Optional[bool] = None
+
+class ProductResponse(ProductBase):
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class AIDiscoveryDocumentRequest(BaseModel):
+    product_name: str
+    details: str
+    product_id: int
+
+class AIDiscoveryDocumentResponse(BaseModel):
+    discovery_document: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    username: Optional[str] = None
+    profile_pic_url: Optional[str] = None
+    timezone: Optional[str] = None
+
+class TokenData(BaseModel):
+    email: Optional[str] = None
+    user_id: Optional[int] = None
+
 
 # --- IMPORTANT: Create database tables when the app is initialized by Gunicorn ---
 with app.app_context():
@@ -185,8 +278,8 @@ def login():
         'user_id': user.id,
         'email': user.email,
         'username': user.username,
-        'profile_pic_url': user.profile_pic_url, # Include profile_pic_url in JWT payload
-        'timezone': user.timezone, # Include timezone in JWT payload
+        'profile_pic_url': user.profile_pic_url,
+        'timezone': user.timezone,
         'is_approved': user.is_approved,
         'exp': datetime.utcnow() + timedelta(hours=24) # Token expires in 24 hours
     }
@@ -196,8 +289,8 @@ def login():
         "message": "Login successful!",
         "token": token,
         "username": user.username,
-        "profile_pic_url": user.profile_pic_url, # Return profile_pic_url directly
-        "timezone": user.timezone # Return timezone directly
+        "profile_pic_url": user.profile_pic_url,
+        "timezone": user.timezone
     }), 200
 
 @app.route('/api/admin/approve_user/<int:user_id>', methods=['POST'])
@@ -243,66 +336,91 @@ def update_profile(current_user):
     return jsonify({"message": "Profile updated successfully", "user": current_user.to_dict()}), 200
 
 
-# --- API Routes for Product Management (will be protected later) ---
+# --- API Routes for Product Management ---
 
 @app.route('/api/products', methods=['GET'])
-def get_products():
-    """Fetches all product features from the database, ordered by creation date."""
-    products = ProductFeature.query.order_by(ProductFeature.created_at.desc()).all()
+@token_required
+def get_products(current_user):
+    """Fetches all product features for the current user from the database, ordered by creation date."""
+    products = Product.query.filter_by(user_id=current_user.id).order_by(Product.created_at.desc()).all()
     return jsonify([product.to_dict() for product in products])
 
 @app.route('/api/products', methods=['POST'])
-def create_product():
-    """Creates a new product feature in the database."""
+@token_required
+def create_product(current_user):
+    """Creates a new product feature for the current user in the database."""
     data = request.json
     if not data or 'name' not in data:
         return jsonify({"error": "Product name is required"}), 400
 
-    new_product = ProductFeature(name=data['name'])
+    new_product = Product(
+        name=data['name'],
+        discovery_document=data.get('discovery_document'),
+        is_archived=data.get('is_archived', False),
+        progress=data.get('progress', 0),
+        stage=data.get('stage', 'Research'),
+        user_id=current_user.id # Assign product to the current user
+    )
     db.session.add(new_product)
     db.session.commit()
     return jsonify(new_product.to_dict()), 201
 
 @app.route('/api/products/<int:product_id>', methods=['GET'])
-def get_product(product_id):
-    """Fetches a single product feature by ID."""
-    product = ProductFeature.query.get_or_404(product_id)
+@token_required
+def get_product(current_user, product_id):
+    """Fetches a single product feature by ID for the current user."""
+    product = Product.query.filter_by(id=product_id, user_id=current_user.id).first_or_404()
     return jsonify(product.to_dict())
 
 @app.route('/api/products/<int:product_id>', methods=['PUT'])
-def update_product(product_id):
-    """Updates an existing product feature by ID."""
-    product = ProductFeature.query.get_or_404(product_id)
+@token_required
+def update_product(current_user, product_id):
+    """Updates an existing product feature by ID for the current user."""
+    product = Product.query.filter_by(id=product_id, user_id=current_user.id).first_or_404()
     data = request.json
 
     if 'name' in data:
         product.name = data['name']
     if 'discovery_document' in data:
         product.discovery_document = data['discovery_document']
+    if 'is_archived' in data:
+        product.is_archived = data['is_archived']
+    if 'progress' in data:
+        product.progress = data['progress']
+    if 'stage' in data:
+        product.stage = data['stage']
 
     db.session.commit()
     return jsonify(product.to_dict())
 
 @app.route('/api/products/<int:product_id>', methods=['DELETE'])
-def delete_product(product_id):
-    """Deletes a product feature by ID."""
-    product = ProductFeature.query.get_or_404(product_id)
+@token_required
+def delete_product(current_user, product_id):
+    """Deletes a product feature by ID for the current user."""
+    product = Product.query.filter_by(id=product_id, user_id=current_user.id).first_or_404()
     db.session.delete(product)
     db.session.commit()
     return jsonify({"message": "Product deleted successfully"}), 204
 
 @app.route('/api/generate-discovery-document', methods=['POST'])
-def generate_discovery_document():
+@token_required
+def generate_discovery_document(current_user):
     """
     Generates a product discovery document using Google Gemini Flash based on user input.
-    Expects JSON with 'product_name' and 'details'.
+    Expects JSON with 'product_name', 'details', and 'product_id'.
     """
     data = request.json
     product_name = data.get('product_name')
     details = data.get('details')
+    product_id = data.get('product_id') # Get product_id from request
 
-    if not product_name or not details:
-        return jsonify({"error": "Product name and details are required"}), 400
+    if not product_name or not details or product_id is None:
+        return jsonify({"error": "Product name, details, and product_id are required"}), 400
+
+    # Verify the product belongs to the current user
+    product = Product.query.filter_by(id=product_id, user_id=current_user.id).first()
+    if not product:
+        return jsonify({"error": "Product not found or does not belong to the current user."}), 404
 
     prompt_parts = [
         f"Generate a comprehensive product discovery document for a product/feature named '{product_name}' with the following details:\n\n{details}\n\nThe document should include sections like: 'Problem Statement', 'Proposed Solution', 'Target Audience', 'Key Features', 'Success Metrics', 'Potential Risks', and 'Future Considerations'. Ensure the tone is professional and concise."
