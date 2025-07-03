@@ -209,6 +209,11 @@ class TokenData(BaseModel):
 with app.app_context():
     db.create_all()
 
+# --- Teardown function to remove the session after each request ---
+@app.teardown_appcontext
+def shutdown_session(exception=None):
+    db.session.remove()
+
 # --- Authentication Decorator ---
 def token_required(f):
     @wraps(f)
