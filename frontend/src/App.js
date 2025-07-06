@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import axios from 'axios';
 
 // Importing Material-UI components
@@ -21,30 +21,32 @@ import {
     InputAdornment,
     Grid, 
     LinearProgress, 
-    Dialog, // For confirmation and add product popups
+    Dialog, 
     DialogActions,
     DialogContent,
     DialogContentText,
     DialogTitle,
-    Select, // For sort dropdown
-    MenuItem, // For sort dropdown items
-    FormControl, // For select input
-    InputLabel, // For select input label
-    Tabs, // New: For tabbed navigation
-    Tab, // New: For individual tabs
-    Menu, // For profile dropdown menu
-    Collapse // For collapsible archived section
+    Select, 
+    MenuItem, 
+    FormControl, 
+    InputLabel, 
+    Tabs, 
+    Tab, 
+    Menu, 
+    Collapse 
 } from '@mui/material';
 
 // Importing Lucide icons
-import { Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, Archive, ArchiveRestore, MessageSquare, CheckCircle, Search, User, Settings, LogOut, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react'; 
+import { 
+    Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, 
+    Archive, ArchiveRestore, MessageSquare, CheckCircle, Search, User, Settings, 
+    LogOut, ChevronDown, ChevronUp, ArrowLeft, Mic, Send, Edit, Save, X, PlusCircle
+} from 'lucide-react'; 
 
 // Define the API URL for your backend.
-// In development, it will default to http://localhost:5000.
-// In production (on Vercel), it will use the REACT_APP_API_URL environment variable.
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-// Define keyframes for the pulse animation
+// Define keyframes for the pulse animation (from previous version)
 const pulseAnimation = `
     @keyframes pulse-initial {
         0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.7); }
@@ -53,12 +55,132 @@ const pulseAnimation = `
     }
 `;
 
+// Define the progress percentages for each tab
+const TAB_PROGRESS_PERCENTAGES = {
+    'Research': 20,
+    'PRD': 10,
+    'Design': 15,
+    'Development': 30,
+    'Tech Documentation': 10,
+    'Launch and Training': 15,
+    'Feedback': 0, // Feedback, Tasks, Repo, Important Notes don't contribute to core progress
+    'Tasks': 0,
+    'Repo': 0,
+    'Important Notes': 0,
+};
+
+// Define the order of tabs for display
+const PRODUCT_TABS_ORDER = [
+    'Research', 'PRD', 'Design', 'Development', 'Tech Documentation',
+    'Launch and Training', 'Feedback', 'Tasks', 'Repo', 'Important Notes'
+];
+
+// --- Editor.js Wrapper Component ---
+// This component dynamically loads Editor.js and initializes it.
+// It takes initialData (JSON) and onChange callback.
+const Editor = ({ initialData, onChange, holder, readOnly = false, onReadyCallback = () => {} }) => {
+    const editorInstance = useRef(null);
+    const editorHolderId = useMemo(() => holder || `editor-js-holder-${Math.random().toString(36).substring(7)}`, [holder]);
+
+    useEffect(() => {
+        // Ensure Editor.js is loaded before initializing
+        if (window.EditorJS) {
+            if (editorInstance.current) {
+                editorInstance.current.destroy(); // Destroy existing instance if it exists
+            }
+
+            editorInstance.current = new window.EditorJS({
+                holder: editorHolderId,
+                data: initialData || { blocks: [] },
+                readOnly: readOnly,
+                tools: {
+                    header: {
+                        class: window.Header,
+                        inlineToolbar: true,
+                    },
+                    paragraph: {
+                        class: window.Paragraph,
+                        inlineToolbar: true,
+                    },
+                    list: {
+                        class: window.List,
+                        inlineToolbar: true,
+                    },
+                    code: window.CodeTool,
+                    table: window.Table,
+                    quote: {
+                        class: window.Quote,
+                        inlineToolbar: true,
+                        shortcut: 'CMD+SHIFT+O',
+                        config: {
+                            quotePlaceholder: 'Enter quote',
+                            captionPlaceholder: 'Quote\'s author',
+                        },
+                    },
+                    raw: window.RawTool,
+                    image: {
+                        class: window.ImageTool,
+                        config: {
+                            uploader: {
+                                uploadByFile(file) {
+                                    // This is a placeholder. In a real app, you'd upload the file
+                                    // to cloud storage (e.g., S3, GCS) and return its URL.
+                                    // For now, it will just show a placeholder image.
+                                    return new Promise(resolve => {
+                                        const reader = new FileReader();
+                                        reader.onloadend = () => {
+                                            resolve({
+                                                success: 1,
+                                                file: {
+                                                    url: `https://placehold.co/600x400/FF0000/FFFFFF?text=Image+Placeholder`, // Placeholder image
+                                                    // Add more properties if needed, e.g., width, height
+                                                }
+                                            });
+                                        };
+                                        reader.readAsDataURL(file);
+                                    });
+                                },
+                            }
+                        }
+                    },
+                    marker: window.Marker,
+                    warning: window.Warning,
+                    delimiter: window.Delimiter,
+                    inlineCode: window.InlineCode,
+                    link: window.LinkTool,
+                    embed: window.Embed,
+                    // Add other tools as needed
+                },
+                onChange: async () => {
+                    if (onChange) {
+                        const savedData = await editorInstance.current.save();
+                        onChange(savedData);
+                    }
+                },
+                onReady: () => {
+                    onReadyCallback();
+                }
+            });
+        }
+
+        return () => {
+            if (editorInstance.current && editorInstance.current.destroy) {
+                editorInstance.current.destroy();
+                editorInstance.current = null;
+            }
+        };
+    }, [editorHolderId, initialData, onChange, readOnly, onReadyCallback]);
+
+    return <Box id={editorHolderId} sx={{ border: '1px solid #e0e7ff', borderRadius: '0.5rem', minHeight: '200px', padding: 2, backgroundColor: '#f9fafb' }} />;
+};
+
+
 // --- AuthPage Component ---
 function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName, setUserTimezone: setAppUserTimezone }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState(''); 
-    const [username, setUsername] = useState(''); // New: Username state
+    const [username, setUsername] = useState(''); 
     const [isLoginMode, setIsLoginMode] = useState(true); 
     const [loading, setLoading] = useState(false);
     const [authError, setAuthError] = useState(null);
@@ -92,7 +214,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName, 
                 setLoading(false);
                 return;
             }
-            if (!username.trim()) { // New: Validate username for signup
+            if (!username.trim()) { 
                 setAuthError("Username is required for signup.");
                 setSnackbarMessage("Username is required for signup.");
                 setSnackbarSeverity('error');
@@ -108,11 +230,11 @@ function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName, 
                 response = await axios.post(`${API_URL}/api/login`, { email, password });
                 localStorage.setItem('token', response.data.token);
                 setAppUserName(response.data.username || 'User Name');
-                setAppUserTimezone(response.data.timezone || 'UTC+05:30 (Chennai)'); // Set timezone from login response
+                setAppUserTimezone(response.data.timezone || 'UTC+05:30 (Chennai)'); 
                 setIsLoggedIn(true);
                 setAuthMessage(response.data.message); 
             } else {
-                response = await axios.post(`${API_URL}/api/signup`, { email, password, username }); // Pass username
+                response = await axios.post(`${API_URL}/api/signup`, { email, password, username }); 
                 setAuthMessage(response.data.message);
                 setSnackbarMessage(response.data.message);
                 setSnackbarSeverity('success');
@@ -289,7 +411,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName, 
                                 placeholder="e.g., Sandeep"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                required // Made mandatory
+                                required 
                                 fullWidth
                                 variant="outlined"
                                 sx={{
@@ -492,7 +614,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName, 
                                     setEmail('');
                                     setPassword('');
                                     setConfirmPassword(''); 
-                                    setUsername(''); // Clear username on mode change
+                                    setUsername(''); 
                                     setSnackbarOpen(false);
                                 }}
                                 sx={{
@@ -537,9 +659,6 @@ function SettingsPage({
     setSnackbarSeverity,
     setSnackbarOpen
 }) {
-    // No file input needed anymore
-    // const fileInputRef = useRef(null); 
-
     const timezones = [
         "UTC-12:00 (Baker Island)", "UTC-11:00 (Niue)", "UTC-10:00 (Hawaii)", "UTC-09:00 (Alaska)",
         "UTC-08:00 (Pacific Time)", "UTC-07:00 (Mountain Time)", "UTC-06:00 (Central Time)",
@@ -553,9 +672,6 @@ function SettingsPage({
         "UTC+12:00 (Fiji)", "UTC+12:45 (Chatham Islands)", "UTC+13:00 (Tonga)", "UTC+14:00 (Kiritimati)"
     ];
 
-    // Removed handleProfilePicUpload
-
-    // Determine the profile image source (always an initial now)
     const displayProfileInitial = useMemo(() => {
         return userName ? userName.charAt(0).toUpperCase() : 'U';
     }, [userName]);
@@ -568,7 +684,7 @@ function SettingsPage({
             fontFamily: 'Inter, sans-serif', 
             background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)',
             p: 3,
-            overflowY: 'auto' // Allow scrolling for settings content if it overflows
+            overflowY: 'auto' 
         }}>
             <Paper
                 elevation={3}
@@ -596,14 +712,13 @@ function SettingsPage({
                         Profile Settings
                     </Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 3 }}>
-                        {/* Display Initial Placeholder */}
                         <Box
                             sx={{
                                 width: 100,
                                 height: 100,
                                 borderRadius: '50%',
-                                backgroundColor: '#e0e7ff', // Light blue background
-                                color: '#4f46e5', // Dark blue text
+                                backgroundColor: '#e0e7ff', 
+                                color: '#4f46e5', 
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -612,7 +727,7 @@ function SettingsPage({
                                 border: '3px solid #4f46e5',
                                 marginBottom: 1,
                                 transition: 'transform 0.2s',
-                                animation: 'pulse-initial 2s infinite', // Apply pulse animation
+                                animation: 'pulse-initial 2s infinite', 
                                 '&:hover': { transform: 'scale(1.05)' }
                             }}
                         >
@@ -670,27 +785,22 @@ function SettingsPage({
 
 // --- Main App Component ---
 function App() {
-    // Products will be fetched from DB
     const [products, setProducts] = useState([]); 
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [newProductName, setNewProductName] = useState('');
-    const [newProductDescription, setNewProductDescription] = useState(''); 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [generatedDocument, setGeneratedDocument] = useState('');
-    const [discoveryInput, setDiscoveryInput] = useState('');
-    const [showFeatureAssistant, setShowFeatureAssistant] = useState(false); 
-    const [showActiveView, setShowActiveView] = useState(true); // New state for Active/Completed toggle
-    const [showArchivedSection, setShowArchivedSection] = useState(false); // State for archived collapsible section
-
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
-    const [authMessage, setAuthMessage] = useState(''); 
     const [snackbarOpen, setSnackbarOpen] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
     const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [authMessage, setAuthMessage] = useState(''); 
+
     // State for new product modal
     const [showAddProductModal, setShowAddProductModal] = useState(false);
+    const [newProductStatus, setNewProductStatus] = useState('Active'); // Default status
+    const [newProductParentId, setNewProductParentId] = useState(''); // For iteration items
 
     // State for delete confirmation modal
     const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
@@ -699,23 +809,53 @@ function App() {
     // State for search and sort/filter
     const [searchTerm, setSearchTerm] = useState('');
     const [sortBy, setSortBy] = useState('newest'); 
-    const [filterByStage, setFilterByStage] = useState('All'); // New state for filtering by stage
+    const [filterByStatus, setFilterByStatus] = useState('All'); // Filter by overall product status
 
     // State for Profile Menu
     const [anchorElProfileMenu, setAnchorElProfileMenu] = useState(null);
     const openProfileMenu = Boolean(anchorElProfileMenu);
 
     // State for Settings Page navigation
-    const [currentPage, setCurrentPage] = useState('dashboard'); // 'dashboard' or 'settings'
+    const [currentPage, setCurrentPage] = useState('dashboard'); 
 
-    // State for Settings Modal (now for actual settings page)
-    // profilePicUrl state removed, as it's no longer stored/used
-    const [userName, setUserName] = useState('User'); // Default to 'User'
-    const [userTimezone, setUserTimezone] = useState('UTC+05:30 (Chennai)'); // Default to Chennai timezone
+    const [userName, setUserName] = useState('User'); 
+    const [userTimezone, setUserTimezone] = useState('UTC+05:30 (Chennai)'); 
 
-    // State for Quote of the Day
     const [quoteOfTheDay, setQuoteOfTheDay] = useState('');
-    const [quoteEmoji, setQuoteEmoji] = useState('💡'); // Emoji for the quote
+    const [quoteEmoji, setQuoteEmoji] = useState('💡'); 
+
+    // AI Chat states for Research Tab
+    const [researchChatHistory, setResearchChatHistory] = useState([]);
+    const [currentResearchPrompt, setCurrentResearchPrompt] = useState('');
+    const [isResearchAILoading, setIsResearchAILoading] = useState(false);
+    const [researchDocumentData, setResearchDocumentData] = useState(null); // Editor.js JSON for research doc
+
+    // AI Chat states for PRD Tab
+    const [prdChatHistory, setPrdChatHistory] = useState([]);
+    const [currentPrdPrompt, setCurrentPrdPrompt] = useState('');
+    const [isPrdAILoading, setIsPrdAILoading] = useState(false);
+    const [prdDocumentData, setPrdDocumentData] = useState(null); // Editor.js JSON for PRD
+
+    // Customer Interview states
+    const [showAddInterviewModal, setShowAddInterviewModal] = useState(false);
+    const [newInterviewCustomerName, setNewInterviewCustomerName] = useState('');
+    const [newInterviewCustomerEmail, setNewInterviewCustomerEmail] = useState('');
+    const [newInterviewDate, setNewInterviewDate] = useState(new Date().toISOString().slice(0, 16)); // YYYY-MM-DDTHH:MM
+    const [customerInterviews, setCustomerInterviews] = useState([]);
+    const [selectedInterview, setSelectedInterview] = useState(null);
+    const [interviewNotesData, setInterviewNotesData] = useState(null); // Editor.js JSON for interview notes
+    const [interviewSummaryData, setInterviewSummaryData] = useState(null); // Editor.js JSON for AI summary
+
+    // Interview Template states
+    const [showTemplateModal, setShowTemplateModal] = useState(false);
+    const [templateName, setTemplateName] = useState('');
+    const [templateQuestionsData, setTemplateQuestionsData] = useState(null); // Editor.js JSON for template questions
+    const [interviewTemplates, setInterviewTemplates] = useState([]);
+    const [selectedTemplate, setSelectedTemplate] = useState(null);
+    const [isTemplateAILoading, setIsTemplateAILoading] = useState(false);
+
+    // Current active tab for product details
+    const [selectedProductTab, setSelectedProductTab] = useState(0); 
 
     // Array of quotes for Product Managers
     const productManagerQuotes = useMemo(() => [
@@ -740,333 +880,29 @@ function App() {
         setQuoteEmoji(quoteData.emoji);
     }, [productManagerQuotes]);
 
-
-    // Ref for Lottie animation container
+    // Lottie animation setup (empty state)
     const lottieContainer = useRef(null);
     const lottieInstance = useRef(null);
-
-    // Define possible Kanban stages and their associated progress percentages
-    const kanbanStages = ['Research', 'Ideation', 'Design', 'Planning', 'Development', 'Documentation'];
-    const stageProgressMap = {
-        'Research': 20,
-        'Ideation': 40,
-        'Design': 60,
-        'Planning': 70,
-        'Development': 90,
-        'Documentation': 100,
-    };
-
-    // New state for selected Kanban tab
-    const [selectedKanbanTab, setSelectedKanbanTab] = useState(0); 
-
-    // Lottie animation setup
     useEffect(() => {
         if (lottieContainer.current && !selectedProduct) {
-            // Ensure lottie is loaded before trying to use it
             if (window.lottie) {
                 if (lottieInstance.current) {
-                    lottieInstance.current.destroy(); // Destroy previous instance if it exists
+                    lottieInstance.current.destroy(); 
                 }
                 lottieInstance.current = window.lottie.loadAnimation({
                     container: lottieContainer.current,
                     renderer: 'svg',
                     loop: true,
                     autoplay: true,
-                    // Public Lottie animation for an empty/waiting state
                     animationData: {
-                        "v": "5.7.4",
-                        "fr": 60,
-                        "ip": 0,
-                        "op": 120,
-                        "wh": 100,
-                        "ht": 100,
-                        "nm": "Empty State",
-                        "ddd": 0,
-                        "assets": [],
+                        "v": "5.7.4", "fr": 60, "ip": 0, "op": 120, "wh": 100, "ht": 100, "nm": "Empty State", "ddd": 0, "assets": [],
                         "layers": [
-                            {
-                                "ddd": 0,
-                                "ind": 1,
-                                "ty": 4,
-                                "nm": "Folder",
-                                "sr": 1,
-                                "ks": {
-                                    "o": { "a": 0, "k": 100, "ix": 11 },
-                                    "rp": { "a": 0, "k": 0, "ix": 12 },
-                                    "s": { "a": 0, "k": [100, 100, 100], "ix": 6 },
-                                    "r": { "a": 0, "k": 0, "ix": 10 },
-                                    "p": { "a": 0, "k": [50, 50, 0], "ix": 2 },
-                                    "a": { "a": 0, "k": [50, 50, 0], "ix": 1 }
-                                },
-                                "ao": 0,
-                                "shapes": [
-                                    {
-                                        "ty": "gr",
-                                        "it": [
-                                            {
-                                                "ind": 0,
-                                                "ty": "sh",
-                                                "ix": 1,
-                                                "ks": {
-                                                    "k": {
-                                                        "i": [
-                                                            { "x": 0.833, "y": 0.833 },
-                                                            { "x": 0.833, "y": 0.833 },
-                                                            { "x": 0.833, "y": 0.833 },
-                                                            { "x": 0.833, "y": 0.833 }
-                                                        ],
-                                                        "o": [
-                                                            { "x": 0.167, "y": 0.167 },
-                                                            { "x": 0.167, "y": 0.167 },
-                                                            { "x": 0.167, "y": 0.167 },
-                                                            { "x": 0.167, "y": 0.167 }
-                                                        ],
-                                                        "v": [
-                                                            [30, 80],
-                                                            [70, 80],
-                                                            [70, 20],
-                                                            [30, 20]
-                                                        ]
-                                                    },
-                                                    "ix": 2
-                                                },
-                                                "nm": "Rectangle Path",
-                                                "mn": "ADBE Vector Shape - Group",
-                                                "hd": false
-                                            },
-                                            {
-                                                "ty": "fl",
-                                                "c": { "a": 0, "k": [0.8, 0.8, 0.8, 1], "ix": 3 },
-                                                "o": { "a": 0, "k": 100, "ix": 4 },
-                                                "r": 1,
-                                                "nm": "Fill 1",
-                                                "mn": "ADBE Vector Fill",
-                                                "hd": false
-                                            },
-                                            {
-                                                "ty": "st",
-                                                "c": { "a": 0, "k": [0.5, 0.5, 0.5, 1], "ix": 5 },
-                                                "o": { "a": 0, "k": 100, "ix": 6 },
-                                                "w": { "a": 0, "k": 2, "ix": 7 },
-                                                "lc": 1,
-                                                "lj": 1,
-                                                "ml": 4,
-                                                "nm": "Stroke 1",
-                                                "mn": "ADBE Vector Stroke",
-                                                "hd": false
-                                            }
-                                        ],
-                                        "nm": "Rectangle 1",
-                                        "mn": "ADBE Vector Group",
-                                        "hd": false
-                                    },
-                                    {
-                                        "ty": "gr",
-                                        "it": [
-                                            {
-                                                "ind": 0,
-                                                "ty": "sh",
-                                                "ix": 1,
-                                                "ks": {
-                                                    "k": {
-                                                        "i": [
-                                                            { "x": 0.833, "y": 0.833 },
-                                                            { "x": 0.833, "y": 0.833 },
-                                                            { "x": 0.833, "y": 0.833 },
-                                                            { "x": 0.833, "y": 0.833 }
-                                                        ],
-                                                        "o": [
-                                                            { "x": 0.167, "y": 0.167 },
-                                                            { "x": 0.167, "y": 0.167 },
-                                                            { "x": 0.167, "y": 0.167 },
-                                                            { "x": 0.167, "y": 0.167 }
-                                                        ],
-                                                        "v": [
-                                                            [30, 80],
-                                                            [70, 80],
-                                                            [70, 20],
-                                                            [30, 20]
-                                                        ]
-                                                    },
-                                                    "ix": 2
-                                                },
-                                                "nm": "Rectangle Path",
-                                                "mn": "ADBE Vector Shape - Group",
-                                                "hd": false
-                                            },
-                                            {
-                                                "ty": "fl",
-                                                "c": { "a": 0, "k": [0.9, 0.9, 0.9, 1], "ix": 3 },
-                                                "o": { "a": 0, "k": 100, "ix": 4 },
-                                                "r": 1,
-                                                "nm": "Fill 1",
-                                                "mn": "ADBE Vector Fill",
-                                                "hd": false
-                                            },
-                                            {
-                                                "ty": "st",
-                                                "c": { "a": 0, "k": [0.6, 0.6, 0.6, 1], "ix": 5 },
-                                                "o": { "a": 0, "k": 100, "ix": 6 },
-                                                "w": { "a": 0, "k": 2, "ix": 7 },
-                                                "lc": 1,
-                                                "lj": 1,
-                                                "ml": 4,
-                                                "nm": "Stroke 1",
-                                                "mn": "ADBE Vector Stroke",
-                                                "hd": false
-                                            }
-                                        ],
-                                        "nm": "Rectangle 2",
-                                        "mn": "ADBE Vector Group",
-                                        "hd": false,
-                                        "tf": true
-                                    },
-                                    {
-                                        "ty": "gr",
-                                        "it": [
-                                            {
-                                                "ind": 0,
-                                                "ty": "sh",
-                                                "ix": 1,
-                                                "ks": {
-                                                    "k": {
-                                                        "i": [
-                                                            { "x": 0.833, "y": 0.833 },
-                                                            { "x": 0.833, "y": 0.833 },
-                                                            { "x": 0.833, "y": 0.833 },
-                                                            { "x": 0.833, "y": 0.833 }
-                                                        ],
-                                                        "o": [
-                                                            { "x": 0.167, "y": 0.167 },
-                                                            { "x": 0.167, "y": 0.167 },
-                                                            { "x": 0.167, "y": 0.167 },
-                                                            { "x": 0.167, "y": 0.167 }
-                                                        ],
-                                                        "v": [
-                                                            [30, 80],
-                                                            [70, 80],
-                                                            [70, 20],
-                                                            [30, 20]
-                                                        ]
-                                                    },
-                                                    "ix": 2
-                                                },
-                                                "nm": "Rectangle Path",
-                                                "mn": "ADBE Vector Shape - Group",
-                                                "hd": false
-                                            },
-                                            {
-                                                "ty": "fl",
-                                                "c": { "a": 0, "k": [1, 1, 1, 1], "ix": 3 },
-                                                "o": { "a": 0, "k": 100, "ix": 4 },
-                                                "r": 1,
-                                                "nm": "Fill 1",
-                                                "mn": "ADBE Vector Fill",
-                                                "hd": false
-                                            },
-                                            {
-                                                "ty": "st",
-                                                "c": { "a": 0, "k": [0.7, 0.7, 0.7, 1], "ix": 5 },
-                                                "o": { "a": 0, "k": 100, "ix": 6 },
-                                                "w": { "a": 0, "k": 2, "ix": 7 },
-                                                "lc": 1,
-                                                "lj": 1,
-                                                "ml": 4,
-                                                "nm": "Stroke 1",
-                                                "mn": "ADBE Vector Stroke",
-                                                "hd": false
-                                            }
-                                        ],
-                                        "nm": "Rectangle 3",
-                                        "mn": "ADBE Vector Group",
-                                        "hd": false,
-                                        "tf": true
-                                    }
-                                ],
-                                "ip": 0,
-                                "op": 120,
-                                "st": 0,
-                                "bm": 0
-                            },
-                            {
-                                "ddd": 0,
-                                "ind": 2,
-                                "ty": 4,
-                                "nm": "Magnifying Glass",
-                                "sr": 1,
-                                "ks": {
-                                    "o": { "a": 0, "k": 100, "ix": 11 },
-                                    "rp": { "a": 0, "k": 0, "ix": 12 },
-                                    "s": { "a": 0, "k": [100, 100, 100], "ix": 6 },
-                                    "r": { "a": 0, "k": 0, "ix": 10 },
-                                    "p": { "a": 0, "k": [50, 50, 0], "ix": 2 },
-                                    "a": { "a": 0, "k": [50, 50, 0], "ix": 1 }
-                                },
-                                "ao": 0,
-                                "shapes": [
-                                    {
-                                        "ty": "gr",
-                                        "it": [
-                                            {
-                                                "ind": 0,
-                                                "ty": "sh",
-                                                "ix": 1,
-                                                "ks": {
-                                                    "k": {
-                                                        "i": [
-                                                            { "x": 0.833, "y": 0.833 },
-                                                            { "x": 0.833, "y": 0.833 },
-                                                            { "x": 0.833, "y": 0.833 },
-                                                            { "x": 0.833, "y": 0.833 }
-                                                        ],
-                                                        "o": [
-                                                            { "x": 0.167, "y": 0.167 },
-                                                            { "x": 0.167, "y": 0.167 },
-                                                            { "x": 0.167, "y": 0.167 },
-                                                            { "x": 0.167, "y": 0.167 }
-                                                        ],
-                                                        "v": [
-                                                            [30, 80],
-                                                            [70, 80],
-                                                            [70, 20],
-                                                            [30, 20]
-                                                        ]
-                                                    },
-                                                    "ix": 2
-                                                },
-                                                "nm": "Rectangle Path",
-                                                "mn": "ADBE Vector Shape - Group",
-                                                "hd": false
-                                            },
-                                            {
-                                                "ty": "st",
-                                                "c": { "a": 0, "k": [0.2, 0.2, 0.2, 1], "ix": 3 },
-                                                "o": { "a": 0, "k": 100, "ix": 4 },
-                                                "w": { "a": 0, "k": 2, "ix": 5 },
-                                                "lc": 1,
-                                                "lj": 1,
-                                                "ml": 4,
-                                                "nm": "Stroke 1",
-                                                "mn": "ADBE Vector Stroke",
-                                                "hd": false
-                                            }
-                                        ],
-                                        "nm": "Ellipse 1",
-                                        "mn": "ADBE Vector Group",
-                                        "hd": false
-                                    }
-                                ],
-                                "ip": 0,
-                                "op": 120,
-                                "st": 0,
-                                "bm": 0
-                            }
-                        ]
+                            { "ddd": 0, "ind": 1, "ty": 4, "nm": "Folder", "sr": 1, "ks": { "o": { "a": 0, "k": 100, "ix": 11 }, "rp": { "a": 0, "k": 0, "ix": 12 }, "s": { "a": 0, "k": [100, 100, 100], "ix": 6 }, "r": { "a": 0, "k": 0, "ix": 10 }, "p": { "a": 0, "k": [50, 50, 0], "ix": 2 }, "a": { "a": 0, "k": [50, 50, 0], "ix": 1 } }, "ao": 0, "shapes": [{ "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [0.8, 0.8, 0.8, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.5, 0.5, 0.5, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 1", "mn": "ADBE Vector Group", "hd": false }, { "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [0.9, 0.9, 0.9, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.6, 0.6, 0.6, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 2", "mn": "ADBE Vector Group", "hd": false, "tf": true }, { "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [1, 1, 1, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.7, 0.7, 0.7, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 3", "mn": "ADBE Vector Group", "hd": false, "tf": true }], "ip": 0, "op": 120, "st": 0, "bm": 0 }, { "ddd": 0, "ind": 2, "ty": 4, "nm": "Magnifying Glass", "sr": 1, "ks": { "o": { "a": 0, "k": 100, "ix": 11 }, "rp": { "a": 0, "k": 0, "ix": 12 }, "s": { "a": 0, "k": [100, 100, 100], "ix": 6 }, "r": { "a": 0, "k": 0, "ix": 10 }, "p": { "a": 0, "k": [50, 50, 0], "ix": 2 }, "a": { "a": 0, "k": [50, 50, 0], "ix": 1 } }, "ao": 0, "shapes": [{ "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.2, 0.2, 0.2, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "w": { "a": 0, "k": 2, "ix": 5 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Ellipse 1", "mn": "ADBE Vector Group", "hd": false }], "ip": 0, "op": 120, "st": 0, "bm": 0 } ]
                     }
                 });
             }
         }
-    }, [selectedProduct]); // Re-run when selectedProduct changes
+    }, [selectedProduct]); 
 
     const handleSnackbarClose = (event, reason) => {
         if (reason === 'clickaway') {
@@ -1079,7 +915,6 @@ function App() {
         const token = localStorage.getItem('token');
         if (token) {
             setIsLoggedIn(true);
-            // Fetch user profile data when logged in
             const fetchUserProfile = async () => {
                 try {
                     const response = await axios.get(`${API_URL}/api/user/profile`, {
@@ -1087,21 +922,43 @@ function App() {
                             Authorization: `Bearer ${token}`
                         }
                     });
-                    console.log("Fetched user profile data:", response.data); // Log profile data
                     setUserName(response.data.username || 'User');
-                    // profilePicUrl is no longer fetched/set
                     setUserTimezone(response.data.timezone || 'UTC+05:30 (Chennai)');
                 } catch (err) {
                     console.error("Error fetching user profile:", err);
                     setSnackbarMessage("Failed to load user profile. Please try logging in again.");
                     setSnackbarSeverity('error');
                     setSnackbarOpen(true);
-                    handleLogout(); // Log out if profile fetch fails
+                    handleLogout(); 
                 }
             };
             fetchUserProfile();
         }
-    }, [isLoggedIn]); // Depend on isLoggedIn to refetch on login/logout
+    }, [isLoggedIn]); 
+
+    // Function to calculate product progress based on tab statuses
+    const calculateProductProgress = useCallback((product) => {
+        let totalWeightedProgress = 0;
+        let totalWeight = 0;
+
+        PRODUCT_TABS_ORDER.forEach(tabName => {
+            const statusKey = `${tabName.toLowerCase().replace(/ /g, '_')}_status`; // e.g., 'research_status'
+            const status = product[statusKey];
+            const weight = TAB_PROGRESS_PERCENTAGES[tabName] || 0; // Get defined percentage, default to 0
+
+            totalWeight += weight;
+
+            if (status === 'Completed' || status === 'Skipped') {
+                totalWeightedProgress += weight;
+            } else if (status === 'In Progress') {
+                // For 'In Progress', contribute half of its weight as a heuristic
+                totalWeightedProgress += weight / 2; 
+            }
+        });
+
+        if (totalWeight === 0) return 0;
+        return Math.round((totalWeightedProgress / totalWeight) * 100);
+    }, []);
 
     useEffect(() => {
         const fetchProducts = async () => {
@@ -1113,10 +970,15 @@ function App() {
                 const token = localStorage.getItem('token');
                 const response = await axios.get(`${API_URL}/api/products`, {
                     headers: {
-                        Authorization: `Bearer ${token}` // Send token for authentication
+                        Authorization: `Bearer ${token}` 
                     }
                 });
-                setProducts(response.data);
+                // Calculate progress for each product after fetching
+                const productsWithProgress = response.data.map(p => ({
+                    ...p,
+                    progress: calculateProductProgress(p) // Update progress based on new logic
+                }));
+                setProducts(productsWithProgress);
             } catch (err) {
                 console.error("Error fetching products:", err);
                 const errorMessage = err.response && err.response.data && err.response.data.message 
@@ -1135,30 +997,23 @@ function App() {
         };
 
         fetchProducts();
-    }, [isLoggedIn]);
+    }, [isLoggedIn, calculateProductProgress]);
 
     // Filter and Sort Logic
     const filteredAndSortedProducts = useMemo(() => {
-        let currentProducts = [];
-        if (showActiveView) {
-            // Active products are not archived AND not in the 'Documentation' (completed) stage
-            currentProducts = products.filter(p => !p.isArchived && p.stage !== 'Documentation');
-        } else { // showCompletedView is true
-            // Completed products are in the 'Documentation' stage AND not archived
-            currentProducts = products.filter(p => p.stage === 'Documentation' && !p.isArchived);
+        let currentProducts = products;
+
+        // Apply status filter
+        if (filterByStatus !== 'All') {
+            currentProducts = currentProducts.filter(p => p.status === filterByStatus);
         }
 
         // Apply search filter
         if (searchTerm) {
             currentProducts = currentProducts.filter(p => 
                 p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (p.discovery_document && p.discovery_document.toLowerCase().includes(searchTerm.toLowerCase()))
+                (p.research_document_json && p.research_document_json.toLowerCase().includes(searchTerm.toLowerCase())) // Search in research doc
             );
-        }
-
-        // Apply stage filter (only for Active/Completed lists)
-        if (filterByStage !== 'All') {
-            currentProducts = currentProducts.filter(p => p.stage === filterByStage);
         }
 
         // Apply sort
@@ -1180,13 +1035,7 @@ function App() {
         });
 
         return currentProducts;
-    }, [products, showActiveView, searchTerm, sortBy, filterByStage]);
-
-    // Separate memoized list for archived products
-    const archivedProducts = useMemo(() => {
-        return products.filter(p => p.isArchived);
-    }, [products]);
-
+    }, [products, searchTerm, sortBy, filterByStatus]);
 
     const handleAddProduct = async () => {
         if (!newProductName.trim()) {
@@ -1201,20 +1050,36 @@ function App() {
         setShowAddProductModal(false); 
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.post(`${API_URL}/api/products`, {
+            const newProductData = {
                 name: newProductName,
-                discovery_document: newProductDescription, 
-                isArchived: false,
-                progress: 0, // Default progress for new product
-                stage: 'Research' // Default stage for new product
-            }, {
+                status: newProductStatus,
+                parent_id: newProductParentId || null, // Ensure null if empty
+                is_archived: false,
+                progress: 0, 
+                // Initialize all tab statuses
+                research_status: 'Not Started',
+                prd_status: 'Not Started',
+                design_status: 'Not Started',
+                development_status: 'Not Started',
+                tech_doc_status: 'Not Started',
+                launch_training_status: 'Not Started',
+                // No initial JSON content for documents
+            };
+
+            const response = await axios.post(`${API_URL}/api/products`, newProductData, {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
             });
-            setProducts([response.data, ...products]); // Add new product to the top
+            // Recalculate progress for the new product
+            const productWithProgress = {
+                ...response.data,
+                progress: calculateProductProgress(response.data)
+            };
+            setProducts([productWithProgress, ...products]); 
             setNewProductName('');
-            setNewProductDescription('');
+            setNewProductStatus('Active');
+            setNewProductParentId('');
             setSnackbarMessage("Product added successfully!");
             setSnackbarSeverity('success');
             setSnackbarOpen(true);
@@ -1232,42 +1097,85 @@ function App() {
         }
     };
 
-    const handleSelectProduct = (product) => {
-        setSelectedProduct(product);
-        setGeneratedDocument(product.discovery_document || '');
-        setDiscoveryInput('');
-        setShowFeatureAssistant(false); 
-        setSnackbarOpen(false);
-        // Set the selected Kanban tab to the index of the selected product's stage
-        const stageIndex = kanbanStages.indexOf(product.stage);
-        setSelectedKanbanTab(stageIndex >= 0 ? stageIndex : 0);
-    };
+    const handleSelectProduct = useCallback(async (product) => {
+        setLoading(true);
+        try {
+            // Fetch the full product details again to ensure latest data
+            const token = localStorage.getItem('token');
+            const response = await axios.get(`${API_URL}/api/products/${product.id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const fullProduct = response.data;
 
-    const handleArchiveProduct = async (productId, archiveStatus) => {
+            setSelectedProduct(fullProduct);
+            setSelectedProductTab(0); // Default to the first tab (Research)
+
+            // Set initial data for Editor.js instances
+            try {
+                setResearchDocumentData(fullProduct.research_document_json ? JSON.parse(fullProduct.research_document_json) : { blocks: [] });
+                setPrdDocumentData(fullProduct.prd_document_json ? JSON.parse(fullProduct.prd_document_json) : { blocks: [] });
+                // Reset chat histories when selecting a new product
+                setResearchChatHistory([]);
+                setPrdChatHistory([]);
+            } catch (e) {
+                console.error("Error parsing JSON for Editor.js:", e);
+                setSnackbarMessage("Error loading document content. It might be malformed.");
+                setSnackbarSeverity('error');
+                setSnackbarOpen(true);
+                setResearchDocumentData({ blocks: [] });
+                setPrdDocumentData({ blocks: [] });
+            }
+
+            // Fetch customer interviews for the selected product
+            const interviewsResponse = await axios.get(`${API_URL}/api/customer_interviews/product/${product.id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setCustomerInterviews(interviewsResponse.data);
+            setSelectedInterview(null); // Clear selected interview when changing product
+
+        } catch (err) {
+            console.error("Error selecting product or fetching its details:", err);
+            const errorMessage = err.response && err.response.data && err.response.data.message 
+                                ? err.response.data.message 
+                                : "Failed to load product details. Please try again.";
+            setError(errorMessage);
+            setSnackbarMessage(errorMessage);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+            setSelectedProduct(null); // Clear selected product on error
+        } finally {
+            setLoading(false);
+        }
+    }, [calculateProductProgress]);
+
+    const handleUpdateProduct = async (productId, updateData) => {
         setLoading(true);
         setError(null);
         setSnackbarOpen(false);
         try {
             const token = localStorage.getItem('token');
-            await axios.put(`${API_URL}/api/products/${productId}`, {
-                isArchived: archiveStatus
-            }, {
+            const response = await axios.put(`${API_URL}/api/products/${productId}`, updateData, {
                 headers: {
                     Authorization: `Bearer ${token}`
                 }
             });
+            // Update local state for products and selectedProduct
+            const updatedProduct = {
+                ...response.data,
+                progress: calculateProductProgress(response.data)
+            };
             setProducts(products.map(p =>
-                p.id === productId ? { ...p, isArchived: archiveStatus } : p
+                p.id === productId ? updatedProduct : p
             ));
-            if (selectedProduct && selectedProduct.id === productId) {
-                setSelectedProduct(prev => ({ ...prev, isArchived: archiveStatus }));
-            }
-            setSnackbarMessage(`Product ${archiveStatus ? 'archived' : 'unarchived'} successfully!`);
+            setSelectedProduct(updatedProduct); // Update selected product with latest data
+            setSnackbarMessage("Product updated successfully!");
             setSnackbarSeverity('success');
             setSnackbarOpen(true);
         } catch (err) {
-            console.error("Error archiving/unarchiving product:", err);
-            const errorMessage = `Failed to ${archiveStatus ? 'archive' : 'unarchive'} product. Please try again.`;
+            console.error("Error updating product:", err);
+            const errorMessage = err.response && err.response.data && err.response.data.message 
+                                ? err.response.data.message 
+                                : "Failed to update product. Please try again.";
             setError(errorMessage);
             setSnackbarMessage(errorMessage);
             setSnackbarSeverity('error');
@@ -1297,8 +1205,12 @@ function App() {
             setProducts(products.filter(p => p.id !== productToDeleteId));
             if (selectedProduct && selectedProduct.id === productToDeleteId) {
                 setSelectedProduct(null);
-                setGeneratedDocument('');
-                setDiscoveryInput('');
+                setResearchDocumentData(null);
+                setPrdDocumentData(null);
+                setResearchChatHistory([]);
+                setPrdChatHistory([]);
+                setCustomerInterviews([]);
+                setSelectedInterview(null);
             }
             setSnackbarMessage("Product deleted successfully!");
             setSnackbarSeverity('success');
@@ -1316,118 +1228,221 @@ function App() {
         }
     };
 
-    const handleGenerateDocument = async () => {
-        if (!selectedProduct) {
-            setSnackbarMessage("Please select a product/feature first.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
-            return;
-        }
-        if (!discoveryInput.trim()) {
-            setSnackbarMessage("Please enter details for the Feature Assistant.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
-            return;
-        }
-
-        setLoading(true);
-        setError(null);
-        setSnackbarOpen(false);
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.post(`${API_URL}/api/generate-discovery-document`, {
-                product_name: selectedProduct.name,
-                details: discoveryInput,
-                product_id: selectedProduct.id // Pass product_id to backend
-            }, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
-
-            const doc = response.data.discovery_document;
-            setGeneratedDocument(doc);
-
-            // Update the product in the backend with the generated document
-            await axios.put(`${API_URL}/api/products/${selectedProduct.id}`, {
-                discovery_document: doc
-            }, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
-            // Update local state for products and selectedProduct
-            setProducts(products.map(p =>
-                p.id === selectedProduct.id ? { ...p, discovery_document: doc } : p
-            ));
-            setSelectedProduct(prev => ({ ...prev, discovery_document: doc }));
-            setSnackbarMessage("Document generated and saved!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-
-        } catch (err) {
-            console.error("Error generating document:", err);
-            const errorMessage = "Failed to generate document. Make sure your Gemini API key is set correctly in the backend or there's a network issue!";
-            setError(errorMessage);
-            setSnackbarMessage(errorMessage);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const handleLogout = () => {
         localStorage.removeItem('token');
         setIsLoggedIn(false);
         setProducts([]);
         setSelectedProduct(null);
-        setGeneratedDocument('');
-        setDiscoveryInput('');
+        setResearchDocumentData(null);
+        setPrdDocumentData(null);
+        setResearchChatHistory([]);
+        setPrdChatHistory([]);
+        setCustomerInterviews([]);
+        setSelectedInterview(null);
         setAuthMessage('You have been logged out.');
         setSnackbarMessage('You have been logged out.');
         setSnackbarSeverity('info');
         setSnackbarOpen(true);
-        setAnchorElProfileMenu(null); // Close profile menu on logout
-        setCurrentPage('dashboard'); // Go back to dashboard view
-        setUserName('User'); // Reset username on logout
-        // profilePicUrl is no longer set/reset here
-        setUserTimezone('UTC+05:30 (Chennai)'); // Reset timezone on logout
+        setAnchorElProfileMenu(null); 
+        setCurrentPage('dashboard'); 
+        setUserName('User'); 
+        setUserTimezone('UTC+05:30 (Chennai)'); 
     };
 
-    // Function to update product stage and progress (example for Kanban interaction)
-    const updateProductStageAndProgress = async (productId, newStage, newProgress) => {
-        setLoading(true);
-        setError(null);
-        setSnackbarOpen(false);
+    // --- AI Chat Logic for Research Tab ---
+    const handleResearchPromptSubmit = async (e) => {
+        e.preventDefault();
+        if (!currentResearchPrompt.trim()) return;
+        if (!selectedProduct) {
+            setSnackbarMessage("Please select a product to generate research document.");
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
+            return;
+        }
+
+        setIsResearchAILoading(true);
+        const userMessage = { role: 'user', content: currentResearchPrompt };
+        const updatedChatHistory = [...researchChatHistory, userMessage];
+        setResearchChatHistory(updatedChatHistory);
+        setCurrentResearchPrompt('');
+
         try {
             const token = localStorage.getItem('token');
-            const updatedProduct = {
-                stage: newStage,
-                progress: newProgress
-            };
-            const response = await axios.put(`${API_URL}/api/products/${productId}`, updatedProduct, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
+            // For MVP, we're sending the full prompt directly.
+            // In a real conversational flow, you'd send the chat history to the backend
+            // and the backend would manage the Gemini conversation.
+            const response = await axios.post(`${API_URL}/api/generate-research-document`, {
+                product_id: selectedProduct.id,
+                prompt_text: currentResearchPrompt,
+                // scraped_data: "Example scraped data from Octoparse/ScrapingBee..." // Integrate this in future
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
             });
-            setProducts(products.map(p =>
-                p.id === productId ? response.data : p
-            ));
-            if (selectedProduct && selectedProduct.id === productId) {
-                setSelectedProduct(response.data);
-                // Also update the selected Kanban tab to the new stage
-                const newStageIndex = kanbanStages.indexOf(newStage);
-                setSelectedKanbanTab(newStageIndex >= 0 ? newStageIndex : 0);
-            }
-            setSnackbarMessage(`Product stage updated to ${newStage}!`);
+
+            const aiResponseText = response.data.research_document;
+            const aiMessage = { role: 'ai', content: aiResponseText };
+            setResearchChatHistory(prev => [...prev, aiMessage]);
+
+            // Update the product's research document in local state and DB
+            const researchDocJson = { blocks: [{ type: "paragraph", data: { text: aiResponseText } }] };
+            setResearchDocumentData(researchDocJson);
+            await handleUpdateProduct(selectedProduct.id, { 
+                research_document_json: JSON.stringify(researchDocJson),
+                research_status: 'Completed' // Mark as completed
+            });
+            setSnackbarMessage("Research document generated and saved!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+
+        } catch (err) {
+            console.error("Error generating research document:", err);
+            const errorMessage = err.response && err.response.data && err.response.data.error 
+                                ? err.response.data.error 
+                                : "Failed to generate research document. Please try again.";
+            setSnackbarMessage(errorMessage);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+            setResearchChatHistory(prev => [...prev, { role: 'ai', content: `Error: ${errorMessage}` }]);
+        } finally {
+            setIsResearchAILoading(false);
+        }
+    };
+
+    const handleResearchDocumentSave = useCallback(async (data) => {
+        if (!selectedProduct) return;
+        setLoading(true);
+        try {
+            await handleUpdateProduct(selectedProduct.id, { 
+                research_document_json: JSON.stringify(data),
+                research_status: 'Completed' // Mark as completed if manually edited/saved
+            });
+            setSnackbarMessage("Research document saved!");
             setSnackbarSeverity('success');
             setSnackbarOpen(true);
         } catch (err) {
-            console.error("Error updating product stage:", err);
-            const errorMessage = "Failed to update product stage. Please try again.";
-            setError(errorMessage);
+            setSnackbarMessage("Failed to save research document.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    }, [selectedProduct, handleUpdateProduct]);
+
+    // --- AI Chat Logic for PRD Tab ---
+    const handlePrdPromptSubmit = async (e) => {
+        e.preventDefault();
+        if (!currentPrdPrompt.trim()) return;
+        if (!selectedProduct) {
+            setSnackbarMessage("Please select a product to generate PRD.");
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
+            return;
+        }
+
+        setIsPrdAILoading(true);
+        const userMessage = { role: 'user', content: currentPrdPrompt };
+        const updatedChatHistory = [...prdChatHistory, userMessage];
+        setPrdChatHistory(updatedChatHistory);
+        setCurrentPrdPrompt('');
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.post(`${API_URL}/api/generate-prd-document`, {
+                product_id: selectedProduct.id,
+                user_requirements: currentPrdPrompt, // User's input for PRD
+                prd_structure_confirmation: "Standard PRD structure with Problem, Goals, Audience, Features, Non-Functional, Metrics, Future.", // Hardcoded for MVP, could be AI-driven later
+                research_data: selectedProduct.research_document_json || "" // Pass existing research data
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const aiResponseText = response.data.prd_document;
+            const aiMessage = { role: 'ai', content: aiResponseText };
+            setPrdChatHistory(prev => [...prev, aiMessage]);
+
+            const prdDocJson = { blocks: [{ type: "paragraph", data: { text: aiResponseText } }] };
+            setPrdDocumentData(prdDocJson);
+            await handleUpdateProduct(selectedProduct.id, { 
+                prd_document_json: JSON.stringify(prdDocJson),
+                prd_status: 'Completed' // Mark as completed
+            });
+            setSnackbarMessage("PRD generated and saved!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+
+        } catch (err) {
+            console.error("Error generating PRD document:", err);
+            const errorMessage = err.response && err.response.data && err.response.data.error 
+                                ? err.response.data.error 
+                                : "Failed to generate PRD. Please try again.";
             setSnackbarMessage(errorMessage);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+            setPrdChatHistory(prev => [...prev, { role: 'ai', content: `Error: ${errorMessage}` }]);
+        } finally {
+            setIsPrdAILoading(false);
+        }
+    };
+
+    const handlePrdDocumentSave = useCallback(async (data) => {
+        if (!selectedProduct) return;
+        setLoading(true);
+        try {
+            await handleUpdateProduct(selectedProduct.id, { 
+                prd_document_json: JSON.stringify(data),
+                prd_status: 'Completed' // Mark as completed if manually edited/saved
+            });
+            setSnackbarMessage("PRD document saved!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            setSnackbarMessage("Failed to save PRD document.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    }, [selectedProduct, handleUpdateProduct]);
+
+    // --- Customer Interview Logic ---
+    const handleAddCustomerInterview = async () => {
+        if (!newInterviewCustomerName.trim()) {
+            setSnackbarMessage("Customer name is required.");
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
+            return;
+        }
+        if (!selectedProduct) {
+            setSnackbarMessage("Please select a product first.");
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
+            return;
+        }
+
+        setLoading(true);
+        setShowAddInterviewModal(false);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.post(`${API_URL}/api/customer_interviews`, {
+                product_id: selectedProduct.id,
+                customer_name: newInterviewCustomerName,
+                customer_email: newInterviewCustomerEmail,
+                interview_date: newInterviewDate,
+                interview_notes_json: JSON.stringify({ blocks: [{ type: "paragraph", data: { text: "Start typing interview notes here..." } }] }),
+                ai_summary_json: null
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setCustomerInterviews(prev => [response.data, ...prev]);
+            setNewInterviewCustomerName('');
+            setNewInterviewCustomerEmail('');
+            setNewInterviewDate(new Date().toISOString().slice(0, 16));
+            setSnackbarMessage("Customer interview added!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Error adding customer interview:", err);
+            setSnackbarMessage("Failed to add customer interview.");
             setSnackbarSeverity('error');
             setSnackbarOpen(true);
         } finally {
@@ -1435,42 +1450,296 @@ function App() {
         }
     };
 
-    // Helper function to get tab color based on stage status
-    const getTabColor = (stage) => {
-        if (!selectedProduct) return '#6b7280'; // Default grey if no product selected
-
-        const currentStageIndex = kanbanStages.indexOf(selectedProduct.stage);
-        const tabStageIndex = kanbanStages.indexOf(stage);
-
-        if (tabStageIndex < currentStageIndex) {
-            return '#16a34a'; // Green for completed stages
-        } else if (tabStageIndex === currentStageIndex) {
-            return '#4f46e5'; // Primary color for current stage
-        } else {
-            return '#6b7280'; // Grey for pending/future stages
+    const handleSelectInterview = async (interview) => {
+        setSelectedInterview(interview);
+        try {
+            setInterviewNotesData(interview.interview_notes_json ? JSON.parse(interview.interview_notes_json) : { blocks: [] });
+            setInterviewSummaryData(interview.ai_summary_json ? JSON.parse(interview.ai_summary_json) : { blocks: [] });
+        } catch (e) {
+            console.error("Error parsing interview notes/summary JSON:", e);
+            setSnackbarMessage("Error loading interview content. It might be malformed.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+            setInterviewNotesData({ blocks: [] });
+            setInterviewSummaryData({ blocks: [] });
         }
     };
 
-    // Helper function for TabPanel content
-    const TabPanel = (props) => {
-        const { children, value, index, ...other } = props;
-        return (
-            <div
-                role="tabpanel"
-                hidden={value !== index}
-                id={`kanban-tabpanel-${index}`}
-                aria-labelledby={`kanban-tab-${index}`}
-                {...other}
-                style={{ flexGrow: 1, display: value === index ? 'flex' : 'none', flexDirection: 'column', overflowY: 'auto' }}
-            >
-                {value === index && (
-                    <Box sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-                        {children}
-                    </Box>
-                )}
-            </div>
-        );
+    const handleSaveInterviewNotes = useCallback(async (data) => {
+        if (!selectedInterview) return;
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.put(`${API_URL}/api/customer_interviews/${selectedInterview.id}`, {
+                interview_notes_json: JSON.stringify(data)
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setSelectedInterview(response.data); // Update selected interview with saved notes
+            setCustomerInterviews(prev => prev.map(int => int.id === response.data.id ? response.data : int));
+            setSnackbarMessage("Interview notes saved!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            setSnackbarMessage("Failed to save interview notes.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    }, [selectedInterview]);
+
+    const handleGenerateInterviewSummary = async () => {
+        if (!selectedInterview || !interviewNotesData || interviewNotesData.blocks.length === 0) {
+            setSnackbarMessage("No interview notes to summarize.");
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
+            return;
+        }
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            // Convert Editor.js data to plain text for AI prompt
+            const plainTextNotes = interviewNotesData.blocks.map(block => block.data.text || '').join('\n');
+
+            const response = await axios.post(`${API_URL}/api/customer_interviews/generate_summary`, {
+                interview_id: selectedInterview.id,
+                notes_content: plainTextNotes
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const summaryText = response.data.ai_summary;
+            const summaryJson = { blocks: [{ type: "paragraph", data: { text: summaryText } }] };
+            setInterviewSummaryData(summaryJson);
+
+            // Update the interview in the backend with the summary
+            const updatedInterview = { ...selectedInterview, ai_summary_json: JSON.stringify(summaryJson) };
+            setCustomerInterviews(prev => prev.map(int => int.id === updatedInterview.id ? updatedInterview : int));
+            setSelectedInterview(updatedInterview);
+
+            setSnackbarMessage("Interview summary generated and saved!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Error generating interview summary:", err);
+            setSnackbarMessage("Failed to generate interview summary.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
     };
+
+    const handleDeleteInterview = async (interviewId) => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`${API_URL}/api/customer_interviews/${interviewId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setCustomerInterviews(prev => prev.filter(int => int.id !== interviewId));
+            if (selectedInterview && selectedInterview.id === interviewId) {
+                setSelectedInterview(null);
+                setInterviewNotesData(null);
+                setInterviewSummaryData(null);
+            }
+            setSnackbarMessage("Interview deleted!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Error deleting interview:", err);
+            setSnackbarMessage("Failed to delete interview.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // --- Interview Template Logic ---
+    const fetchInterviewTemplates = useCallback(async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(`${API_URL}/api/interview_templates`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setInterviewTemplates(response.data);
+        } catch (err) {
+            console.error("Error fetching templates:", err);
+            setSnackbarMessage("Failed to load interview templates.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (isLoggedIn) {
+            fetchInterviewTemplates();
+        }
+    }, [isLoggedIn, fetchInterviewTemplates]);
+
+    const handleCreateTemplate = async () => {
+        if (!templateName.trim()) {
+            setSnackbarMessage("Template name is required.");
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
+            return;
+        }
+        setLoading(true);
+        setShowTemplateModal(false);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.post(`${API_URL}/api/interview_templates`, {
+                template_name: templateName,
+                template_questions_json: templateQuestionsData ? JSON.stringify(templateQuestionsData) : null
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setInterviewTemplates(prev => [response.data, ...prev]);
+            setTemplateName('');
+            setTemplateQuestionsData(null);
+            setSnackbarMessage("Template created!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Error creating template:", err);
+            setSnackbarMessage("Failed to create template.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSelectTemplate = (template) => {
+        setSelectedTemplate(template);
+        try {
+            setTemplateQuestionsData(template.template_questions_json ? JSON.parse(template.template_questions_json) : { blocks: [] });
+        } catch (e) {
+            console.error("Error parsing template questions JSON:", e);
+            setSnackbarMessage("Error loading template content. It might be malformed.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+            setTemplateQuestionsData({ blocks: [] });
+        }
+        setShowTemplateModal(true); // Open modal to edit selected template
+    };
+
+    const handleUpdateTemplate = async () => {
+        if (!selectedTemplate) return;
+        setLoading(true);
+        setShowTemplateModal(false);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.put(`${API_URL}/api/interview_templates/${selectedTemplate.id}`, {
+                template_name: templateName,
+                template_questions_json: templateQuestionsData ? JSON.stringify(templateQuestionsData) : null
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setInterviewTemplates(prev => prev.map(t => t.id === response.data.id ? response.data : t));
+            setSnackbarMessage("Template updated!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Error updating template:", err);
+            setSnackbarMessage("Failed to update template.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteTemplate = async (templateId) => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`${API_URL}/api/interview_templates/${templateId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setInterviewTemplates(prev => prev.filter(t => t.id !== templateId));
+            if (selectedTemplate && selectedTemplate.id === templateId) {
+                setSelectedTemplate(null);
+                setTemplateName('');
+                setTemplateQuestionsData(null);
+            }
+            setSnackbarMessage("Template deleted!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Error deleting template:", err);
+            setSnackbarMessage("Failed to delete template.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleGenerateTemplateQuestions = async (featureIdea, existingQuestions) => {
+        setIsTemplateAILoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.post(`${API_URL}/api/interview_templates/generate_questions`, {
+                feature_idea: featureIdea,
+                existing_questions: existingQuestions
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const generatedText = response.data.generated_questions;
+            setTemplateQuestionsData({ blocks: [{ type: "paragraph", data: { text: generatedText } }] });
+            setSnackbarMessage("Questions generated!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Error generating template questions:", err);
+            setSnackbarMessage("Failed to generate questions.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setIsTemplateAILoading(false);
+        }
+    };
+
+    const handleProductStatusChange = async (productId, newStatus) => {
+        setLoading(true);
+        try {
+            await handleUpdateProduct(productId, { status: newStatus });
+            setSnackbarMessage(`Product status updated to ${newStatus}!`);
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            setSnackbarMessage("Failed to update product status.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleTabStatusChange = async (tabName, newStatus) => {
+        if (!selectedProduct) return;
+        setLoading(true);
+        const statusKey = `${tabName.toLowerCase().replace(/ /g, '_')}_status`;
+        try {
+            const updatedProductData = { [statusKey]: newStatus };
+            await handleUpdateProduct(selectedProduct.id, updatedProductData);
+            setSnackbarMessage(`${tabName} status updated to ${newStatus}!`);
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            setSnackbarMessage(`Failed to update ${tabName} status.`);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
     const handleProfileMenuOpen = (event) => {
         setAnchorElProfileMenu(event.currentTarget);
@@ -1481,7 +1750,7 @@ function App() {
     };
 
     const handleOpenSettings = () => {
-        setCurrentPage('settings'); // Navigate to settings page
+        setCurrentPage('settings'); 
         handleProfileMenuClose();
     };
 
@@ -1492,7 +1761,6 @@ function App() {
             const token = localStorage.getItem('token');
             const response = await axios.put(`${API_URL}/api/user/profile`, {
                 username: userName,
-                // profile_pic_url: profilePicUrl, // REMOVED from payload
                 timezone: userTimezone
             }, {
                 headers: {
@@ -1502,7 +1770,7 @@ function App() {
             setSnackbarMessage(response.data.message);
             setSnackbarSeverity('success');
             setSnackbarOpen(true);
-            setCurrentPage('dashboard'); // Go back to dashboard after saving
+            setCurrentPage('dashboard'); 
         } catch (err) {
             console.error("Error saving profile settings:", err);
             const errorMessage = err.response && err.response.data && err.response.data.message 
@@ -1516,7 +1784,6 @@ function App() {
         }
     };
 
-    // Determine the profile image source for the header (always an initial now)
     const displayHeaderProfileInitial = useMemo(() => {
         return userName ? userName.charAt(0).toUpperCase() : 'U';
     }, [userName]);
@@ -1527,7 +1794,6 @@ function App() {
             setIsLoggedIn={setIsLoggedIn} 
             setAuthMessage={setAuthMessage} 
             setUserName={setUserName} 
-            // setProfilePicUrl={setProfilePicUrl} // Removed prop
             setUserTimezone={setUserTimezone} 
         />;
     }
@@ -1536,8 +1802,6 @@ function App() {
         return (
             <SettingsPage 
                 setCurrentPage={setCurrentPage}
-                // profilePicUrl={profilePicUrl} // Removed prop
-                // setProfilePicUrl={setProfilePicUrl} // Removed prop
                 userName={userName}
                 setUserName={setUserName}
                 userTimezone={userTimezone}
@@ -1555,13 +1819,31 @@ function App() {
             sx={{
                 display: 'flex',
                 flexDirection: 'column',
-                height: '100vh', // Full viewport height
-                width: '100vw',  // Full viewport width
+                height: '100vh', 
+                width: '100vw',  
                 fontFamily: 'Inter',
                 background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)',
-                overflow: 'hidden', // Prevent main page scrollbars
+                overflow: 'hidden', 
             }}
         >
+            {/* Editor.js CDN includes - REQUIRED for Editor component to work */}
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/editorjs@2.28.2/dist/editor.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/header@2.8.0/dist/bundle.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/paragraph@2.11.3/dist/bundle.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/list@1.9.0/dist/bundle.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/code@2.9.0/dist/bundle.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/table@2.5.0/dist/bundle.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/quote@2.6.0/dist/bundle.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/raw@2.5.0/dist/bundle.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/image@2.9.0/dist/bundle.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/marker@1.4.0/dist/bundle.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/warning@2.8.0/dist/bundle.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/delimiter@1.4.0/dist/bundle.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/inline-code@1.4.0/dist/bundle.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/link@2.5.0/dist/bundle.min.js"></script>
+            <script src="https://cdn.jsdelivr.net/npm/@editorjs/embed@2.5.3/dist/bundle.min.js"></script>
+            {/* Add more Editor.js tool CDNs here as needed */}
+
             {/* Inject the keyframes for the pulse animation */}
             <style>{pulseAnimation}</style>
 
@@ -1577,7 +1859,7 @@ function App() {
                     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', 
                     borderRadius: '0.75rem', 
                     margin: '1rem', 
-                    flexShrink: 0, // Prevent header from shrinking
+                    flexShrink: 0, 
                 }}
             >
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -1602,7 +1884,7 @@ function App() {
                             '95%': { opacity: 1, transform: 'translateY(0)' },
                             '100%': { opacity: 0, transform: 'translateY(-10px)' },
                         },
-                        animation: 'fadeInOut 15s infinite', // Slower, more distinct animation
+                        animation: 'fadeInOut 15s infinite', 
                         display: 'flex',
                         alignItems: 'center',
                         gap: 1,
@@ -1629,8 +1911,8 @@ function App() {
                                 width: 40,
                                 height: 40,
                                 borderRadius: '50%',
-                                backgroundColor: '#e0e7ff', // Light blue background
-                                color: '#4f46e5', // Dark blue text
+                                backgroundColor: '#e0e7ff', 
+                                color: '#4f46e5', 
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -1638,7 +1920,7 @@ function App() {
                                 fontWeight: 'bold',
                                 border: '2px solid #4f46e5',
                                 boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                animation: 'pulse-initial 2s infinite', // Apply pulse animation
+                                animation: 'pulse-initial 2s infinite', 
                             }}
                         >
                             {displayHeaderProfileInitial}
@@ -1680,7 +1962,7 @@ function App() {
                 </Box>
             </Box>
 
-            {/* Main Content Area: Sidebar + Kanban Board */}
+            {/* Main Content Area: Sidebar + Product Detail View */}
             <Box sx={{ flexGrow: 1, display: 'flex', padding: '1rem', gap: '1rem', overflow: 'hidden' }}> 
                 {/* Left Sidebar */}
                 <Paper
@@ -1694,12 +1976,11 @@ function App() {
                         p: 2,
                         display: 'flex',
                         flexDirection: 'column',
-                        // Fixed height for sidebar to allow its content to scroll
                         height: '100%', 
                         '@media (max-width: 600px)': { 
                             width: '100%',
                             marginBottom: '1rem',
-                            height: 'auto', // Adjust for mobile if needed
+                            height: 'auto', 
                         },
                     }}
                 >
@@ -1715,12 +1996,31 @@ function App() {
                             borderRadius: '0.75rem',
                             textTransform: 'none',
                             padding: '0.75rem 1rem',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.06)',
                             marginBottom: 3,
                         }}
                         onClick={() => setShowAddProductModal(true)}
                     >
                         Add New Item
+                    </Button>
+
+                    {/* Global Tasks Button (Placeholder for Phase 2) */}
+                    <Button
+                        variant="outlined"
+                        startIcon={<CheckCircle size={20} />}
+                        sx={{
+                            borderColor: '#4f46e5',
+                            color: '#4f46e5',
+                            '&:hover': { backgroundColor: '#eef2ff', borderColor: '#4338ca' },
+                            fontWeight: 600,
+                            borderRadius: '0.75rem',
+                            textTransform: 'none',
+                            padding: '0.75rem 1rem',
+                            marginBottom: 3,
+                        }}
+                        disabled // Disabled for Phase 1
+                    >
+                        Tasks (Coming Soon)
                     </Button>
 
                     {/* Search and Sort/Filter Controls */}
@@ -1761,67 +2061,26 @@ function App() {
                                 </Select>
                             </FormControl>
                             <FormControl fullWidth variant="outlined" size="small">
-                                <InputLabel id="filter-by-stage-label">Filter By Stage</InputLabel>
+                                <InputLabel id="filter-by-status-label">Filter By Status</InputLabel>
                                 <Select
-                                    labelId="filter-by-stage-label"
-                                    id="filter-by-stage-select"
-                                    value={filterByStage}
-                                    onChange={(e) => setFilterByStage(e.target.value)}
-                                    label="Filter By Stage"
+                                    labelId="filter-by-status-label"
+                                    id="filter-by-status-select"
+                                    value={filterByStatus}
+                                    onChange={(e) => setFilterByStatus(e.target.value)}
+                                    label="Filter By Status"
                                     sx={{ borderRadius: '0.5rem' }}
                                 >
-                                    <MenuItem value="All">All Stages</MenuItem>
-                                    {kanbanStages.map(stage => (
-                                        <MenuItem key={stage} value={stage}>{stage}</MenuItem>
-                                    ))}
+                                    <MenuItem value="All">All Statuses</MenuItem>
+                                    <MenuItem value="Active">Active</MenuItem>
+                                    <MenuItem value="Completed">Completed</MenuItem>
+                                    <MenuItem value="Cancelled">Cancelled</MenuItem>
+                                    <MenuItem value="On-Hold">On-Hold</MenuItem>
                                 </Select>
                             </FormControl>
                         </Box>
                     </Box>
 
-                    {/* Toggle Buttons for Active/Completed Items */}
-                    <Box sx={{ display: 'flex', justifyContent: 'space-around', marginBottom: 2, gap: 1 }}>
-                        <Button
-                            variant={showActiveView ? "contained" : "outlined"}
-                            onClick={() => setShowActiveView(true)}
-                            sx={{
-                                flexGrow: 1,
-                                textTransform: 'none',
-                                borderRadius: '0.5rem',
-                                fontWeight: 600,
-                                backgroundColor: showActiveView ? '#4f46e5' : 'transparent',
-                                color: showActiveView ? '#fff' : '#4f46e5',
-                                borderColor: '#4f46e5',
-                                '&:hover': {
-                                    backgroundColor: showActiveView ? '#4338ca' : '#eef2ff',
-                                    borderColor: '#4338ca',
-                                },
-                            }}
-                        >
-                            Active
-                        </Button>
-                        <Button
-                            variant={!showActiveView ? "contained" : "outlined"}
-                            onClick={() => setShowActiveView(false)}
-                            sx={{
-                                flexGrow: 1,
-                                textTransform: 'none',
-                                borderRadius: '0.5rem',
-                                fontWeight: 600,
-                                backgroundColor: !showActiveView ? '#4f46e5' : 'transparent',
-                                color: !showActiveView ? '#fff' : '#4f46e5',
-                                borderColor: '#4f46e5',
-                                '&:hover': {
-                                    backgroundColor: !showActiveView ? '#4338ca' : '#eef2ff',
-                                    borderColor: '#4338ca',
-                                },
-                            }}
-                        >
-                            Completed
-                        </Button>
-                    </Box>
-
-                    {/* Conditional Rendering of Active/Completed Lists */}
+                    {/* Product List */}
                     <List
                         subheader={
                             <ListSubheader component="div" sx={{ 
@@ -1835,17 +2094,17 @@ function App() {
                                 display: 'flex',
                                 alignItems: 'center',
                             }}>
-                                <Box sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: showActiveView ? '#16a34a' : '#4f46e5', marginRight: '0.5rem' }} />
-                                {showActiveView ? 'Active Items' : 'Completed Items'}
+                                <Box sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', marginRight: '0.5rem' }} />
+                                All Products
                             </ListSubheader>
                         }
-                        sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', flexGrow: 1 }} // Allow list to scroll
+                        sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', flexGrow: 1 }} 
                     >
                         {loading && <Typography sx={{ color: '#9333ea', textAlign: 'center', marginY: 3, fontSize: '0.9rem', fontWeight: 500 }}>Loading...</Typography>}
                         {error && <Alert severity="error" sx={{ marginY: 3, borderRadius: '0.5rem' }}>{error}</Alert>}
                         {!loading && !error && filteredAndSortedProducts.length === 0 ? (
                             <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 3 }}>
-                                {showActiveView ? 'No active products matching criteria.' : 'No completed products matching criteria.'}
+                                No products matching criteria.
                             </Typography>
                         ) : (
                             filteredAndSortedProducts.map(product => (
@@ -1854,8 +2113,8 @@ function App() {
                                     onClick={() => handleSelectProduct(product)}
                                     sx={{
                                         display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
+                                        flexDirection: 'column', // Stack content vertically
+                                        alignItems: 'flex-start',
                                         padding: 1.5,
                                         borderRadius: '0.5rem',
                                         marginBottom: '0.5rem',
@@ -1863,111 +2122,46 @@ function App() {
                                         border: selectedProduct && selectedProduct.id === product.id ? '1px solid #c7d2fe' : '1px solid #f3f4f6',
                                         '&:hover': { backgroundColor: '#e0e7ff' },
                                         transition: 'background-color 0.2s, border-color 0.2s',
+                                        cursor: 'pointer'
                                     }}
                                 >
-                                    <ListItemText
-                                        primary={product.name}
-                                        secondary={
-                                            <Box>
-                                                <Typography component="span" variant="body2" sx={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                                                    Stage: {product.stage} | Progress: {product.progress}%
-                                                </Typography>
-                                                <LinearProgress 
-                                                    variant="determinate" 
-                                                    value={product.progress} 
-                                                    sx={{ 
-                                                        width: '100%', 
-                                                        borderRadius: 5, 
-                                                        height: 4, 
-                                                        backgroundColor: '#e0e7ff', 
-                                                        '& .MuiLinearProgress-bar': { backgroundColor: '#4f46e5' } 
-                                                    }} 
-                                                />
-                                            </Box>
-                                        }
-                                        primaryTypographyProps={{ fontWeight: 'medium', color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                    />
-                                    <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                        {/* Archive/Delete buttons always visible for active/completed */}
-                                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleArchiveProduct(product.id, true); }}>
-                                            <Archive size={16} />
-                                        </IconButton>
-                                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); confirmDeleteProduct(product.id); }}>
-                                            <Trash2 size={16} />
-                                        </IconButton>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                                        <ListItemText
+                                            primary={product.name}
+                                            primaryTypographyProps={{ fontWeight: 'medium', color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                        />
+                                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleUpdateProduct(product.id, { is_archived: !product.is_archived }); }}>
+                                                {product.is_archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
+                                            </IconButton>
+                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); confirmDeleteProduct(product.id); }}>
+                                                <Trash2 size={16} />
+                                            </IconButton>
+                                        </Box>
                                     </Box>
+                                    <Typography component="span" variant="body2" sx={{ fontSize: '0.75rem', color: '#6b7280', width: '100%', marginTop: 0.5 }}>
+                                        Status: {product.status} | Progress: {product.progress}%
+                                    </Typography>
+                                    <LinearProgress 
+                                        variant="determinate" 
+                                        value={product.progress} 
+                                        sx={{ 
+                                            width: '100%', 
+                                            borderRadius: 5, 
+                                            height: 4, 
+                                            backgroundColor: '#e0e7ff', 
+                                            '& .MuiLinearProgress-bar': { backgroundColor: '#4f46e5' } 
+                                        }} 
+                                    />
                                 </ListItem>
                             ))
                         )}
                     </List>
-
-                    {/* Archived Items Section (Collapsible) */}
-                    <Box sx={{ marginTop: 3, borderTop: '1px solid #e5e7eb', paddingTop: 2 }}>
-                        <Button
-                            onClick={() => setShowArchivedSection(!showArchivedSection)}
-                            fullWidth
-                            sx={{
-                                textTransform: 'none',
-                                fontWeight: 'bold',
-                                color: '#4b5563',
-                                justifyContent: 'space-between',
-                                '&:hover': { backgroundColor: '#f3f4f6' },
-                                borderRadius: '0.5rem',
-                                padding: '0.5rem 1rem',
-                            }}
-                            endIcon={showArchivedSection ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                        >
-                            Archived Items ({archivedProducts.length})
-                        </Button>
-                        <Collapse in={showArchivedSection}>
-                            <List dense sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', maxHeight: 200, marginTop: 1 }}>
-                                {archivedProducts.length === 0 ? (
-                                    <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 1 }}>
-                                        No archived products.
-                                    </Typography>
-                                ) : (
-                                    archivedProducts.map(product => (
-                                        <ListItem
-                                            key={product.id}
-                                            onClick={() => handleSelectProduct(product)}
-                                            sx={{
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center',
-                                                padding: 1,
-                                                borderRadius: '0.5rem',
-                                                marginBottom: '0.5rem',
-                                                backgroundColor: selectedProduct && selectedProduct.id === product.id ? '#f3e8ff' : '#fff',
-                                                border: selectedProduct && selectedProduct.id === product.id ? '1px solid #d8b4fe' : '1px solid #f3f4f6',
-                                                '&:hover': { backgroundColor: '#ede9fe' },
-                                                transition: 'background-color 0.2s, border-color 0.2s',
-                                            }}
-                                        >
-                                            <ListItemText
-                                                primary={product.name}
-                                                secondary={`Stage: ${product.stage} | Progress: ${product.progress}%`}
-                                                primaryTypographyProps={{ fontWeight: 'medium', color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                                secondaryTypographyProps={{ fontSize: '0.75rem', color: '#6b7280' }}
-                                            />
-                                            <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                                <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleArchiveProduct(product.id, false); }}>
-                                                    <ArchiveRestore size={16} />
-                                                </IconButton>
-                                                <IconButton size="small" onClick={(e) => { e.stopPropagation(); confirmDeleteProduct(product.id); }}>
-                                                    <Trash2 size={16} />
-                                                </IconButton>
-                                            </Box>
-                                        </ListItem>
-                                    ))
-                                )}
-                            </List>
-                        </Collapse>
-                    </Box>
                 </Paper>
 
-                {/* Right Main Content: Kanban Board (now tabbed) */}
+                {/* Right Main Content: Product Detail Tabs */}
                 <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {/* Kanban Board Header */}
+                    {/* Product Detail Header */}
                     <Paper
                         elevation={3}
                         sx={{
@@ -1980,20 +2174,20 @@ function App() {
                             justifyContent: 'space-between',
                             flexWrap: 'wrap', 
                             gap: 2, 
-                            flexShrink: 0, // Prevent header from shrinking
+                            flexShrink: 0, 
                         }}
                     >
                         <Box>
                             <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1f2937' }}>
-                                {selectedProduct ? selectedProduct.name : "Select a Product/Feature"} 
+                                {selectedProduct ? selectedProduct.name : "Select a Product/Item"} 
                                 <Typography component="span" variant="body2" sx={{ color: '#6b7280', marginLeft: 1 }}>
-                                    {selectedProduct ? `(${selectedProduct.stage} Stage)` : ""}
+                                    {selectedProduct ? `(Status: ${selectedProduct.status})` : ""}
                                 </Typography>
                             </Typography>
                             {selectedProduct && (
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 1 }}>
                                     <Typography variant="body2" sx={{ color: '#4b5563' }}>
-                                        Progress: {selectedProduct.progress}%
+                                        Overall Progress: {selectedProduct.progress}%
                                     </Typography>
                                     <LinearProgress 
                                         variant="determinate" 
@@ -2010,7 +2204,23 @@ function App() {
                             )}
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                            {/* Feature Assistant button in header, context-aware */}
+                            {selectedProduct && (
+                                <FormControl variant="outlined" size="small" sx={{ minWidth: 120 }}>
+                                    <InputLabel id="product-status-label">Status</InputLabel>
+                                    <Select
+                                        labelId="product-status-label"
+                                        value={selectedProduct.status}
+                                        onChange={(e) => handleProductStatusChange(selectedProduct.id, e.target.value)}
+                                        label="Status"
+                                        sx={{ borderRadius: '0.5rem' }}
+                                    >
+                                        {['Active', 'Completed', 'Cancelled', 'On-Hold'].map(status => (
+                                            <MenuItem key={status} value={status}>{status}</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            )}
+                            {/* Feature Assistant button (Placeholder for future general AI assistant) */}
                             <Button
                                 variant="contained"
                                 startIcon={<MessageSquare size={20} />}
@@ -2024,25 +2234,14 @@ function App() {
                                     padding: '0.5rem 1rem',
                                     boxShadow: 'none',
                                 }}
-                                onClick={() => {
-                                    if (selectedProduct) {
-                                        // When Feature Assistant is toggled, ensure we're on the current product's stage tab
-                                        const stageIndex = kanbanStages.indexOf(selectedProduct.stage);
-                                        setSelectedKanbanTab(stageIndex >= 0 ? stageIndex : 0);
-                                        setShowFeatureAssistant(!showFeatureAssistant);
-                                    } else {
-                                        setSnackbarMessage("Please select a product/feature first to use the Feature Assistant.");
-                                        setSnackbarSeverity('info');
-                                        setSnackbarOpen(true);
-                                    }
-                                }}
+                                disabled // Disabled for Phase 1
                             >
-                                Feature Assistant
+                                Feature Assistant (Coming Soon)
                             </Button>
                         </Box>
                     </Paper>
 
-                    {/* Kanban Board Tabs Container */}
+                    {/* Product Detail Tabs Container */}
                     <Paper
                         elevation={1}
                         sx={{
@@ -2051,8 +2250,8 @@ function App() {
                             boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
                             display: 'flex',
                             flexDirection: 'column',
-                            flexGrow: 1, // Allow this container to grow
-                            overflow: 'hidden' // Hide overflow from tabs themselves
+                            flexGrow: 1, 
+                            overflow: 'hidden' 
                         }}
                     >
                         {selectedProduct === null ? (
@@ -2067,184 +2266,302 @@ function App() {
                             }}>
                                 <Box ref={lottieContainer} sx={{ width: '200px', height: '200px', marginBottom: 2 }}></Box>
                                 <Typography variant="h6" sx={{ color: '#4f46e5', fontWeight: 'bold', textAlign: 'center' }}>
-                                    Select a Product or Feature
+                                    Select a Product or Item
                                 </Typography>
                                 <Typography variant="body1" sx={{ color: '#6b7280', textAlign: 'center', maxWidth: '400px' }}>
-                                    Choose an item from the left sidebar to view its details and Kanban stages.
+                                    Choose an item from the left sidebar to view its details and manage its lifecycle.
                                 </Typography>
                             </Box>
                         ) : (
                             <>
                                 <Tabs 
-                                    value={selectedKanbanTab} 
-                                    onChange={(event, newValue) => setSelectedKanbanTab(newValue)} 
-                                    aria-label="Kanban stages tabs"
-                                    variant="scrollable" // Make tabs scrollable if many stages
+                                    value={selectedProductTab} 
+                                    onChange={(event, newValue) => setSelectedProductTab(newValue)} 
+                                    aria-label="Product detail tabs"
+                                    variant="scrollable" 
                                     scrollButtons="auto"
                                     sx={{
                                         borderBottom: 1,
                                         borderColor: 'divider',
-                                        '& .MuiTabs-indicator': { backgroundColor: '#4f46e5' }, // Indicator color
+                                        '& .MuiTabs-indicator': { backgroundColor: '#4f46e5' }, 
                                     }}
                                 >
-                                    {kanbanStages.map((stage, index) => (
+                                    {PRODUCT_TABS_ORDER.map((tabName, index) => (
                                         <Tab 
-                                            key={stage} 
-                                            label={stage} 
-                                            id={`kanban-tab-${index}`} 
-                                            aria-controls={`kanban-tabpanel-${index}`}
+                                            key={tabName} 
+                                            label={tabName} 
+                                            id={`product-tab-${index}`} 
+                                            aria-controls={`product-tabpanel-${index}`}
                                             sx={{
                                                 textTransform: 'none',
                                                 fontWeight: 'bold',
-                                                color: getTabColor(stage), // Dynamic color based on stage status
+                                                color: selectedProduct[`${tabName.toLowerCase().replace(/ /g, '_')}_status`] === 'Completed' ? '#16a34a' : '#4f46e5',
                                                 '&.Mui-selected': {
-                                                    color: '#4f46e5', // Selected tab color
+                                                    color: '#4f46e5', 
                                                 },
                                                 '&:hover': {
                                                     backgroundColor: '#eef2ff',
                                                 },
-                                                borderRadius: '0.5rem 0.5rem 0 0', // Rounded top corners
-                                                minHeight: '48px', // Standard tab height
+                                                borderRadius: '0.5rem 0.5rem 0 0', 
+                                                minHeight: '48px', 
                                             }}
                                         />
                                     ))}
                                 </Tabs>
 
-                                {/* Tab Panels for each stage */}
-                                {kanbanStages.map((stage, index) => (
-                                    <TabPanel value={selectedKanbanTab} index={index} key={stage}>
-                                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, flexGrow: 1 }}>
-                                            {/* Feature Assistant section, now within the active tab */}
-                                            {showFeatureAssistant && (
-                                                <Paper
-                                                    elevation={1}
-                                                    sx={{
-                                                        backgroundColor: '#f5f3ff',
-                                                        p: 3,
-                                                        borderRadius: '0.75rem',
-                                                        border: '1px solid #d8b4fe',
-                                                        display: 'flex',
-                                                        flexDirection: 'column',
-                                                        gap: 2,
-                                                    }}
+                                {/* Tab Panels for each section */}
+                                {PRODUCT_TABS_ORDER.map((tabName, index) => (
+                                    <TabPanel value={selectedProductTab} index={index} key={tabName}>
+                                        {/* Common Status Controls for each tab */}
+                                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1, marginBottom: 2 }}>
+                                            <Typography variant="body2" color="textSecondary">
+                                                Status:
+                                            </Typography>
+                                            <FormControl variant="outlined" size="small" sx={{ minWidth: 120 }}>
+                                                <Select
+                                                    value={selectedProduct[`${tabName.toLowerCase().replace(/ /g, '_')}_status`]}
+                                                    onChange={(e) => handleTabStatusChange(tabName, e.target.value)}
+                                                    sx={{ borderRadius: '0.5rem' }}
                                                 >
-                                                    <Typography variant="h6" sx={{ fontWeight: 600, color: '#374151' }}>
-                                                        Feature Assistant for {stage}
+                                                    {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(status => (
+                                                        <MenuItem key={status} value={status}>{status}</MenuItem>
+                                                    ))}
+                                                </Select>
+                                            </FormControl>
+                                        </Box>
+
+                                        {/* --- Research Tab Content --- */}
+                                        {tabName === 'Research' && (
+                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, flexGrow: 1, overflowY: 'auto' }}>
+                                                {/* Market Research Section */}
+                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #d8b4fe', backgroundColor: '#f5f3ff' }}>
+                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#4f46e5', marginBottom: 2 }}>
+                                                        Market Research
                                                     </Typography>
-                                                    <TextField
-                                                        id={`discoveryInput-${stage}`}
-                                                        placeholder="Enter details for AI generation..."
-                                                        multiline
-                                                        rows={6}
-                                                        value={discoveryInput}
-                                                        onChange={(e) => setDiscoveryInput(e.target.value)}
-                                                        disabled={loading}
-                                                        fullWidth
-                                                        variant="outlined"
-                                                        sx={{
-                                                            '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' },
-                                                            '& .Mui-focused fieldset': { borderColor: '#9333ea', boxShadow: '0 0 0 2px rgba(147, 51, 234, 0.25)' },
-                                                        }}
+                                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: '300px', overflowY: 'auto', marginBottom: 2 }}>
+                                                        {researchChatHistory.map((msg, idx) => (
+                                                            <Box key={idx} sx={{ 
+                                                                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                                                                backgroundColor: msg.role === 'user' ? '#eef2ff' : '#f0f4f8',
+                                                                borderRadius: '0.75rem',
+                                                                p: 1.5,
+                                                                maxWidth: '80%',
+                                                                wordBreak: 'break-word',
+                                                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                                            }}>
+                                                                <Typography variant="body2" sx={{ color: msg.role === 'user' ? '#4f46e5' : '#374151' }}>
+                                                                    {msg.content}
+                                                                </Typography>
+                                                            </Box>
+                                                        ))}
+                                                        {isResearchAILoading && (
+                                                            <Box sx={{ alignSelf: 'flex-start', p: 1.5 }}>
+                                                                <CircularProgress size={20} />
+                                                                <Typography variant="body2" sx={{ color: '#6b7280', ml: 1 }}>AI is thinking...</Typography>
+                                                            </Box>
+                                                        )}
+                                                    </Box>
+                                                    <form onSubmit={handleResearchPromptSubmit} style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                                                        <TextField
+                                                            fullWidth
+                                                            variant="outlined"
+                                                            size="small"
+                                                            placeholder="Ask AI about market research..."
+                                                            value={currentResearchPrompt}
+                                                            onChange={(e) => setCurrentResearchPrompt(e.target.value)}
+                                                            disabled={isResearchAILoading}
+                                                            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                                                        />
+                                                        <IconButton type="submit" color="primary" disabled={isResearchAILoading}>
+                                                            <Send />
+                                                        </IconButton>
+                                                        {/* Speech-to-text (Mic) button - Placeholder for now */}
+                                                        <IconButton color="primary" disabled> 
+                                                            <Mic />
+                                                        </IconButton>
+                                                    </form>
+                                                </Paper>
+
+                                                {/* Market Research Document Editor */}
+                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #e0e7ff', backgroundColor: '#f9fafb', flexGrow: 1 }}>
+                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 2 }}>
+                                                        Market Research Document
+                                                    </Typography>
+                                                    <Editor 
+                                                        initialData={researchDocumentData} 
+                                                        onChange={handleResearchDocumentSave} 
+                                                        holder="research-editor-container"
                                                     />
-                                                    <Button
-                                                        onClick={handleGenerateDocument}
-                                                        variant="contained"
-                                                        disabled={loading}
-                                                        sx={{
-                                                            backgroundColor: '#16a34a', '&:hover': { backgroundColor: '#15803d' },
-                                                            color: '#fff', fontWeight: 600, borderRadius: '0.5rem', textTransform: 'none',
-                                                        }}
-                                                    >
-                                                        {loading ? <CircularProgress size={20} color="inherit" /> : 'Generate Document'}
-                                                    </Button>
-                                                    {(generatedDocument || selectedProduct.discovery_document) && (
-                                                        <Box sx={{ marginTop: 2 }}>
-                                                            <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#374151', marginBottom: 1 }}>
-                                                                Generated Document:
+                                                </Paper>
+
+                                                {/* Customer Interviews Section */}
+                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #d8b4fe', backgroundColor: '#f5f3ff' }}>
+                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                                                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
+                                                            Customer Interviews
+                                                        </Typography>
+                                                        <Button 
+                                                            variant="contained" 
+                                                            startIcon={<PlusCircle size={20} />} 
+                                                            onClick={() => setShowAddInterviewModal(true)}
+                                                            sx={{ textTransform: 'none', borderRadius: '0.5rem', backgroundColor: '#16a34a', '&:hover': { backgroundColor: '#15803d' } }}
+                                                        >
+                                                            Add Interview
+                                                        </Button>
+                                                    </Box>
+                                                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 2 }}>
+                                                        <Button 
+                                                            variant="outlined" 
+                                                            startIcon={<Sparkles size={16} />} 
+                                                            onClick={fetchInterviewTemplates}
+                                                            sx={{ textTransform: 'none', borderRadius: '0.5rem', borderColor: '#9333ea', color: '#9333ea', '&:hover': { backgroundColor: '#f3e8ff' } }}
+                                                        >
+                                                            Manage Templates
+                                                        </Button>
+                                                    </Box>
+
+                                                    <List dense sx={{ maxHeight: 300, overflowY: 'auto', border: '1px solid #e0e7ff', borderRadius: '0.5rem' }}>
+                                                        {customerInterviews.length === 0 ? (
+                                                            <ListItem><ListItemText secondary="No interviews added yet." sx={{ textAlign: 'center' }} /></ListItem>
+                                                        ) : (
+                                                            customerInterviews.map(interview => (
+                                                                <ListItem 
+                                                                    key={interview.id} 
+                                                                    onClick={() => handleSelectInterview(interview)}
+                                                                    secondaryAction={
+                                                                        <IconButton edge="end" aria-label="delete" onClick={(e) => { e.stopPropagation(); handleDeleteInterview(interview.id); }}>
+                                                                            <Trash2 size={16} />
+                                                                        </IconButton>
+                                                                    }
+                                                                    sx={{ 
+                                                                        backgroundColor: selectedInterview && selectedInterview.id === interview.id ? '#eef2ff' : 'transparent',
+                                                                        '&:hover': { backgroundColor: '#eef2ff' },
+                                                                        borderRadius: '0.5rem',
+                                                                        marginBottom: '0.25rem'
+                                                                    }}
+                                                                >
+                                                                    <ListItemText 
+                                                                        primary={interview.customer_name} 
+                                                                        secondary={`${new Date(interview.interview_date).toLocaleDateString()} - ${interview.customer_email || 'N/A'}`} 
+                                                                    />
+                                                                </ListItem>
+                                                            ))
+                                                        )}
+                                                    </List>
+
+                                                    {selectedInterview && (
+                                                        <Box sx={{ marginTop: 3, borderTop: '1px solid #e0e7ff', paddingTop: 3 }}>
+                                                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 2 }}>
+                                                                Interview Notes for {selectedInterview.customer_name}
                                                             </Typography>
-                                                            <Paper elevation={0} sx={{ backgroundColor: '#f9fafb', p: 2, borderRadius: '0.5rem', border: '1px solid #e5e7eb', whiteSpace: 'pre-wrap', fontSize: '0.9rem' }}>
-                                                                {generatedDocument || selectedProduct.discovery_document}
-                                                            </Paper>
+                                                            <Editor 
+                                                                initialData={interviewNotesData} 
+                                                                onChange={handleSaveInterviewNotes} 
+                                                                holder={`interview-notes-editor-${selectedInterview.id}`}
+                                                            />
+                                                            <Button 
+                                                                variant="contained" 
+                                                                startIcon={<Sparkles size={20} />} 
+                                                                onClick={handleGenerateInterviewSummary}
+                                                                disabled={loading}
+                                                                sx={{ textTransform: 'none', borderRadius: '0.5rem', backgroundColor: '#9333ea', '&:hover': { backgroundColor: '#7e22ce' }, marginTop: 2 }}
+                                                            >
+                                                                {loading ? <CircularProgress size={20} color="inherit" /> : 'Generate Summary'}
+                                                            </Button>
+
+                                                            {interviewSummaryData && (
+                                                                <Box sx={{ marginTop: 3 }}>
+                                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 1 }}>
+                                                                        AI Summary:
+                                                                    </Typography>
+                                                                    <Editor 
+                                                                        initialData={interviewSummaryData} 
+                                                                        readOnly={true} 
+                                                                        holder={`interview-summary-editor-${selectedInterview.id}`}
+                                                                    />
+                                                                </Box>
+                                                            )}
                                                         </Box>
                                                     )}
                                                 </Paper>
-                                            )}
+                                            </Box>
+                                        )}
 
-                                            {/* Static tasks for the current stage (can be replaced with dynamic data) */}
-                                            <Paper
-                                                elevation={1}
-                                                sx={{
-                                                    backgroundColor: '#f5f3ff', // Light purple background
-                                                    p: 3,
-                                                    borderRadius: '0.75rem',
-                                                    border: '1px solid #d8b4fe',
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    gap: 1,
-                                                    flexGrow: 1, // Allow this paper to grow
-                                                }}
-                                            >
-                                                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#4f46e5', marginBottom: 1 }}>
-                                                    Tasks for {stage}
+                                        {/* --- PRD Tab Content --- */}
+                                        {tabName === 'PRD' && (
+                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, flexGrow: 1, overflowY: 'auto' }}>
+                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #d8b4fe', backgroundColor: '#f5f3ff' }}>
+                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#4f46e5', marginBottom: 2 }}>
+                                                        PRD Generation Assistant
+                                                    </Typography>
+                                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: '300px', overflowY: 'auto', marginBottom: 2 }}>
+                                                        {prdChatHistory.map((msg, idx) => (
+                                                            <Box key={idx} sx={{ 
+                                                                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                                                                backgroundColor: msg.role === 'user' ? '#eef2ff' : '#f0f4f8',
+                                                                borderRadius: '0.75rem',
+                                                                p: 1.5,
+                                                                maxWidth: '80%',
+                                                                wordBreak: 'break-word',
+                                                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                                            }}>
+                                                                <Typography variant="body2" sx={{ color: msg.role === 'user' ? '#4f46e5' : '#374151' }}>
+                                                                    {msg.content}
+                                                                </Typography>
+                                                            </Box>
+                                                        ))}
+                                                        {isPrdAILoading && (
+                                                            <Box sx={{ alignSelf: 'flex-start', p: 1.5 }}>
+                                                                <CircularProgress size={20} />
+                                                                <Typography variant="body2" sx={{ color: '#6b7280', ml: 1 }}>AI is thinking...</Typography>
+                                                            </Box>
+                                                        )}
+                                                    </Box>
+                                                    <form onSubmit={handlePrdPromptSubmit} style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                                                        <TextField
+                                                            fullWidth
+                                                            variant="outlined"
+                                                            size="small"
+                                                            placeholder="Tell AI about your PRD requirements..."
+                                                            value={currentPrdPrompt}
+                                                            onChange={(e) => setCurrentPrdPrompt(e.target.value)}
+                                                            disabled={isPrdAILoading}
+                                                            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                                                        />
+                                                        <IconButton type="submit" color="primary" disabled={isPrdAILoading}>
+                                                            <Send />
+                                                        </IconButton>
+                                                        {/* Speech-to-text (Mic) button - Placeholder for now */}
+                                                        <IconButton color="primary" disabled> 
+                                                            <Mic />
+                                                        </IconButton>
+                                                    </form>
+                                                </Paper>
+
+                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #e0e7ff', backgroundColor: '#f9fafb', flexGrow: 1 }}>
+                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 2 }}>
+                                                        Product Requirements Document
+                                                    </Typography>
+                                                    <Editor 
+                                                        initialData={prdDocumentData} 
+                                                        onChange={handlePrdDocumentSave} 
+                                                        holder="prd-editor-container"
+                                                    />
+                                                </Paper>
+                                            </Box>
+                                        )}
+
+                                        {/* --- Other Tabs (Placeholders for now) --- */}
+                                        {tabName !== 'Research' && tabName !== 'PRD' && (
+                                            <Box sx={{ p: 3, textAlign: 'center', color: '#6b7280', flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+                                                <Typography variant="h6" sx={{ marginBottom: 2 }}>
+                                                    {tabName} Tab
                                                 </Typography>
-                                                {/* Example static tasks - these would ideally come from DB */}
-                                                {stage === 'Research' && (
-                                                    <>
-                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Market analysis completed <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
-                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Competitor analysis <Box component="span" sx={{ color: '#16a34a', display: 'inline-flex', alignItems: 'center' }}><CheckCircle size={14} style={{ marginLeft: '0.25rem' }} /></Box></Typography>
-                                                    </>
-                                                )}
-                                                {stage === 'Ideation' && (
-                                                    <>
-                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Plan logic and expectations <Box component="span" sx={{ color: '#fde047', display: 'inline-flex', alignItems: 'center' }}><CircularProgress size={14} sx={{ marginLeft: '0.25rem', color: '#fde047' }} /></Box></Typography>
-                                                    </>
-                                                )}
-                                                {stage === 'Design' && (
-                                                    <>
-                                                        <Typography variant="body2" sx={{ color: '#374151' }}>PRD handover to design team <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto' }}>Pending</Alert></Box></Typography>
-                                                    </>
-                                                )}
-                                                {stage === 'Planning' && (
-                                                    <>
-                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Timeline planning <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto' }}>Pending</Alert></Box></Typography>
-                                                    </>
-                                                )}
-                                                {stage === 'Development' && (
-                                                    <>
-                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Frontend development <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto' }}>Pending</Alert></Box></Typography>
-                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Backend API integration <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto' }}>Pending</Alert></Box></Typography>
-                                                    </>
-                                                )}
-                                                {stage === 'Documentation' && (
-                                                    <>
-                                                        <Typography variant="body2" sx={{ color: '#374151' }}>Tech documentation handover <Box component="span" sx={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center' }}><Alert severity="warning" icon={false} sx={{ padding: '0px 4px', minHeight: 'auto' }}>Pending</Alert></Box></Typography>
-                                                    </>
-                                                )}
-                                                <Button 
-                                                    variant="outlined" 
-                                                    startIcon={<Plus size={16} />} 
-                                                    sx={{ 
-                                                        marginTop: 'auto', 
-                                                        textTransform: 'none', 
-                                                        color: '#4f46e5', 
-                                                        borderColor: '#d8b4fe', 
-                                                        '&:hover': { borderColor: '#9333ea', backgroundColor: '#f0eaff' } 
-                                                    }}
-                                                    onClick={() => {
-                                                        if (selectedProduct) {
-                                                            const newProgress = stageProgressMap[stage];
-                                                            updateProductStageAndProgress(selectedProduct.id, stage, newProgress);
-                                                        } else {
-                                                            setSnackbarMessage("Please select a product/feature first to add tasks or set stage.");
-                                                            setSnackbarSeverity('info');
-                                                            setSnackbarOpen(true);
-                                                        }
-                                                    }}
-                                                >
-                                                    Add Task / Set Stage
-                                                </Button>
-                                            </Paper>
-                                        </Box>
+                                                <Typography variant="body1">
+                                                    Content for the {tabName} tab will be implemented in future phases.
+                                                </Typography>
+                                            </Box>
+                                        )}
                                     </TabPanel>
                                 ))}
                             </>
@@ -2255,13 +2572,13 @@ function App() {
 
             {/* Add Product Modal */}
             <Dialog open={showAddProductModal} onClose={() => setShowAddProductModal(false)} PaperProps={{ sx: { borderRadius: '1rem' } }}>
-                <DialogTitle sx={{ fontWeight: 'bold', color: '#1f2937' }}>Add New Product/Feature</DialogTitle>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#1f2937' }}>Add New Product/Item</DialogTitle>
                 <DialogContent dividers>
                     <TextField
                         autoFocus
                         margin="dense"
-                        id="product-name"
-                        label="Product/Feature Name"
+                        id="new-product-name"
+                        label="Product/Item Name"
                         type="text"
                         fullWidth
                         variant="outlined"
@@ -2269,18 +2586,33 @@ function App() {
                         onChange={(e) => setNewProductName(e.target.value)}
                         sx={{ marginBottom: 2 }}
                     />
-                    <TextField
-                        margin="dense"
-                        id="product-description"
-                        label="Brief Description (Optional)"
-                        type="text"
-                        fullWidth
-                        multiline
-                        rows={4}
-                        variant="outlined"
-                        value={newProductDescription}
-                        onChange={(e) => setNewProductDescription(e.target.value)}
-                    />
+                    <FormControl fullWidth margin="dense" sx={{ marginBottom: 2 }}>
+                        <InputLabel id="new-product-status-label">Status</InputLabel>
+                        <Select
+                            labelId="new-product-status-label"
+                            value={newProductStatus}
+                            onChange={(e) => setNewProductStatus(e.target.value)}
+                            label="Status"
+                        >
+                            {['Active', 'Completed', 'Cancelled', 'On-Hold'].map(status => (
+                                <MenuItem key={status} value={status}>{status}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                    <FormControl fullWidth margin="dense">
+                        <InputLabel id="new-product-parent-label">Parent Item (for Iteration)</InputLabel>
+                        <Select
+                            labelId="new-product-parent-label"
+                            value={newProductParentId}
+                            onChange={(e) => setNewProductParentId(e.target.value)}
+                            label="Parent Item (for Iteration)"
+                        >
+                            <MenuItem value=""><em>None</em></MenuItem>
+                            {products.filter(p => !p.parent_id).map(p => ( // Only show top-level products as parents
+                                <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
                 </DialogContent>
                 <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
                     <Button 
@@ -2312,6 +2644,199 @@ function App() {
                 </DialogActions>
             </Dialog>
 
+            {/* Add Customer Interview Modal */}
+            <Dialog open={showAddInterviewModal} onClose={() => setShowAddInterviewModal(false)} PaperProps={{ sx: { borderRadius: '1rem' } }}>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#1f2937' }}>Add New Customer Interview</DialogTitle>
+                <DialogContent dividers>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        id="interview-customer-name"
+                        label="Customer Name"
+                        type="text"
+                        fullWidth
+                        variant="outlined"
+                        value={newInterviewCustomerName}
+                        onChange={(e) => setNewInterviewCustomerName(e.target.value)}
+                        sx={{ marginBottom: 2 }}
+                    />
+                    <TextField
+                        margin="dense"
+                        id="interview-customer-email"
+                        label="Customer Email (Optional)"
+                        type="email"
+                        fullWidth
+                        variant="outlined"
+                        value={newInterviewCustomerEmail}
+                        onChange={(e) => setNewInterviewCustomerEmail(e.target.value)}
+                        sx={{ marginBottom: 2 }}
+                    />
+                    <TextField
+                        margin="dense"
+                        id="interview-date"
+                        label="Interview Date"
+                        type="datetime-local"
+                        fullWidth
+                        variant="outlined"
+                        value={newInterviewDate}
+                        onChange={(e) => setNewInterviewDate(e.target.value)}
+                        InputLabelProps={{
+                            shrink: true,
+                        }}
+                    />
+                </DialogContent>
+                <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
+                    <Button 
+                        onClick={() => setShowAddInterviewModal(false)} 
+                        sx={{ 
+                            textTransform: 'none', 
+                            color: '#6b7280', 
+                            borderRadius: '0.5rem', 
+                            '&:hover': { backgroundColor: '#f3f4f6' } 
+                        }}
+                    >
+                        Cancel
+                    </Button>
+                    <Button 
+                        onClick={handleAddCustomerInterview} 
+                        variant="contained" 
+                        disabled={loading || !newInterviewCustomerName.trim()}
+                        sx={{ 
+                            textTransform: 'none', 
+                            backgroundColor: '#4f46e5', 
+                            color: '#fff', 
+                            borderRadius: '0.5rem',
+                            '&:hover': { backgroundColor: '#4338ca' },
+                            '&:disabled': { opacity: 0.5, color: '#fff' }
+                        }}
+                    >
+                        Add Interview
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Interview Template Modal */}
+            <Dialog open={showTemplateModal} onClose={() => { setShowTemplateModal(false); setSelectedTemplate(null); setTemplateName(''); setTemplateQuestionsData(null); }} PaperProps={{ sx: { borderRadius: '1rem', maxWidth: '800px' } }} fullWidth>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#1f2937' }}>
+                    {selectedTemplate ? 'Edit Interview Template' : 'Manage Interview Templates'}
+                </DialogTitle>
+                <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {!selectedTemplate ? (
+                        <>
+                            <Box sx={{ display: 'flex', gap: 2, marginBottom: 2 }}>
+                                <TextField
+                                    autoFocus
+                                    margin="dense"
+                                    id="template-name-input"
+                                    label="New Template Name"
+                                    type="text"
+                                    fullWidth
+                                    variant="outlined"
+                                    value={templateName}
+                                    onChange={(e) => setTemplateName(e.target.value)}
+                                />
+                                <Button 
+                                    onClick={handleCreateTemplate} 
+                                    variant="contained" 
+                                    disabled={loading || !templateName.trim()}
+                                    sx={{ textTransform: 'none', borderRadius: '0.5rem', backgroundColor: '#16a34a', '&:hover': { backgroundColor: '#15803d' } }}
+                                >
+                                    Create
+                                </Button>
+                            </Box>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 1 }}>Existing Templates</Typography>
+                            <List dense sx={{ maxHeight: 300, overflowY: 'auto', border: '1px solid #e0e7ff', borderRadius: '0.5rem' }}>
+                                {interviewTemplates.length === 0 ? (
+                                    <ListItem><ListItemText secondary="No templates created yet." sx={{ textAlign: 'center' }} /></ListItem>
+                                ) : (
+                                    interviewTemplates.map(template => (
+                                        <ListItem 
+                                            key={template.id} 
+                                            onClick={() => handleSelectTemplate(template)}
+                                            secondaryAction={
+                                                <IconButton edge="end" aria-label="delete" onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(template.id); }}>
+                                                    <Trash2 size={16} />
+                                                </IconButton>
+                                            }
+                                            sx={{ 
+                                                backgroundColor: selectedTemplate && selectedTemplate.id === template.id ? '#eef2ff' : 'transparent',
+                                                '&:hover': { backgroundColor: '#eef2ff' },
+                                                borderRadius: '0.5rem',
+                                                marginBottom: '0.25rem'
+                                            }}
+                                        >
+                                            <ListItemText primary={template.template_name} />
+                                        </ListItem>
+                                    ))
+                                )}
+                            </List>
+                        </>
+                    ) : (
+                        <>
+                            <TextField
+                                margin="dense"
+                                id="edit-template-name"
+                                label="Template Name"
+                                type="text"
+                                fullWidth
+                                variant="outlined"
+                                value={templateName}
+                                onChange={(e) => setTemplateName(e.target.value)}
+                                sx={{ marginBottom: 2 }}
+                            />
+                            <Typography variant="body1" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 1 }}>
+                                Template Questions
+                            </Typography>
+                            <Editor 
+                                initialData={templateQuestionsData} 
+                                onChange={setTemplateQuestionsData} 
+                                holder={`template-editor-${selectedTemplate.id}`}
+                            />
+                            <Button 
+                                variant="contained" 
+                                startIcon={<Sparkles size={20} />} 
+                                onClick={() => handleGenerateTemplateQuestions(selectedProduct?.name || '', templateQuestionsData ? JSON.stringify(templateQuestionsData) : '')}
+                                disabled={isTemplateAILoading || !selectedProduct}
+                                sx={{ textTransform: 'none', borderRadius: '0.5rem', backgroundColor: '#9333ea', '&:hover': { backgroundColor: '#7e22ce' }, marginTop: 2 }}
+                            >
+                                {isTemplateAILoading ? <CircularProgress size={20} color="inherit" /> : 'Generate Questions with AI'}
+                            </Button>
+                        </>
+                    )}
+                </DialogContent>
+                <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
+                    <Button 
+                        onClick={() => { setShowTemplateModal(false); setSelectedTemplate(null); setTemplateName(''); setTemplateQuestionsData(null); }} 
+                        sx={{ 
+                            textTransform: 'none', 
+                            color: '#6b7280', 
+                            borderRadius: '0.5rem', 
+                            '&:hover': { backgroundColor: '#f3f4f6' } 
+                        }}
+                    >
+                        {selectedTemplate ? 'Close' : 'Cancel'}
+                    </Button>
+                    {selectedTemplate && (
+                        <Button 
+                            onClick={handleUpdateTemplate} 
+                            variant="contained" 
+                            disabled={loading || !templateName.trim()}
+                            sx={{ 
+                                textTransform: 'none', 
+                                backgroundColor: '#4f46e5', 
+                                color: '#fff', 
+                                borderRadius: '0.5rem',
+                                '&:hover': { backgroundColor: '#4338ca' },
+                                '&:disabled': { opacity: 0.5, color: '#fff' }
+                            }}
+                        >
+                            Save Changes
+                        </Button>
+                    )}
+                </DialogActions>
+            </Dialog>
+
+
             {/* Delete Confirmation Modal */}
             <Dialog
                 open={showDeleteConfirmModal}
@@ -2325,7 +2850,7 @@ function App() {
                 </DialogTitle>
                 <DialogContent>
                     <DialogContentText id="alert-dialog-description" sx={{ color: '#4b5563' }}>
-                        Are you sure you want to delete this product/feature? This action cannot be undone.
+                        Are you sure you want to delete this product/item? This action cannot be undone.
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
@@ -2368,5 +2893,26 @@ function App() {
         </Box>
     );
 }
+
+// Helper function for TabPanel content
+const TabPanel = (props) => {
+    const { children, value, index, ...other } = props;
+    return (
+        <div
+            role="tabpanel"
+            hidden={value !== index}
+            id={`product-tabpanel-${index}`}
+            aria-labelledby={`product-tab-${index}`}
+            {...other}
+            style={{ flexGrow: 1, display: value === index ? 'flex' : 'none', flexDirection: 'column', overflowY: 'auto' }}
+        >
+            {value === index && (
+                <Box sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+                    {children}
+                </Box>
+            )}
+        </div>
+    );
+};
 
 export default App;
