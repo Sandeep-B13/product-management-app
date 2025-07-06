@@ -1,2918 +1,2448 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
 import axios from 'axios';
 
-// Importing Material-UI components
-import { 
-    Box, 
-    Button, 
-    TextField, 
-    Typography, 
-    Paper, 
-    Checkbox, 
-    FormControlLabel, 
-    CircularProgress,
-    Snackbar,
-    Alert,
-    List,
-    ListItem,
-    ListSubheader, 
-    ListItemText,
-    IconButton,
-    InputAdornment,
-    Grid, 
-    LinearProgress, 
-    Dialog, 
-    DialogActions,
-    DialogContent,
-    DialogContentText,
-    DialogTitle,
-    Select, 
-    MenuItem, 
-    FormControl, 
-    InputLabel, 
-    Tabs, 
-    Tab, 
-    Menu, 
-    Collapse 
-} from '@mui/material';
+// --- Constants ---
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api';
 
-// Importing Lucide icons
-import { 
-    Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, 
-    Archive, ArchiveRestore, MessageSquare, CheckCircle, Search, User, Settings, 
-    LogOut, ChevronDown, ChevronUp, ArrowLeft, Mic, Send, Edit, Save, X, PlusCircle
-} from 'lucide-react'; 
+// --- Contexts ---
+const AuthContext = createContext(null);
+const ProductContext = createContext(null);
 
-// Define the API URL for your backend.
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+// --- Utility Functions ---
+const fetcher = axios.create({
+    baseURL: API_BASE_URL,
+    headers: {
+        'Content-Type': 'application/json',
+    },
+});
 
-// Define keyframes for the pulse animation (from previous version)
-const pulseAnimation = `
-    @keyframes pulse-initial {
-        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.7); }
-        70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(79, 70, 229, 0); }
-        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
+// Interceptor to add Authorization header
+fetcher.interceptors.request.use(
+    config => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+    },
+    error => {
+        return Promise.reject(error);
     }
-`;
+);
 
-// Define the progress percentages for each tab
-const TAB_PROGRESS_PERCENTAGES = {
-    'Research': 20,
-    'PRD': 10,
-    'Design': 15,
-    'Development': 30,
-    'Tech Documentation': 10,
-    'Launch and Training': 15,
-    'Feedback': 0, // Feedback, Tasks, Repo, Important Notes don't contribute to core progress
-    'Tasks': 0,
-    'Repo': 0,
-    'Important Notes': 0,
-};
-
-// Define the order of tabs for display
-const PRODUCT_TABS_ORDER = [
-    'Research', 'PRD', 'Design', 'Development', 'Tech Documentation',
-    'Launch and Training', 'Feedback', 'Tasks', 'Repo', 'Important Notes'
-];
-
-// --- Editor.js Wrapper Component ---
-// This component dynamically loads Editor.js and initializes it.
-// It takes initialData (JSON) and onChange callback.
-const Editor = ({ initialData, onChange, holder, readOnly = false, onReadyCallback = () => {} }) => {
-    const editorInstance = useRef(null);
-    const editorHolderId = useMemo(() => holder || `editor-js-holder-${Math.random().toString(36).substring(7)}`, [holder]);
-
-    useEffect(() => {
-        // Ensure Editor.js is loaded before initializing
-        if (window.EditorJS) {
-            if (editorInstance.current) {
-                editorInstance.current.destroy(); // Destroy existing instance if it exists
-            }
-
-            editorInstance.current = new window.EditorJS({
-                holder: editorHolderId,
-                data: initialData || { blocks: [] },
-                readOnly: readOnly,
-                tools: {
-                    header: {
-                        class: window.Header,
-                        inlineToolbar: true,
-                    },
-                    paragraph: {
-                        class: window.Paragraph,
-                        inlineToolbar: true,
-                    },
-                    list: {
-                        class: window.List,
-                        inlineToolbar: true,
-                    },
-                    code: window.CodeTool,
-                    table: window.Table,
-                    quote: {
-                        class: window.Quote,
-                        inlineToolbar: true,
-                        shortcut: 'CMD+SHIFT+O',
-                        config: {
-                            quotePlaceholder: 'Enter quote',
-                            captionPlaceholder: 'Quote\'s author',
-                        },
-                    },
-                    raw: window.RawTool,
-                    image: {
-                        class: window.ImageTool,
-                        config: {
-                            uploader: {
-                                uploadByFile(file) {
-                                    // This is a placeholder. In a real app, you'd upload the file
-                                    // to cloud storage (e.g., S3, GCS) and return its URL.
-                                    // For now, it will just show a placeholder image.
-                                    return new Promise(resolve => {
-                                        const reader = new FileReader();
-                                        reader.onloadend = () => {
-                                            resolve({
-                                                success: 1,
-                                                file: {
-                                                    url: `https://placehold.co/600x400/FF0000/FFFFFF?text=Image+Placeholder`, // Placeholder image
-                                                    // Add more properties if needed, e.g., width, height
-                                                }
-                                            });
-                                        };
-                                        reader.readAsDataURL(file);
-                                    });
-                                },
-                            }
-                        }
-                    },
-                    marker: window.Marker,
-                    warning: window.Warning,
-                    delimiter: window.Delimiter,
-                    inlineCode: window.InlineCode,
-                    link: window.LinkTool,
-                    embed: window.Embed,
-                    // Add other tools as needed
-                },
-                onChange: async () => {
-                    if (onChange) {
-                        const savedData = await editorInstance.current.save();
-                        onChange(savedData);
-                    }
-                },
-                onReady: () => {
-                    onReadyCallback();
-                }
-            });
-        }
-
-        return () => {
-            if (editorInstance.current && editorInstance.current.destroy) {
-                editorInstance.current.destroy();
-                editorInstance.current = null;
-            }
-        };
-    }, [editorHolderId, initialData, onChange, readOnly, onReadyCallback]);
-
-    return <Box id={editorHolderId} sx={{ border: '1px solid #e0e7ff', borderRadius: '0.5rem', minHeight: '200px', padding: 2, backgroundColor: '#f9fafb' }} />;
-};
-
-
-// --- AuthPage Component ---
-function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName, setUserTimezone: setAppUserTimezone }) {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState(''); 
-    const [username, setUsername] = useState(''); 
-    const [isLoginMode, setIsLoginMode] = useState(true); 
-    const [loading, setLoading] = useState(false);
-    const [authError, setAuthError] = useState(null);
-    const [rememberMe, setRememberMe] = useState(false);
-    const [showPassword, setShowPassword] = useState(false);
-    const [showConfirmPassword, setShowConfirmPassword] = useState(false); 
-    const [snackbarOpen, setSnackbarOpen] = useState(false);
-    const [snackbarMessage, setSnackbarMessage] = useState('');
-    const [snackbarSeverity, setSnackbarSeverity] = useState('success');
-
-    const handleSnackbarClose = (event, reason) => {
-        if (reason === 'clickaway') {
-            return;
-        }
-        setSnackbarOpen(false);
-    };
-
-    const handleAuthSubmit = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        setAuthError(null);
-        setAuthMessage('');
-        setSnackbarOpen(false); 
-
-        if (!isLoginMode) { 
-            if (password !== confirmPassword) {
-                setAuthError("Passwords do not match.");
-                setSnackbarMessage("Passwords do not match.");
-                setSnackbarSeverity('error');
-                setSnackbarOpen(true);
-                setLoading(false);
-                return;
-            }
-            if (!username.trim()) { 
-                setAuthError("Username is required for signup.");
-                setSnackbarMessage("Username is required for signup.");
-                setSnackbarSeverity('error');
-                setSnackbarOpen(true);
-                setLoading(false);
-                return;
-            }
-        }
-
-        try {
-            let response;
-            if (isLoginMode) {
-                response = await axios.post(`${API_URL}/api/login`, { email, password });
-                localStorage.setItem('token', response.data.token);
-                setAppUserName(response.data.username || 'User Name');
-                setAppUserTimezone(response.data.timezone || 'UTC+05:30 (Chennai)'); 
-                setIsLoggedIn(true);
-                setAuthMessage(response.data.message); 
-            } else {
-                response = await axios.post(`${API_URL}/api/signup`, { email, password, username }); 
-                setAuthMessage(response.data.message);
-                setSnackbarMessage(response.data.message);
-                setSnackbarSeverity('success');
-                setSnackbarOpen(true);
-                setIsLoginMode(true); 
-            }
-        } catch (err) {
-            console.error("Authentication error:", err);
-            const errorMessage = err.response && err.response.data && err.response.data.message 
-                                ? err.response.data.message 
-                                : "An unexpected error occurred. Please try again.";
-            setAuthError(errorMessage);
-            setSnackbarMessage(errorMessage);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <Box
-            sx={{
-                minHeight: '100vh',
-                display: 'flex',
-                fontFamily: 'Inter, sans-serif',
-                background: 'linear-gradient(to bottom right, #eef2ff, #fff, #f5f3ff)', 
-                '@media (min-width: 1024px)': { 
-                    display: 'flex', 
-                },
-            }}
-        >
-            {/* Left Side - Hero Section */}
-            <Box
-                sx={{
-                    display: { xs: 'none', lg: 'flex' }, 
-                    width: { lg: '50%' }, 
-                    background: 'linear-gradient(to bottom right, #4f46e5, #9333ea, #3730a3)', 
-                    position: 'relative',
-                    overflow: 'hidden',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    px: 6, 
-                    color: '#fff',
-                }}
-            >
-                {/* Background Pattern */}
-                <Box
-                    sx={{
-                        position: 'absolute',
-                        inset: 0,
-                        opacity: 0.1,
-                    }}
-                >
-                    <Box sx={{ position: 'absolute', top: 0, left: '-1rem', width: '18rem', height: '18rem', borderRadius: '9999px', mixBlendMode: 'multiply', filter: 'blur(3rem)', animation: 'pulse 4s infinite cubic-bezier(0.4, 0, 0.6, 1)', backgroundColor: '#d8b4fe' }} />
-                    <Box sx={{ position: 'absolute', top: 0, right: '-1rem', width: '18rem', height: '18rem', borderRadius: '9999px', mixBlendMode: 'multiply', filter: 'blur(3rem)', animation: 'pulse 4s infinite cubic-bezier(0.4, 0, 0.6, 1) 2s', backgroundColor: '#fde047' }} />
-                    <Box sx={{ position: 'absolute', bottom: '-2rem', left: '5rem', width: '18rem', height: '18rem', borderRadius: '9999px', mixBlendMode: 'multiply', filter: 'blur(3rem)', animation: 'pulse 4s infinite cubic-bezier(0.4, 0, 0.6, 1) 4s', backgroundColor: '#fbcfe8' }} />
-                </Box>
-                
-                <Box sx={{ position: 'relative', zIndex: 10 }}>
-                    <Box sx={{ marginBottom: 4 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
-                            <Sparkles size={40} color="#fde047" style={{ marginRight: '0.75rem' }} />
-                            <Typography variant="h6" component="span" sx={{ fontWeight: 'bold' }}>
-                                Auto Product Manager
-                            </Typography>
-                        </Box>
-                        <Typography variant="h3" component="h1" sx={{ fontWeight: 'bold', lineHeight: 'tight', marginBottom: 3 }}>
-                            Automate Your Entire Product Management
-                            <Box component="span" sx={{ display: 'block', color: '#fde047' }}>Lifecycle</Box>
-                        </Typography>
-                        <Typography variant="body1" sx={{ fontSize: '1.25rem', color: '#e0e7ff', marginBottom: 4, lineHeight: 'relaxed' }}>
-                            Leverage AI-powered insights to streamline every stage of your product lifecycle, from ideation to launch and beyond, with automated documentation and enhanced collaboration.
-                        </Typography>
-                    </Box>
-                    
-                    {/* Feature highlights */}
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Zap size={24} color="#fde047" style={{ marginRight: '0.75rem', flexShrink: 0 }} />
-                            <Typography variant="body2" sx={{ color: '#e0e7ff' }}>AI-Driven Product Lifecycle Automation</Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Users size={24} color="#fde047" style={{ marginRight: '0.75rem', flexShrink: 0 }} />
-                            <Typography variant="body2" sx={{ color: '#e0e7ff' }}>Seamless Team Collaboration</Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <BarChart3 size={24} color="#fde047" style={{ marginRight: '0.75rem', flexShrink: 0 }} />
-                            <Typography variant="body2" sx={{ color: '#e0e7ff' }}>Actionable Analytics & Strategic Insights</Typography>
-                        </Box>
-                    </Box>
-                </Box>
-            </Box>
-
-            {/* Right Side - Auth Form */}
-            <Box
-                sx={{
-                    width: { xs: '100%', lg: '50%' }, 
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    p: 4, 
-                }}
-            >
-                <Paper
-                    elevation={3}
-                    sx={{
-                        width: '100%',
-                        maxWidth: '28rem', 
-                        borderRadius: '1rem', 
-                        p: { xs: 4, sm: 5 }, 
-                        border: '1px solid #e5e7eb', 
-                    }}
-                >
-                    {/* Mobile Logo */}
-                    <Box sx={{ display: { xs: 'flex', lg: 'none' }, justifyContent: 'center', alignItems: 'center', flexDirection: 'column', marginBottom: 4 }}>
-                        <Sparkles size={32} color="#4f46e5" style={{ marginBottom: '0.5rem' }} />
-                        <Typography variant="h6" component="span" sx={{ fontWeight: 'bold' }}>
-                            Auto Product Manager
-                        </Typography>
-                    </Box>
-
-                    {/* Header */}
-                    <Box sx={{ textAlign: 'center', marginBottom: 4 }}>
-                        <Typography variant="h5" component="h2" sx={{ fontWeight: 'bold', color: '#111827', marginBottom: 1 }}>
-                            {isLoginMode ? 'Welcome back' : 'Create your account'}
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: '#4b5563' }}>
-                            {isLoginMode 
-                                ? 'Enter your credentials to access your dashboard' 
-                                : 'Get started with your free account today'
-                            }
-                        </Typography>
-                    </Box>
-
-                    {/* Form */}
-                    <Box component="form" onSubmit={handleAuthSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        {/* Email Input */}
-                        <TextField
-                            label="Work Email"
-                            id="email"
-                            type="email"
-                            placeholder="yourname@company.com"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                            fullWidth
-                            variant="outlined"
-                            sx={{
-                                '& .MuiOutlinedInput-root': {
-                                    borderRadius: '0.5rem',
-                                    '&.Mui-focused fieldset': {
-                                        borderColor: '#6366f1', 
-                                        boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)', 
-                                    },
-                                },
-                                '& .MuiInputLabel-root': {
-                                    fontWeight: 600, 
-                                    color: '#374151', 
-                                },
-                                '& .MuiInputBase-input::placeholder': {
-                                    color: '#9ca3af', 
-                                    opacity: 1, 
-                                },
-                            }}
-                        />
-
-                        {/* Username Input (only for signup mode) */}
-                        {!isLoginMode && (
-                            <TextField
-                                label="Your Name"
-                                id="username"
-                                type="text"
-                                placeholder="e.g., Sandeep"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                required 
-                                fullWidth
-                                variant="outlined"
-                                sx={{
-                                    '& .MuiOutlinedInput-root': {
-                                        borderRadius: '0.5rem',
-                                        '&.Mui-focused fieldset': {
-                                            borderColor: '#6366f1', 
-                                            boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)', 
-                                    },
-                                },
-                                '& .MuiInputLabel-root': {
-                                    fontWeight: 600, 
-                                    color: '#374151', 
-                                },
-                                '& .MuiInputBase-input::placeholder': {
-                                    color: '#9ca3af', 
-                                    opacity: 1, 
-                                },
-                            }}
-                        />
-                        )}
-
-                        {/* Password Input */}
-                        <TextField
-                            label="Password"
-                            id="password"
-                            type={showPassword ? "text" : "password"}
-                            placeholder="Enter your password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            fullWidth
-                            variant="outlined"
-                            InputProps={{
-                                endAdornment: (
-                                    <InputAdornment position="end">
-                                        <IconButton
-                                            aria-label="toggle password visibility"
-                                            onClick={() => setShowPassword(!showPassword)}
-                                            edge="end"
-                                            sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
-                                        >
-                                            {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                                        </IconButton>
-                                    </InputAdornment>
-                                ),
-                                sx: {
-                                    borderRadius: '0.5rem',
-                                    '&.Mui-focused fieldset': {
-                                        borderColor: '#6366f1', 
-                                        boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)', 
-                                    },
-                                },
-                            }}
-                            sx={{
-                                '& .MuiInputLabel-root': {
-                                    fontWeight: 600, 
-                                    color: '#374151', 
-                                },
-                                '& .MuiInputBase-input::placeholder': {
-                                    color: '#9ca3af', 
-                                    opacity: 1, 
-                                },
-                            }}
-                        />
-
-                        {/* Confirm Password Input (only for signup mode) */}
-                        {!isLoginMode && (
-                            <TextField
-                                label="Confirm Password"
-                                id="confirm-password"
-                                type={showConfirmPassword ? "text" : "password"}
-                                placeholder="Confirm your password"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                required
-                                fullWidth
-                                variant="outlined"
-                                InputProps={{
-                                    endAdornment: (
-                                        <InputAdornment position="end">
-                                            <IconButton
-                                                aria-label="toggle confirm password visibility"
-                                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                                edge="end"
-                                                sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
-                                            >
-                                                {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                                            </IconButton>
-                                        </InputAdornment>
-                                    ),
-                                    sx: {
-                                        borderRadius: '0.5rem',
-                                        '&.Mui-focused fieldset': {
-                                            borderColor: '#6366f1',
-                                            boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)',
-                                        },
-                                    },
-                                }}
-                                sx={{
-                                    '& .MuiInputLabel-root': {
-                                        fontWeight: 600,
-                                        color: '#374151',
-                                    },
-                                    '& .MuiInputBase-input::placeholder': {
-                                        color: '#9ca3af',
-                                        opacity: 1,
-                                    },
-                                }}
-                            />
-                        )}
-
-                        {/* Remember Me */}
-                        {isLoginMode && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
-                                <FormControlLabel
-                                    control={
-                                        <Checkbox
-                                            checked={rememberMe}
-                                            onChange={(e) => setRememberMe(e.target.checked)}
-                                            id="remember-me"
-                                            sx={{
-                                                color: '#4f46e5',
-                                                '&.Mui-checked': {
-                                                    color: '#4f46e5',
-                                                },
-                                                '& .MuiSvgIcon-root': {
-                                                    fontSize: '1rem',
-                                                },
-                                            }}
-                                        />
-                                    }
-                                    label={
-                                        <Typography variant="body2" sx={{ fontSize: '0.875rem', color: '#374151' }}>
-                                            Remember me
-                                        </Typography>
-                                    }
-                                />
-                            </Box>
-                        )}
-
-                        {/* Submit Button */}
-                        <Button
-                            type="submit"
-                            variant="contained"
-                            disabled={loading}
-                            sx={{
-                                width: '100%',
-                                paddingY: '0.75rem',
-                                paddingX: '1.5rem',
-                                background: 'linear-gradient(to right, #4f46e5, #9333ea)',
-                                color: '#fff',
-                                fontWeight: 600,
-                                borderRadius: '0.5rem',
-                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                                textTransform: 'none',
-                                transition: 'all 200ms ease-in-out',
-                                '&:hover': {
-                                    background: 'linear-gradient(to right, #4338ca, #7e22ce)',
-                                    transform: 'scale(1.02)',
-                                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                                },
-                                '&:disabled': {
-                                    opacity: 0.5,
-                                    cursor: 'not-allowed',
-                                    color: '#fff',
-                                },
-                            }}
-                        >
-                            {loading ? (
-                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                    <CircularProgress size={20} color="inherit" sx={{ marginRight: 1 }} />
-                                    Processing...
-                                </Box>
-                            ) : (
-                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                    {isLoginMode ? 'Sign in' : 'Create account'}
-                                    <ArrowRight size={20} style={{ marginLeft: '0.5rem' }} />
-                                </Box>
-                            )}
-                        </Button>
-                    </Box>
-
-                    {/* Error Message */}
-                    {authError && (
-                        <Alert severity="error" sx={{ marginTop: 3, borderRadius: '0.5rem', border: '1px solid #fecaca' }}>
-                            {authError}
-                        </Alert>
-                    )}
-
-                    {/* Toggle Mode */}
-                    <Box sx={{ marginTop: 4, textAlign: 'center' }}>
-                        <Typography variant="body2" sx={{ color: '#4b5563' }}>
-                            {isLoginMode ? "Don't have an account?" : "Already have an account?"}{' '}
-                            <Button
-                                variant="text"
-                                onClick={() => { 
-                                    setIsLoginMode(!isLoginMode); 
-                                    setAuthError(null); 
-                                    setEmail('');
-                                    setPassword('');
-                                    setConfirmPassword(''); 
-                                    setUsername(''); 
-                                    setSnackbarOpen(false);
-                                }}
-                                sx={{
-                                    color: '#4f46e5',
-                                    fontWeight: 600,
-                                    textTransform: 'none',
-                                    '&:hover': {
-                                        color: '#6366f1',
-                                        backgroundColor: 'transparent',
-                                    },
-                                }}
-                            >
-                                {isLoginMode ? 'Sign up' : 'Sign in'}
-                            </Button>
-                        </Typography>
-                    </Box>
-
-                    {/* Security notice */}
-                    <Typography variant="caption" sx={{ marginTop: 3, fontSize: '0.75rem', color: '#6b7280', textAlign: 'center', display: 'block' }}>
-                        By continuing, you agree to our Terms of Service and Privacy Policy.
-                    </Typography>
-                </Paper>
-            </Box>
-            <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
-                <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
-                    {snackbarMessage}
-                </Alert>
-            </Snackbar>
-        </Box>
-    );
-}
-
-// --- SettingsPage Component ---
-function SettingsPage({ 
-    setCurrentPage, 
-    userName, 
-    setUserName, 
-    userTimezone, 
-    setUserTimezone, 
-    handleSaveSettings,
-    setSnackbarMessage,
-    setSnackbarSeverity,
-    setSnackbarOpen
-}) {
-    const timezones = [
-        "UTC-12:00 (Baker Island)", "UTC-11:00 (Niue)", "UTC-10:00 (Hawaii)", "UTC-09:00 (Alaska)",
-        "UTC-08:00 (Pacific Time)", "UTC-07:00 (Mountain Time)", "UTC-06:00 (Central Time)",
-        "UTC-05:00 (Eastern Time)", "UTC-04:00 (Atlantic Time)", "UTC-03:00 (Buenos Aires)",
-        "UTC-02:00 (Fernando de Noronha)", "UTC-01:00 (Azores)", "UTC+00:00 (London)",
-        "UTC+01:00 (Berlin)", "UTC+02:00 (Athens)", "UTC+03:00 (Moscow)", "UTC+03:30 (Tehran)",
-        "UTC+04:00 (Dubai)", "UTC+04:30 (Kabul)", "UTC+05:00 (Karachi)", "UTC+05:30 (Chennai)",
-        "UTC+05:45 (Kathmandu)", "UTC+06:00 (Dhaka)", "UTC+06:30 (Yangon)", "UTC+07:00 (Bangkok)",
-        "UTC+08:00 (Beijing)", "UTC+08:45 (Eucla)", "UTC+09:00 (Tokyo)", "UTC+09:30 (Adelaide)",
-        "UTC+10:00 (Sydney)", "UTC+10:30 (Lord Howe Island)", "UTC+11:00 (Solomon Islands)",
-        "UTC+12:00 (Fiji)", "UTC+12:45 (Chatham Islands)", "UTC+13:00 (Tonga)", "UTC+14:00 (Kiritimati)"
-    ];
-
-    const displayProfileInitial = useMemo(() => {
-        return userName ? userName.charAt(0).toUpperCase() : 'U';
-    }, [userName]);
-
-    return (
-        <Box sx={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            height: '100vh', 
-            fontFamily: 'Inter, sans-serif', 
-            background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)',
-            p: 3,
-            overflowY: 'auto' 
-        }}>
-            <Paper
-                elevation={3}
-                sx={{
-                    maxWidth: '800px',
-                    margin: 'auto',
-                    p: { xs: 3, sm: 5 },
-                    borderRadius: '1rem',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                    backgroundColor: '#fff',
-                    width: '100%',
-                }}
-            >
-                <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: 4 }}>
-                    <IconButton onClick={() => setCurrentPage('dashboard')} sx={{ marginRight: 2, color: '#4f46e5' }}>
-                        <ArrowLeft size={24} />
-                    </IconButton>
-                    <Typography variant="h5" component="h2" sx={{ fontWeight: 'bold', color: '#111827' }}>
-                        Settings
-                    </Typography>
-                </Box>
-
-                <Box sx={{ marginBottom: 4 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 2 }}>
-                        Profile Settings
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 3 }}>
-                        <Box
-                            sx={{
-                                width: 100,
-                                height: 100,
-                                borderRadius: '50%',
-                                backgroundColor: '#e0e7ff', 
-                                color: '#4f46e5', 
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '3rem',
-                                fontWeight: 'bold',
-                                border: '3px solid #4f46e5',
-                                marginBottom: 1,
-                                transition: 'transform 0.2s',
-                                animation: 'pulse-initial 2s infinite', 
-                                '&:hover': { transform: 'scale(1.05)' }
-                            }}
-                        >
-                            {displayProfileInitial}
-                        </Box>
-                        <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.875rem' }}>Your profile initial</Typography>
-                    </Box>
-                    <TextField
-                        margin="normal"
-                        id="user-name"
-                        label="Your Name"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={userName}
-                        onChange={(e) => setUserName(e.target.value)}
-                        sx={{ marginBottom: 2 }}
-                    />
-                    <FormControl fullWidth margin="normal">
-                        <InputLabel id="timezone-select-label">Timezone</InputLabel>
-                        <Select
-                            labelId="timezone-select-label"
-                            id="user-timezone"
-                            value={userTimezone}
-                            label="Timezone"
-                            onChange={(e) => setUserTimezone(e.target.value)}
-                        >
-                            {timezones.map((tz) => (
-                                <MenuItem key={tz} value={tz}>{tz}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                </Box>
-
-                <Box sx={{ textAlign: 'right', marginTop: 4 }}>
-                    <Button 
-                        onClick={handleSaveSettings} 
-                        variant="contained" 
-                        sx={{ 
-                            textTransform: 'none', 
-                            backgroundColor: '#4f46e5', 
-                            color: '#fff', 
-                            borderRadius: '0.5rem',
-                            padding: '0.75rem 1.5rem',
-                            '&:hover': { backgroundColor: '#4338ca' }
-                        }}
-                    >
-                        Save Changes
-                    </Button>
-                </Box>
-            </Paper>
-        </Box>
-    );
-}
-
-// --- Main App Component ---
-function App() {
-    const [products, setProducts] = useState([]); 
-    const [selectedProduct, setSelectedProduct] = useState(null);
-    const [newProductName, setNewProductName] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const [snackbarOpen, setSnackbarOpen] = useState(false);
-    const [snackbarMessage, setSnackbarMessage] = useState('');
-    const [snackbarSeverity, setSnackbarSeverity] = useState('success');
-
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
-    const [authMessage, setAuthMessage] = useState(''); 
-
-    // State for new product modal
-    const [showAddProductModal, setShowAddProductModal] = useState(false);
-    const [newProductStatus, setNewProductStatus] = useState('Active'); // Default status
-    const [newProductParentId, setNewProductParentId] = useState(''); // For iteration items
-
-    // State for delete confirmation modal
-    const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
-    const [productToDeleteId, setProductToDeleteId] = useState(null);
-
-    // State for search and sort/filter
-    const [searchTerm, setSearchTerm] = useState('');
-    const [sortBy, setSortBy] = useState('newest'); 
-    const [filterByStatus, setFilterByStatus] = useState('All'); // Filter by overall product status
-
-    // State for Profile Menu
-    const [anchorElProfileMenu, setAnchorElProfileMenu] = useState(null);
-    const openProfileMenu = Boolean(anchorElProfileMenu);
-
-    // State for Settings Page navigation
-    const [currentPage, setCurrentPage] = useState('dashboard'); 
-
-    const [userName, setUserName] = useState('User'); 
-    const [userTimezone, setUserTimezone] = useState('UTC+05:30 (Chennai)'); 
-
-    const [quoteOfTheDay, setQuoteOfTheDay] = useState('');
-    const [quoteEmoji, setQuoteEmoji] = useState('💡'); 
-
-    // AI Chat states for Research Tab
-    const [researchChatHistory, setResearchChatHistory] = useState([]);
-    const [currentResearchPrompt, setCurrentResearchPrompt] = useState('');
-    const [isResearchAILoading, setIsResearchAILoading] = useState(false);
-    const [researchDocumentData, setResearchDocumentData] = useState(null); // Editor.js JSON for research doc
-
-    // AI Chat states for PRD Tab
-    const [prdChatHistory, setPrdChatHistory] = useState([]);
-    const [currentPrdPrompt, setCurrentPrdPrompt] = useState('');
-    const [isPrdAILoading, setIsPrdAILoading] = useState(false);
-    const [prdDocumentData, setPrdDocumentData] = useState(null); // Editor.js JSON for PRD
-
-    // Customer Interview states
-    const [showAddInterviewModal, setShowAddInterviewModal] = useState(false);
-    const [newInterviewCustomerName, setNewInterviewCustomerName] = useState('');
-    const [newInterviewCustomerEmail, setNewInterviewCustomerEmail] = useState('');
-    const [newInterviewDate, setNewInterviewDate] = useState(new Date().toISOString().slice(0, 16)); // YYYY-MM-DDTHH:MM
-    const [customerInterviews, setCustomerInterviews] = useState([]);
-    const [selectedInterview, setSelectedInterview] = useState(null);
-    const [interviewNotesData, setInterviewNotesData] = useState(null); // Editor.js JSON for interview notes
-    const [interviewSummaryData, setInterviewSummaryData] = useState(null); // Editor.js JSON for AI summary
-
-    // Interview Template states
-    const [showTemplateModal, setShowTemplateModal] = useState(false);
-    const [templateName, setTemplateName] = useState('');
-    const [templateQuestionsData, setTemplateQuestionsData] = useState(null); // Editor.js JSON for template questions
-    const [interviewTemplates, setInterviewTemplates] = useState([]);
-    const [selectedTemplate, setSelectedTemplate] = useState(null);
-    const [isTemplateAILoading, setIsTemplateAILoading] = useState(false);
-
-    // Current active tab for product details
-    const [selectedProductTab, setSelectedProductTab] = useState(0); 
-
-    // Array of quotes for Product Managers
-    const productManagerQuotes = useMemo(() => [
-        { quote: "The only way to do great work is to love what you do.", author: "Steve Jobs", emoji: "🍎" },
-        { quote: "Your most unhappy customers are your greatest source of learning.", author: "Bill Gates", emoji: "📚" },
-        { quote: "If you're not embarrassed by the first version of your product, you've launched too late.", author: "Reid Hoffman", emoji: "🚀" },
-        { quote: "Design is not just what it looks like and feels like. Design is how it works.", author: "Steve Jobs", emoji: "🎨" },
-        { quote: "The goal is to build a product that people use, not a product that people like.", author: "Marty Cagan", emoji: "🎯" },
-        { quote: "Innovation is saying no to a thousand things.", author: "Steve Jobs", emoji: "💡" },
-        { quote: "Good product managers are the CEOs of their products.", author: "Ben Horowitz", emoji: "👑" },
-        { quote: "The best products are built by teams who are obsessed with their customers.", author: "Jeff Bezos", emoji: "🤝" },
-        { quote: "You can't just ask customers what they want and then try to give that to them. By the time you get it built, they'll want something new.", author: "Steve Jobs", emoji: "🔮" },
-        { quote: "Focus on the user and all else will follow.", author: "Google's Ten Things We Know to Be True", emoji: "🔍" }
-    ], []);
-
-    // Effect to set the quote of the day
-    useEffect(() => {
-        const today = new Date();
-        const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
-        const quoteData = productManagerQuotes[dayOfYear % productManagerQuotes.length];
-        setQuoteOfTheDay(quoteData.quote + " – " + quoteData.author);
-        setQuoteEmoji(quoteData.emoji);
-    }, [productManagerQuotes]);
-
-    // Lottie animation setup (empty state)
-    const lottieContainer = useRef(null);
-    const lottieInstance = useRef(null);
-    useEffect(() => {
-        if (lottieContainer.current && !selectedProduct) {
-            if (window.lottie) {
-                if (lottieInstance.current) {
-                    lottieInstance.current.destroy(); 
-                }
-                lottieInstance.current = window.lottie.loadAnimation({
-                    container: lottieContainer.current,
-                    renderer: 'svg',
-                    loop: true,
-                    autoplay: true,
-                    animationData: {
-                        "v": "5.7.4", "fr": 60, "ip": 0, "op": 120, "wh": 100, "ht": 100, "nm": "Empty State", "ddd": 0, "assets": [],
-                        "layers": [
-                            { "ddd": 0, "ind": 1, "ty": 4, "nm": "Folder", "sr": 1, "ks": { "o": { "a": 0, "k": 100, "ix": 11 }, "rp": { "a": 0, "k": 0, "ix": 12 }, "s": { "a": 0, "k": [100, 100, 100], "ix": 6 }, "r": { "a": 0, "k": 0, "ix": 10 }, "p": { "a": 0, "k": [50, 50, 0], "ix": 2 }, "a": { "a": 0, "k": [50, 50, 0], "ix": 1 } }, "ao": 0, "shapes": [{ "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [0.8, 0.8, 0.8, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.5, 0.5, 0.5, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 1", "mn": "ADBE Vector Group", "hd": false }, { "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [0.9, 0.9, 0.9, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.6, 0.6, 0.6, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 2", "mn": "ADBE Vector Group", "hd": false, "tf": true }, { "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [1, 1, 1, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.7, 0.7, 0.7, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 3", "mn": "ADBE Vector Group", "hd": false, "tf": true }], "ip": 0, "op": 120, "st": 0, "bm": 0 }, { "ddd": 0, "ind": 2, "ty": 4, "nm": "Magnifying Glass", "sr": 1, "ks": { "o": { "a": 0, "k": 100, "ix": 11 }, "rp": { "a": 0, "k": 0, "ix": 12 }, "s": { "a": 0, "k": [100, 100, 100], "ix": 6 }, "r": { "a": 0, "k": 0, "ix": 10 }, "p": { "a": 0, "k": [50, 50, 0], "ix": 2 }, "a": { "a": 0, "k": [50, 50, 0], "ix": 1 } }, "ao": 0, "shapes": [{ "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.2, 0.2, 0.2, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "w": { "a": 0, "k": 2, "ix": 5 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Ellipse 1", "mn": "ADBE Vector Group", "hd": false }], "ip": 0, "op": 120, "st": 0, "bm": 0 } ]
-                    }
-                });
-            }
-        }
-    }, [selectedProduct]); 
-
-    const handleSnackbarClose = (event, reason) => {
-        if (reason === 'clickaway') {
-            return;
-        }
-        setSnackbarOpen(false);
-    };
+// --- Auth Provider Component ---
+function AuthProvider({ children }) {
+    const [user, setUser] = useState(null);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const token = localStorage.getItem('token');
-        if (token) {
-            setIsLoggedIn(true);
-            const fetchUserProfile = async () => {
-                try {
-                    const response = await axios.get(`${API_URL}/api/user/profile`, {
-                        headers: {
-                            Authorization: `Bearer ${token}`
-                        }
-                    });
-                    setUserName(response.data.username || 'User');
-                    setUserTimezone(response.data.timezone || 'UTC+05:30 (Chennai)');
-                } catch (err) {
-                    console.error("Error fetching user profile:", err);
-                    setSnackbarMessage("Failed to load user profile. Please try logging in again.");
-                    setSnackbarSeverity('error');
-                    setSnackbarOpen(true);
-                    handleLogout(); 
-                }
-            };
-            fetchUserProfile();
+        const username = localStorage.getItem('username');
+        const timezone = localStorage.getItem('timezone');
+        if (token && username) {
+            setUser({ token, username, timezone });
         }
-    }, [isLoggedIn]); 
+        setLoading(false);
+    }, []);
 
-    // Function to calculate product progress based on tab statuses
-    const calculateProductProgress = useCallback((product) => {
-        let totalWeightedProgress = 0;
-        let totalWeight = 0;
+    const login = async (email, password) => {
+        try {
+            const response = await fetcher.post('/login', { email, password });
+            const { token, username, timezone } = response.data;
+            localStorage.setItem('token', token);
+            localStorage.setItem('username', username);
+            localStorage.setItem('timezone', timezone);
+            setUser({ token, username, timezone });
+            return { success: true };
+        } catch (error) {
+            console.error('Login failed:', error.response?.data || error.message);
+            return { success: false, message: error.response?.data?.message || 'Login failed' };
+        }
+    };
 
-        PRODUCT_TABS_ORDER.forEach(tabName => {
-            const statusKey = `${tabName.toLowerCase().replace(/ /g, '_')}_status`; // e.g., 'research_status'
-            const status = product[statusKey];
-            const weight = TAB_PROGRESS_PERCENTAGES[tabName] || 0; // Get defined percentage, default to 0
+    const signup = async (email, password, username) => {
+        try {
+            const response = await fetcher.post('/signup', { email, password, username });
+            return { success: true, message: response.data.message };
+        } catch (error) {
+            console.error('Signup failed:', error.response?.data || error.message);
+            return { success: false, message: error.response?.data?.message || 'Signup failed' };
+        }
+    };
 
-            totalWeight += weight;
+    const logout = () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('username');
+        localStorage.removeItem('timezone');
+        setUser(null);
+    };
 
-            if (status === 'Completed' || status === 'Skipped') {
-                totalWeightedProgress += weight;
-            } else if (status === 'In Progress') {
-                // For 'In Progress', contribute half of its weight as a heuristic
-                totalWeightedProgress += weight / 2; 
+    const updateProfile = async (newUsername, newTimezone) => {
+        try {
+            const response = await fetcher.put('/user/profile', {
+                username: newUsername,
+                timezone: newTimezone,
+            });
+            const updatedUser = response.data.user;
+            localStorage.setItem('username', updatedUser.username);
+            localStorage.setItem('timezone', updatedUser.timezone);
+            setUser(prev => ({ ...prev, username: updatedUser.username, timezone: updatedUser.timezone }));
+            return { success: true, message: response.data.message };
+        } catch (error) {
+            console.error('Profile update failed:', error.response?.data || error.message);
+            return { success: false, message: error.response?.data?.message || 'Failed to update profile' };
+        }
+    };
+
+    return (
+        <AuthContext.Provider value={{ user, login, signup, logout, loading, updateProfile }}>
+            {children}
+        </AuthContext.Provider>
+    );
+}
+
+// --- App Component ---
+function App() {
+    const { user, loading } = useContext(AuthContext);
+    const [currentPage, setCurrentPage] = useState('login'); // 'login', 'signup', 'dashboard', 'productDetail', 'profile'
+    const [selectedProductId, setSelectedProductId] = useState(null);
+
+    useEffect(() => {
+        if (!loading) {
+            if (user) {
+                setCurrentPage('dashboard');
+            } else {
+                setCurrentPage('login');
             }
-        });
+        }
+    }, [user, loading]);
 
-        if (totalWeight === 0) return 0;
-        return Math.round((totalWeightedProgress / totalWeight) * 100);
+    const navigateTo = (page, productId = null) => {
+        setCurrentPage(page);
+        setSelectedProductId(productId);
+    };
+
+    if (loading) {
+        return <div className="flex items-center justify-center min-h-screen bg-gray-100">Loading...</div>;
+    }
+
+    let content;
+    switch (currentPage) {
+        case 'login':
+            content = <LoginPage navigateTo={navigateTo} />;
+            break;
+        case 'signup':
+            content = <SignupPage navigateTo={navigateTo} />;
+            break;
+        case 'dashboard':
+            content = <DashboardPage navigateTo={navigateTo} />;
+            break;
+        case 'productDetail':
+            content = <ProductDetailView productId={selectedProductId} navigateTo={navigateTo} />;
+            break;
+        case 'profile':
+            content = <ProfilePage navigateTo={navigateTo} />;
+            break;
+        default:
+            content = <LoginPage navigateTo={navigateTo} />;
+    }
+
+    return (
+        <div className="min-h-screen bg-gray-100 font-inter">
+            {user && <Navbar navigateTo={navigateTo} username={user.username} />}
+            <main className="container mx-auto p-4">
+                {content}
+            </main>
+        </div>
+    );
+}
+
+// --- Navbar Component ---
+function Navbar({ navigateTo, username }) {
+    const { logout } = useContext(AuthContext);
+    return (
+        <nav className="bg-gradient-to-r from-purple-600 to-indigo-700 p-4 shadow-lg">
+            <div className="container mx-auto flex justify-between items-center">
+                <h1 className="text-white text-2xl font-bold cursor-pointer" onClick={() => navigateTo('dashboard')}>
+                    Auto Product Manager
+                </h1>
+                <div className="flex items-center space-x-4">
+                    <span className="text-white text-lg">Hello, {username}!</span>
+                    <button
+                        onClick={() => navigateTo('profile')}
+                        className="bg-white text-purple-700 px-4 py-2 rounded-lg shadow hover:bg-gray-100 transition duration-300 ease-in-out transform hover:scale-105"
+                    >
+                        Profile
+                    </button>
+                    <button
+                        onClick={logout}
+                        className="bg-red-500 text-white px-4 py-2 rounded-lg shadow hover:bg-red-600 transition duration-300 ease-in-out transform hover:scale-105"
+                    >
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </nav>
+    );
+}
+
+// --- Login Page Component ---
+function LoginPage({ navigateTo }) {
+    const { login } = useContext(AuthContext);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [message, setMessage] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setMessage('');
+        const result = await login(email, password);
+        if (result.success) {
+            navigateTo('dashboard');
+        } else {
+            setMessage(result.message);
+        }
+    };
+
+    return (
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+            <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+                <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">Login</h2>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
+                            Email
+                        </label>
+                        <input
+                            type="email"
+                            id="email"
+                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+                            Password
+                        </label>
+                        <input
+                            type="password"
+                            id="password"
+                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105"
+                    >
+                        Login
+                    </button>
+                </form>
+                {message && <p className="mt-4 text-center text-red-500">{message}</p>}
+                <p className="mt-6 text-center text-gray-600">
+                    Don't have an account?{' '}
+                    <button
+                        onClick={() => navigateTo('signup')}
+                        className="text-purple-600 hover:underline font-bold"
+                    >
+                        Sign Up
+                    </button>
+                </p>
+            </div>
+        </div>
+    );
+}
+
+// --- Signup Page Component ---
+function SignupPage({ navigateTo }) {
+    const { signup } = useContext(AuthContext);
+    const [email, setEmail] = useState('');
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [message, setMessage] = useState('');
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setMessage('');
+        const result = await signup(email, password, username);
+        setMessage(result.message);
+        if (result.success) {
+            // Optionally navigate to login or show success message only
+            setEmail('');
+            setUsername('');
+            setPassword('');
+            setTimeout(() => navigateTo('login'), 3000); // Redirect after 3 seconds
+        }
+    };
+
+    return (
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+            <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+                <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">Sign Up</h2>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
+                            Email
+                        </label>
+                        <input
+                            type="email"
+                            id="email"
+                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
+                            Username
+                        </label>
+                        <input
+                            type="text"
+                            id="username"
+                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+                            Password
+                        </label>
+                        <input
+                            type="password"
+                            id="password"
+                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105"
+                    >
+                        Sign Up
+                    </button>
+                </form>
+                {message && <p className="mt-4 text-center text-green-500">{message}</p>}
+                <p className="mt-6 text-center text-gray-600">
+                    Already have an account?{' '}
+                    <button
+                        onClick={() => navigateTo('login')}
+                        className="text-purple-600 hover:underline font-bold"
+                    >
+                        Login
+                    </button>
+                </p>
+            </div>
+        </div>
+    );
+}
+
+// --- Profile Page Component ---
+function ProfilePage({ navigateTo }) {
+    const { user, updateProfile } = useContext(AuthContext);
+    const [username, setUsername] = useState(user?.username || '');
+    const [timezone, setTimezone] = useState(user?.timezone || 'UTC+05:30 (Chennai)');
+    const [message, setMessage] = useState('');
+
+    const handleUpdate = async (e) => {
+        e.preventDefault();
+        setMessage('');
+        const result = await updateProfile(username, timezone);
+        setMessage(result.message);
+        if (result.success) {
+            // Optionally, clear message after a few seconds
+            setTimeout(() => setMessage(''), 3000);
+        }
+    };
+
+    return (
+        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-80px)]">
+            <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+                <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">User Profile</h2>
+                <form onSubmit={handleUpdate} className="space-y-4">
+                    <div>
+                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
+                            Email (Read-only)
+                        </label>
+                        <input
+                            type="email"
+                            id="email"
+                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight bg-gray-100 cursor-not-allowed"
+                            value={user?.email || ''}
+                            disabled
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
+                            Username
+                        </label>
+                        <input
+                            type="text"
+                            id="username"
+                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="timezone">
+                            Timezone
+                        </label>
+                        <input
+                            type="text"
+                            id="timezone"
+                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            value={timezone}
+                            onChange={(e) => setTimezone(e.target.value)}
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105"
+                    >
+                        Update Profile
+                    </button>
+                </form>
+                {message && (
+                    <p className={`mt-4 text-center ${message.includes('success') ? 'text-green-500' : 'text-red-500'}`}>
+                        {message}
+                    </p>
+                )}
+                <button
+                    onClick={() => navigateTo('dashboard')}
+                    className="mt-6 w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105"
+                >
+                    Back to Dashboard
+                </button>
+            </div>
+        </div>
+    );
+}
+
+
+// --- Dashboard Page Component ---
+function DashboardPage({ navigateTo }) {
+    const { user } = useContext(AuthContext);
+    const [products, setProducts] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [newProductName, setNewProductName] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+
+    const fetchProducts = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await fetcher.get('/products');
+            setProducts(response.data);
+        } catch (err) {
+            console.error('Error fetching products:', err);
+            setError('Failed to fetch products. Please try again.');
+        } finally {
+            setLoading(false);
+        }
     }, []);
 
     useEffect(() => {
-        const fetchProducts = async () => {
-            if (!isLoggedIn) return;
-
-            setLoading(true);
-            setError(null);
-            try {
-                const token = localStorage.getItem('token');
-                const response = await axios.get(`${API_URL}/api/products`, {
-                    headers: {
-                        Authorization: `Bearer ${token}` 
-                    }
-                });
-                // Calculate progress for each product after fetching
-                const productsWithProgress = response.data.map(p => ({
-                    ...p,
-                    progress: calculateProductProgress(p) // Update progress based on new logic
-                }));
-                setProducts(productsWithProgress);
-            } catch (err) {
-                console.error("Error fetching products:", err);
-                const errorMessage = err.response && err.response.data && err.response.data.message 
-                                    ? err.response.data.message 
-                                    : "Failed to load products. Please check the backend server or your login status.";
-                setError(errorMessage);
-                setSnackbarMessage(errorMessage);
-                setSnackbarSeverity('error');
-                setSnackbarOpen(true);
-                if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-                    handleLogout();
-                }
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchProducts();
-    }, [isLoggedIn, calculateProductProgress]);
-
-    // Filter and Sort Logic
-    const filteredAndSortedProducts = useMemo(() => {
-        let currentProducts = products;
-
-        // Apply status filter
-        if (filterByStatus !== 'All') {
-            currentProducts = currentProducts.filter(p => p.status === filterByStatus);
+        if (user) {
+            fetchProducts();
         }
+    }, [user, fetchProducts]);
 
-        // Apply search filter
-        if (searchTerm) {
-            currentProducts = currentProducts.filter(p => 
-                p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (p.research_document_json && p.research_document_json.toLowerCase().includes(searchTerm.toLowerCase())) // Search in research doc
-            );
-        }
-
-        // Apply sort
-        currentProducts.sort((a, b) => {
-            if (sortBy === 'newest') {
-                return new Date(b.created_at) - new Date(a.created_at);
-            } else if (sortBy === 'oldest') {
-                return new Date(a.created_at) - new Date(b.created_at);
-            } else if (sortBy === 'alpha-asc') {
-                return a.name.localeCompare(b.name);
-            } else if (sortBy === 'alpha-desc') {
-                return b.name.localeCompare(a.name);
-            } else if (sortBy === 'progress-asc') {
-                return a.progress - b.progress;
-            } else if (sortBy === 'progress-desc') {
-                return b.progress - a.progress;
-            }
-            return 0;
-        });
-
-        return currentProducts;
-    }, [products, searchTerm, sortBy, filterByStatus]);
-
-    const handleAddProduct = async () => {
-        if (!newProductName.trim()) {
-            setSnackbarMessage("Product name cannot be empty.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
-            return;
-        }
-        setLoading(true);
-        setError(null);
-        setSnackbarOpen(false);
-        setShowAddProductModal(false); 
+    const handleCreateProduct = async (e) => {
+        e.preventDefault();
         try {
-            const token = localStorage.getItem('token');
-            const newProductData = {
-                name: newProductName,
-                status: newProductStatus,
-                parent_id: newProductParentId || null, // Ensure null if empty
-                is_archived: false,
-                progress: 0, 
-                // Initialize all tab statuses
-                research_status: 'Not Started',
-                prd_status: 'Not Started',
-                design_status: 'Not Started',
-                development_status: 'Not Started',
-                tech_doc_status: 'Not Started',
-                launch_training_status: 'Not Started',
-                // No initial JSON content for documents
-            };
-
-            const response = await axios.post(`${API_URL}/api/products`, newProductData, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
-            // Recalculate progress for the new product
-            const productWithProgress = {
-                ...response.data,
-                progress: calculateProductProgress(response.data)
-            };
-            setProducts([productWithProgress, ...products]); 
+            await fetcher.post('/products', { name: newProductName });
             setNewProductName('');
-            setNewProductStatus('Active');
-            setNewProductParentId('');
-            setSnackbarMessage("Product added successfully!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
+            setShowCreateModal(false);
+            fetchProducts(); // Refresh the list
         } catch (err) {
-            console.error("Error creating product:", err);
-            const errorMessage = err.response && err.response.data && err.response.data.message 
-                                ? err.response.data.message 
-                                : "Failed to add product. Please try again.";
-            setError(errorMessage);
-            setSnackbarMessage(errorMessage);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
+            console.error('Error creating product:', err);
+            setError('Failed to create product. Please try again.');
         }
     };
 
-    const handleSelectProduct = useCallback(async (product) => {
-        setLoading(true);
-        try {
-            // Fetch the full product details again to ensure latest data
-            const token = localStorage.getItem('token');
-            const response = await axios.get(`${API_URL}/api/products/${product.id}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const fullProduct = response.data;
-
-            setSelectedProduct(fullProduct);
-            setSelectedProductTab(0); // Default to the first tab (Research)
-
-            // Set initial data for Editor.js instances
+    const handleDeleteProduct = async (productId) => {
+        if (window.confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
             try {
-                setResearchDocumentData(fullProduct.research_document_json ? JSON.parse(fullProduct.research_document_json) : { blocks: [] });
-                setPrdDocumentData(fullProduct.prd_document_json ? JSON.parse(fullProduct.prd_document_json) : { blocks: [] });
-                // Reset chat histories when selecting a new product
-                setResearchChatHistory([]);
-                setPrdChatHistory([]);
-            } catch (e) {
-                console.error("Error parsing JSON for Editor.js:", e);
-                setSnackbarMessage("Error loading document content. It might be malformed.");
-                setSnackbarSeverity('error');
-                setSnackbarOpen(true);
-                setResearchDocumentData({ blocks: [] });
-                setPrdDocumentData({ blocks: [] });
+                await fetcher.delete(`/products/${productId}`);
+                fetchProducts(); // Refresh the list
+            } catch (err) {
+                console.error('Error deleting product:', err);
+                setError('Failed to delete product. Please try again.');
             }
-
-            // Fetch customer interviews for the selected product
-            const interviewsResponse = await axios.get(`${API_URL}/api/customer_interviews/product/${product.id}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setCustomerInterviews(interviewsResponse.data);
-            setSelectedInterview(null); // Clear selected interview when changing product
-
-        } catch (err) {
-            console.error("Error selecting product or fetching its details:", err);
-            const errorMessage = err.response && err.response.data && err.response.data.message 
-                                ? err.response.data.message 
-                                : "Failed to load product details. Please try again.";
-            setError(errorMessage);
-            setSnackbarMessage(errorMessage);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-            setSelectedProduct(null); // Clear selected product on error
-        } finally {
-            setLoading(false);
         }
-    }, [calculateProductProgress]);
+    };
 
-    const handleUpdateProduct = async (productId, updateData) => {
+    const filteredProducts = products.filter(product =>
+        product.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    if (loading) return <div className="text-center mt-8">Loading products...</div>;
+    if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
+
+    return (
+        <div className="mt-8">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-3xl font-bold text-gray-800">My Products</h2>
+                <div className="flex items-center space-x-4">
+                    <input
+                        type="text"
+                        placeholder="Search products..."
+                        className="shadow appearance-none border rounded-lg py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    <button
+                        onClick={() => setShowCreateModal(true)}
+                        className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
+                    >
+                        + Create New Product
+                    </button>
+                </div>
+            </div>
+
+            {filteredProducts.length === 0 ? (
+                <p className="text-center text-gray-600 text-lg">No products found. Start by creating one!</p>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredProducts.map((product) => (
+                        <div key={product.id} className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300">
+                            <h3 className="text-xl font-semibold text-gray-900 mb-2">{product.name}</h3>
+                            <p className="text-gray-600 text-sm mb-4">Status: <span className={`font-medium ${product.status === 'Active' ? 'text-green-600' : 'text-yellow-600'}`}>{product.status}</span></p>
+                            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+                                <div className="bg-purple-600 h-2.5 rounded-full" style={{ width: `${product.progress}%` }}></div>
+                            </div>
+                            <p className="text-gray-600 text-sm mb-4">Progress: {product.progress}%</p>
+                            <div className="flex justify-end space-x-2">
+                                <button
+                                    onClick={() => navigateTo('productDetail', product.id)}
+                                    className="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-1 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                                >
+                                    View Details
+                                </button>
+                                <button
+                                    onClick={() => handleDeleteProduct(product.id)}
+                                    className="bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-1 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {showCreateModal && (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+                        <h3 className="text-2xl font-bold text-gray-800 mb-4">Create New Product</h3>
+                        <form onSubmit={handleCreateProduct} className="space-y-4">
+                            <div>
+                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="productName">
+                                    Product Name
+                                </label>
+                                <input
+                                    type="text"
+                                    id="productName"
+                                    className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    value={newProductName}
+                                    onChange={(e) => setNewProductName(e.target.value)}
+                                    required
+                                />
+                            </div>
+                            <div className="flex justify-end space-x-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCreateModal(false)}
+                                    className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg transition duration-300 ease-in-out"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300 ease-in-out"
+                                >
+                                    Create Product
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// --- ProductDetailView Component ---
+function ProductDetailView({ productId, navigateTo }) {
+    const { user } = useContext(AuthContext);
+    const [product, setProduct] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'research', 'prd', 'design', 'development', 'tech_doc', 'launch_training', 'important_notes', 'interviews', 'templates', 'tasks', 'collaboration'
+    const [editMode, setEditMode] = useState(false);
+    const [editedProduct, setEditedProduct] = useState(null);
+
+    const fetchProduct = useCallback(async () => {
         setLoading(true);
         setError(null);
-        setSnackbarOpen(false);
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.put(`${API_URL}/api/products/${productId}`, updateData, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
-            // Update local state for products and selectedProduct
-            const updatedProduct = {
-                ...response.data,
-                progress: calculateProductProgress(response.data)
-            };
-            setProducts(products.map(p =>
-                p.id === productId ? updatedProduct : p
-            ));
-            setSelectedProduct(updatedProduct); // Update selected product with latest data
-            setSnackbarMessage("Product updated successfully!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
+            const response = await fetcher.get(`/products/${productId}`);
+            setProduct(response.data);
+            setEditedProduct(response.data); // Initialize editedProduct with fetched data
         } catch (err) {
-            console.error("Error updating product:", err);
-            const errorMessage = err.response && err.response.data && err.response.data.message 
-                                ? err.response.data.message 
-                                : "Failed to update product. Please try again.";
-            setError(errorMessage);
-            setSnackbarMessage(errorMessage);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
+            console.error('Error fetching product details:', err);
+            setError('Failed to fetch product details.');
         } finally {
             setLoading(false);
         }
-    };
+    }, [productId]);
 
-    const confirmDeleteProduct = (productId) => {
-        setProductToDeleteId(productId);
-        setShowDeleteConfirmModal(true);
-    };
-
-    const handleDeleteProduct = async () => {
-        setLoading(true);
-        setError(null);
-        setSnackbarOpen(false);
-        setShowDeleteConfirmModal(false); 
-        try {
-            const token = localStorage.getItem('token');
-            await axios.delete(`${API_URL}/api/products/${productToDeleteId}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
-            setProducts(products.filter(p => p.id !== productToDeleteId));
-            if (selectedProduct && selectedProduct.id === productToDeleteId) {
-                setSelectedProduct(null);
-                setResearchDocumentData(null);
-                setPrdDocumentData(null);
-                setResearchChatHistory([]);
-                setPrdChatHistory([]);
-                setCustomerInterviews([]);
-                setSelectedInterview(null);
-            }
-            setSnackbarMessage("Product deleted successfully!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            console.error("Error deleting product:", err);
-            const errorMessage = "Failed to delete product. Please try again.";
-            setError(errorMessage);
-            setSnackbarMessage(errorMessage);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-            setProductToDeleteId(null);
+    useEffect(() => {
+        if (user && productId) {
+            fetchProduct();
         }
-    };
+    }, [user, productId, fetchProduct]);
 
-    const handleLogout = () => {
-        localStorage.removeItem('token');
-        setIsLoggedIn(false);
-        setProducts([]);
-        setSelectedProduct(null);
-        setResearchDocumentData(null);
-        setPrdDocumentData(null);
-        setResearchChatHistory([]);
-        setPrdChatHistory([]);
-        setCustomerInterviews([]);
-        setSelectedInterview(null);
-        setAuthMessage('You have been logged out.');
-        setSnackbarMessage('You have been logged out.');
-        setSnackbarSeverity('info');
-        setSnackbarOpen(true);
-        setAnchorElProfileMenu(null); 
-        setCurrentPage('dashboard'); 
-        setUserName('User'); 
-        setUserTimezone('UTC+05:30 (Chennai)'); 
-    };
-
-    // --- AI Chat Logic for Research Tab ---
-    const handleResearchPromptSubmit = async (e) => {
+    const handleUpdateProduct = async (e) => {
         e.preventDefault();
-        if (!currentResearchPrompt.trim()) return;
-        if (!selectedProduct) {
-            setSnackbarMessage("Please select a product to generate research document.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
+        try {
+            const response = await fetcher.put(`/products/${productId}`, editedProduct);
+            setProduct(response.data);
+            setEditMode(false);
+            alert('Product updated successfully!');
+        } catch (err) {
+            console.error('Error updating product:', err);
+            setError('Failed to update product.');
+            alert('Failed to update product. Check console for details.');
+        }
+    };
+
+    const handleStatusChange = (newStatus) => {
+        setEditedProduct(prev => ({ ...prev, status: newStatus }));
+    };
+
+    const handleTabStatusChange = (tabName, newStatus) => {
+        setEditedProduct(prev => ({ ...prev, [`${tabName}_status`]: newStatus }));
+    };
+
+    const handleContentChange = (tabName, content) => {
+        setEditedProduct(prev => ({ ...prev, [`${tabName}_json`]: content }));
+    };
+
+    // Determine if the current user is the owner of the product
+    const isProductOwner = product && user && product.user_id === user.id;
+
+    if (loading) return <div className="text-center mt-8">Loading product details...</div>;
+    if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
+    if (!product) return <div className="text-center mt-8">Product not found.</div>;
+
+    return (
+        <div className="mt-8 bg-white p-6 rounded-lg shadow-xl">
+            <button
+                onClick={() => navigateTo('dashboard')}
+                className="mb-4 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+            >
+                &larr; Back to Dashboard
+            </button>
+
+            <h2 className="text-3xl font-bold text-gray-800 mb-4">{product.name}</h2>
+
+            <div className="flex justify-between items-center mb-6">
+                <div className="flex items-center space-x-4">
+                    <span className="text-gray-700 text-lg">Status:</span>
+                    {editMode ? (
+                        <select
+                            value={editedProduct.status}
+                            onChange={(e) => handleStatusChange(e.target.value)}
+                            className="border rounded-lg py-2 px-3 shadow focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        >
+                            {['Active', 'Completed', 'Cancelled', 'On-Hold'].map(s => (
+                                <option key={s} value={s}>{s}</option>
+                            ))}
+                        </select>
+                    ) : (
+                        <span className={`font-semibold text-lg ${product.status === 'Active' ? 'text-green-600' : 'text-yellow-600'}`}>
+                            {product.status}
+                        </span>
+                    )}
+                </div>
+                <div>
+                    {editMode ? (
+                        <div className="space-x-2">
+                            <button
+                                onClick={handleUpdateProduct}
+                                className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
+                            >
+                                Save Changes
+                            </button>
+                            <button
+                                onClick={() => { setEditMode(false); setEditedProduct(product); }} // Revert changes
+                                className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => setEditMode(true)}
+                            className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
+                        >
+                            Edit Product
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Tabs Navigation */}
+            <div className="border-b border-gray-200 mb-6">
+                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                    {['overview', 'research', 'prd', 'design', 'development', 'tech_doc', 'launch_training', 'important_notes', 'interviews', 'templates', 'tasks', 'collaboration'].map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`${
+                                activeTab === tab
+                                    ? 'border-purple-500 text-purple-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                            } whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors duration-200`}
+                        >
+                            {tab.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                        </button>
+                    ))}
+                </nav>
+            </div>
+
+            {/* Tab Content */}
+            <div className="tab-content">
+                {activeTab === 'overview' && (
+                    <OverviewTab product={product} />
+                )}
+                {activeTab === 'research' && (
+                    <ResearchTab
+                        product={product}
+                        editMode={editMode}
+                        onContentChange={(content) => handleContentChange('research_document', content)}
+                        onStatusChange={(status) => handleTabStatusChange('research', status)}
+                    />
+                )}
+                {activeTab === 'prd' && (
+                    <PRDTab
+                        product={product}
+                        editMode={editMode}
+                        onContentChange={(content) => handleContentChange('prd_document', content)}
+                        onStatusChange={(status) => handleTabStatusChange('prd', status)}
+                    />
+                )}
+                {activeTab === 'design' && (
+                    <GenericContentTab
+                        title="Design Notes"
+                        product={product}
+                        contentKey="design_notes_json"
+                        statusKey="design_status"
+                        editMode={editMode}
+                        onContentChange={(content) => handleContentChange('design_notes', content)}
+                        onStatusChange={(status) => handleTabStatusChange('design', status)}
+                    />
+                )}
+                {activeTab === 'development' && (
+                    <GenericContentTab
+                        title="Development Specifications"
+                        product={product}
+                        contentKey="dev_specs_json"
+                        statusKey="development_status"
+                        editMode={editMode}
+                        onContentChange={(content) => handleContentChange('dev_specs', content)}
+                        onStatusChange={(status) => handleTabStatusChange('development', status)}
+                    />
+                )}
+                {activeTab === 'tech_doc' && (
+                    <GenericContentTab
+                        title="Technical Documentation"
+                        product={product}
+                        contentKey="tech_doc_json"
+                        statusKey="tech_doc_status"
+                        editMode={editMode}
+                        onContentChange={(content) => handleContentChange('tech_doc', content)}
+                        onStatusChange={(status) => handleTabStatusChange('tech_doc', status)}
+                    />
+                )}
+                {activeTab === 'launch_training' && (
+                    <GenericContentTab
+                        title="Launch & Training"
+                        product={product}
+                        contentKey="launch_training_json"
+                        statusKey="launch_training_status"
+                        editMode={editMode}
+                        onContentChange={(content) => handleContentChange('launch_training', content)}
+                        onStatusChange={(status) => handleTabStatusChange('launch_training', status)}
+                    />
+                )}
+                 {activeTab === 'important_notes' && (
+                    <GenericContentTab
+                        title="Important Notes"
+                        product={product}
+                        contentKey="important_notes_json"
+                        statusKey="important_notes_status" // Note: This status key doesn't exist in backend, but keeping for consistency if added later
+                        editMode={editMode}
+                        onContentChange={(content) => handleContentChange('important_notes', content)}
+                        onStatusChange={(status) => handleTabStatusChange('important_notes', status)}
+                    />
+                )}
+                {activeTab === 'interviews' && (
+                    <CustomerInterviewTab productId={productId} isEditor={isProductOwner || (product && product.product_accesses.some(pa => pa.user_id === user.id && pa.role === 'editor'))} />
+                )}
+                {activeTab === 'templates' && (
+                    <InterviewTemplateTab />
+                )}
+                {activeTab === 'tasks' && (
+                    <TaskTab productId={productId} isEditor={isProductOwner || (product && product.product_accesses.some(pa => pa.user_id === user.id && pa.role === 'editor'))} />
+                )}
+                {activeTab === 'collaboration' && (
+                    <CollaborationTab productId={productId} isOwner={isProductOwner} />
+                )}
+            </div>
+        </div>
+    );
+}
+
+// --- Overview Tab Component ---
+function OverviewTab({ product }) {
+    // Helper to format date
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+        return new Date(dateString).toLocaleDateString(undefined, options);
+    };
+
+    return (
+        <div className="space-y-4">
+            <h3 className="text-2xl font-semibold text-gray-800 mb-4">Product Overview</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <p className="text-gray-700"><strong>Product Name:</strong> {product.name}</p>
+                <p className="text-gray-700"><strong>Status:</strong> <span className={`font-medium ${product.status === 'Active' ? 'text-green-600' : 'text-yellow-600'}`}>{product.status}</span></p>
+                <p className="text-gray-700"><strong>Archived:</strong> {product.is_archived ? 'Yes' : 'No'}</p>
+                <p className="text-gray-700"><strong>Overall Progress:</strong> {product.progress}%</p>
+                <p className="text-gray-700"><strong>Created At:</strong> {formatDate(product.created_at)}</p>
+                <p className="text-gray-700"><strong>Last Updated:</strong> {formatDate(product.updated_at)}</p>
+            </div>
+
+            <h4 className="text-xl font-semibold text-gray-800 mt-6 mb-3">Section Progress</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {['research', 'prd', 'design', 'development', 'tech_doc', 'launch_training'].map(section => (
+                    <div key={section} className="bg-gray-50 p-4 rounded-lg shadow-sm">
+                        <p className="font-medium text-gray-800">{section.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}:</p>
+                        <span className={`text-sm font-semibold ${
+                            product[`${section}_status`] === 'Completed' ? 'text-green-600' :
+                            product[`${section}_status`] === 'In Progress' ? 'text-blue-600' :
+                            'text-gray-500'
+                        }`}>
+                            {product[`${section}_status`]}
+                        </span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+
+// --- Generic Content Tab Component (for Design, Dev, Tech Doc, Launch, Important Notes) ---
+function GenericContentTab({ title, product, contentKey, statusKey, editMode, onContentChange, onStatusChange }) {
+    const [content, setContent] = useState(product[contentKey] || '');
+    const [status, setStatus] = useState(product[statusKey] || 'Not Started');
+
+    useEffect(() => {
+        setContent(product[contentKey] || '');
+        setStatus(product[statusKey] || 'Not Started');
+    }, [product, contentKey, statusKey]);
+
+    const handleContentUpdate = (e) => {
+        const newContent = e.target.value;
+        setContent(newContent);
+        onContentChange(newContent);
+    };
+
+    const handleStatusUpdate = (e) => {
+        const newStatus = e.target.value;
+        setStatus(newStatus);
+        onStatusChange(newStatus);
+    };
+
+    return (
+        <div className="space-y-4">
+            <h3 className="text-2xl font-semibold text-gray-800 mb-4">{title}</h3>
+            <div className="flex items-center space-x-4 mb-4">
+                <span className="text-gray-700 text-lg">Status:</span>
+                {editMode ? (
+                    <select
+                        value={status}
+                        onChange={handleStatusUpdate}
+                        className="border rounded-lg py-2 px-3 shadow focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                        {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(s => (
+                            <option key={s} value={s}>{s}</option>
+                        ))}
+                    </select>
+                ) : (
+                    <span className={`font-semibold text-lg ${status === 'Completed' ? 'text-green-600' : 'text-gray-600'}`}>
+                        {status}
+                    </span>
+                )}
+            </div>
+            {editMode ? (
+                <textarea
+                    className="w-full p-4 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[300px]"
+                    value={content}
+                    onChange={handleContentUpdate}
+                    placeholder={`Enter ${title} here...`}
+                />
+            ) : (
+                <div className="bg-gray-50 p-4 rounded-lg shadow-inner prose max-w-none" dangerouslySetInnerHTML={{ __html: content ? content.replace(/\n/g, '<br/>') : '<p class="text-gray-500">No content available.</p>' }} />
+            )}
+        </div>
+    );
+}
+
+// --- Research Tab Component ---
+function ResearchTab({ product, editMode, onContentChange, onStatusChange }) {
+    const [prompt, setPrompt] = useState('');
+    const [loadingAI, setLoadingAI] = useState(false);
+    const [aiError, setAiError] = useState(null);
+
+    const handleGenerateResearch = async () => {
+        if (!prompt) {
+            setAiError('Please enter a prompt for research generation.');
             return;
         }
-
-        setIsResearchAILoading(true);
-        const userMessage = { role: 'user', content: currentResearchPrompt };
-        const updatedChatHistory = [...researchChatHistory, userMessage];
-        setResearchChatHistory(updatedChatHistory);
-        setCurrentResearchPrompt('');
-
+        setLoadingAI(true);
+        setAiError(null);
         try {
-            const token = localStorage.getItem('token');
-            // For MVP, we're sending the full prompt directly.
-            // In a real conversational flow, you'd send the chat history to the backend
-            // and the backend would manage the Gemini conversation.
-            const response = await axios.post(`${API_URL}/api/generate-research-document`, {
-                product_id: selectedProduct.id,
-                prompt_text: currentResearchPrompt,
+            const response = await fetcher.post('/generate-research-document', {
+                product_id: product.id,
+                prompt_text: prompt,
                 // scraped_data: "Example scraped data from Octoparse/ScrapingBee..." // Integrate this in future
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
             });
-
-            const aiResponseText = response.data.research_document;
-            const aiMessage = { role: 'ai', content: aiResponseText };
-            setResearchChatHistory(prev => [...prev, aiMessage]);
-
-            // Update the product's research document in local state and DB
-            const researchDocJson = { blocks: [{ type: "paragraph", data: { text: aiResponseText } }] };
-            setResearchDocumentData(researchDocJson);
-            await handleUpdateProduct(selectedProduct.id, { 
-                research_document_json: JSON.stringify(researchDocJson),
-                research_status: 'Completed' // Mark as completed
-            });
-            setSnackbarMessage("Research document generated and saved!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-
+            onContentChange(response.data.research_document);
+            onStatusChange('Completed');
+            alert('Research document generated and saved!');
         } catch (err) {
-            console.error("Error generating research document:", err);
-            const errorMessage = err.response && err.response.data && err.response.data.error 
-                                ? err.response.data.error 
-                                : "Failed to generate research document. Please try again.";
-            setSnackbarMessage(errorMessage);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-            setResearchChatHistory(prev => [...prev, { role: 'ai', content: `Error: ${errorMessage}` }]);
+            console.error('Error generating research document:', err.response?.data || err.message);
+            setAiError(err.response?.data?.error || 'Failed to generate research document.');
         } finally {
-            setIsResearchAILoading(false);
+            setLoadingAI(false);
         }
     };
 
-    const handleResearchDocumentSave = useCallback(async (data) => {
-        if (!selectedProduct) return;
-        setLoading(true);
+    return (
+        <div className="space-y-4">
+            <h3 className="text-2xl font-semibold text-gray-800 mb-4">Market Research</h3>
+            <div className="flex items-center space-x-4 mb-4">
+                <span className="text-gray-700 text-lg">Status:</span>
+                {editMode ? (
+                    <select
+                        value={product.research_status}
+                        onChange={(e) => onStatusChange(e.target.value)}
+                        className="border rounded-lg py-2 px-3 shadow focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                        {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(s => (
+                            <option key={s} value={s}>{s}</option>
+                        ))}
+                    </select>
+                ) : (
+                    <span className={`font-semibold text-lg ${product.research_status === 'Completed' ? 'text-green-600' : 'text-gray-600'}`}>
+                        {product.research_status}
+                    </span>
+                )}
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg shadow-sm mb-6">
+                <h4 className="text-xl font-semibold text-gray-800 mb-3">AI Research Assistant</h4>
+                <textarea
+                    className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[100px] mb-4"
+                    placeholder="Enter product idea or research prompt for AI (e.g., 'A mobile app for tracking personal finance with budgeting features')."
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    disabled={loadingAI || !editMode}
+                />
+                <button
+                    onClick={handleGenerateResearch}
+                    disabled={loadingAI || !editMode}
+                    className={`px-6 py-2 rounded-lg font-bold text-white shadow transition duration-300 ease-in-out ${
+                        loadingAI ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 transform hover:scale-105'
+                    }`}
+                >
+                    {loadingAI ? 'Generating...' : 'Generate Research Document'}
+                </button>
+                {aiError && <p className="text-red-500 text-sm mt-2">{aiError}</p>}
+            </div>
+
+            <h4 className="text-xl font-semibold text-gray-800 mb-3">Research Document Content</h4>
+            {editMode ? (
+                <textarea
+                    className="w-full p-4 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[400px]"
+                    value={product.research_document_json || ''}
+                    onChange={(e) => onContentChange(e.target.value)}
+                    placeholder="AI-generated or manually entered research content will appear here."
+                />
+            ) : (
+                <div className="bg-gray-50 p-4 rounded-lg shadow-inner prose max-w-none" dangerouslySetInnerHTML={{ __html: product.research_document_json ? product.research_document_json.replace(/\n/g, '<br/>') : '<p class="text-gray-500">No research document available.</p>' }} />
+            )}
+        </div>
+    );
+}
+
+// --- PRD Tab Component ---
+function PRDTab({ product, editMode, onContentChange, onStatusChange }) {
+    const [userRequirements, setUserRequirements] = useState('');
+    const [prdStructureConfirmation, setPrdStructureConfirmation] = useState('Standard PRD structure (Problem, Goals, Audience, Features, NFRs, Metrics, Future)');
+    const [loadingAI, setLoadingAI] = useState(false);
+    const [aiError, setAiError] = useState(null);
+
+    const handleGeneratePRD = async () => {
+        if (!product.research_document_json) {
+            setAiError('Please generate or provide a Research Document first.');
+            return;
+        }
+        if (!userRequirements) {
+            setAiError('Please provide user-specific requirements for the PRD.');
+            return;
+        }
+        setLoadingAI(true);
+        setAiError(null);
         try {
-            await handleUpdateProduct(selectedProduct.id, { 
-                research_document_json: JSON.stringify(data),
-                research_status: 'Completed' // Mark as completed if manually edited/saved
+            const response = await fetcher.post('/generate-prd-document', {
+                product_id: product.id,
+                research_data: product.research_document_json,
+                user_requirements: userRequirements,
+                prd_structure_confirmation: prdStructureConfirmation,
             });
-            setSnackbarMessage("Research document saved!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
+            onContentChange(response.data.prd_document);
+            onStatusChange('Completed');
+            alert('PRD generated and saved!');
         } catch (err) {
-            setSnackbarMessage("Failed to save research document.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
+            console.error('Error generating PRD:', err.response?.data || err.message);
+            setAiError(err.response?.data?.error || 'Failed to generate PRD.');
+        } finally {
+            setLoadingAI(false);
+        }
+    };
+
+    return (
+        <div className="space-y-4">
+            <h3 className="text-2xl font-semibold text-gray-800 mb-4">Product Requirements Document (PRD)</h3>
+            <div className="flex items-center space-x-4 mb-4">
+                <span className="text-gray-700 text-lg">Status:</span>
+                {editMode ? (
+                    <select
+                        value={product.prd_status}
+                        onChange={(e) => onStatusChange(e.target.value)}
+                        className="border rounded-lg py-2 px-3 shadow focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                        {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(s => (
+                            <option key={s} value={s}>{s}</option>
+                        ))}
+                    </select>
+                ) : (
+                    <span className={`font-semibold text-lg ${product.prd_status === 'Completed' ? 'text-green-600' : 'text-gray-600'}`}>
+                        {product.prd_status}
+                    </span>
+                )}
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg shadow-sm mb-6">
+                <h4 className="text-xl font-semibold text-gray-800 mb-3">AI PRD Generator</h4>
+                <p className="text-gray-700 text-sm mb-2">
+                    *Note: A Research Document is highly recommended before generating a PRD for best results.
+                </p>
+                <textarea
+                    className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[100px] mb-4"
+                    placeholder="Enter user-specific requirements or additional details for the PRD (e.g., 'Focus on mobile-first design, integrate with Stripe for payments')."
+                    value={userRequirements}
+                    onChange={(e) => setUserRequirements(e.target.value)}
+                    disabled={loadingAI || !editMode}
+                />
+                <textarea
+                    className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[80px] mb-4"
+                    placeholder="Confirm or suggest a PRD structure (e.g., 'Standard PRD structure' or 'Include detailed user stories')."
+                    value={prdStructureConfirmation}
+                    onChange={(e) => setPrdStructureConfirmation(e.target.value)}
+                    disabled={loadingAI || !editMode}
+                />
+                <button
+                    onClick={handleGeneratePRD}
+                    disabled={loadingAI || !editMode}
+                    className={`px-6 py-2 rounded-lg font-bold text-white shadow transition duration-300 ease-in-out ${
+                        loadingAI ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 transform hover:scale-105'
+                    }`}
+                >
+                    {loadingAI ? 'Generating...' : 'Generate PRD'}
+                </button>
+                {aiError && <p className="text-red-500 text-sm mt-2">{aiError}</p>}
+            </div>
+
+            <h4 className="text-xl font-semibold text-gray-800 mb-3">PRD Content</h4>
+            {editMode ? (
+                <textarea
+                    className="w-full p-4 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[400px]"
+                    value={product.prd_document_json || ''}
+                    onChange={(e) => onContentChange(e.target.value)}
+                    placeholder="AI-generated or manually entered PRD content will appear here."
+                />
+            ) : (
+                <div className="bg-gray-50 p-4 rounded-lg shadow-inner prose max-w-none" dangerouslySetInnerHTML={{ __html: product.prd_document_json ? product.prd_document_json.replace(/\n/g, '<br/>') : '<p class="text-gray-500">No PRD available.</p>' }} />
+            )}
+        </div>
+    );
+}
+
+// --- Customer Interview Tab Component ---
+function CustomerInterviewTab({ productId, isEditor }) {
+    const { user } = useContext(AuthContext);
+    const [interviews, setInterviews] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [newInterviewData, setNewInterviewData] = useState({
+        customer_name: '',
+        customer_email: '',
+        interview_date: new Date().toISOString().slice(0, 16), // YYYY-MM-DDTHH:MM
+        interview_notes_json: '',
+    });
+    const [selectedInterview, setSelectedInterview] = useState(null);
+    const [showDetailModal, setShowDetailModal] = useState(false);
+    const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+    const [aiSummaryError, setAiSummaryError] = useState(null);
+
+    const fetchInterviews = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await fetcher.get(`/customer_interviews/product/${productId}`);
+            setInterviews(response.data);
+        } catch (err) {
+            console.error('Error fetching interviews:', err.response?.data || err.message);
+            setError('Failed to fetch interviews.');
         } finally {
             setLoading(false);
         }
-    }, [selectedProduct, handleUpdateProduct]);
+    }, [productId]);
 
-    // --- AI Chat Logic for PRD Tab ---
-    const handlePrdPromptSubmit = async (e) => {
+    useEffect(() => {
+        if (user && productId) {
+            fetchInterviews();
+        }
+    }, [user, productId, fetchInterviews]);
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setNewInterviewData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleAddInterview = async (e) => {
         e.preventDefault();
-        if (!currentPrdPrompt.trim()) return;
-        if (!selectedProduct) {
-            setSnackbarMessage("Please select a product to generate PRD.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
-            return;
-        }
-
-        setIsPrdAILoading(true);
-        const userMessage = { role: 'user', content: currentPrdPrompt };
-        const updatedChatHistory = [...prdChatHistory, userMessage];
-        setPrdChatHistory(updatedChatHistory);
-        setCurrentPrdPrompt('');
-
+        setError(null);
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.post(`${API_URL}/api/generate-prd-document`, {
-                product_id: selectedProduct.id,
-                user_requirements: currentPrdPrompt, // User's input for PRD
-                prd_structure_confirmation: "Standard PRD structure with Problem, Goals, Audience, Features, Non-Functional, Metrics, Future.", // Hardcoded for MVP, could be AI-driven later
-                research_data: selectedProduct.research_document_json || "" // Pass existing research data
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
+            await fetcher.post('/customer_interviews', {
+                ...newInterviewData,
+                product_id: productId,
             });
-
-            const aiResponseText = response.data.prd_document;
-            const aiMessage = { role: 'ai', content: aiResponseText };
-            setPrdChatHistory(prev => [...prev, aiMessage]);
-
-            const prdDocJson = { blocks: [{ type: "paragraph", data: { text: aiResponseText } }] };
-            setPrdDocumentData(prdDocJson);
-            await handleUpdateProduct(selectedProduct.id, { 
-                prd_document_json: JSON.stringify(prdDocJson),
-                prd_status: 'Completed' // Mark as completed
+            setNewInterviewData({
+                customer_name: '',
+                customer_email: '',
+                interview_date: new Date().toISOString().slice(0, 16),
+                interview_notes_json: '',
             });
-            setSnackbarMessage("PRD generated and saved!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-
+            setShowAddModal(false);
+            fetchInterviews();
         } catch (err) {
-            console.error("Error generating PRD document:", err);
-            const errorMessage = err.response && err.response.data && err.response.data.error 
-                                ? err.response.data.error 
-                                : "Failed to generate PRD. Please try again.";
-            setSnackbarMessage(errorMessage);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-            setPrdChatHistory(prev => [...prev, { role: 'ai', content: `Error: ${errorMessage}` }]);
-        } finally {
-            setIsPrdAILoading(false);
+            console.error('Error adding interview:', err.response?.data || err.message);
+            setError(err.response?.data?.error || 'Failed to add interview.');
         }
     };
 
-    const handlePrdDocumentSave = useCallback(async (data) => {
-        if (!selectedProduct) return;
-        setLoading(true);
-        try {
-            await handleUpdateProduct(selectedProduct.id, { 
-                prd_document_json: JSON.stringify(data),
-                prd_status: 'Completed' // Mark as completed if manually edited/saved
-            });
-            setSnackbarMessage("PRD document saved!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            setSnackbarMessage("Failed to save PRD document.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    }, [selectedProduct, handleUpdateProduct]);
-
-    // --- Customer Interview Logic ---
-    const handleAddCustomerInterview = async () => {
-        if (!newInterviewCustomerName.trim()) {
-            setSnackbarMessage("Customer name is required.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
-            return;
-        }
-        if (!selectedProduct) {
-            setSnackbarMessage("Please select a product first.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
-            return;
-        }
-
-        setLoading(true);
-        setShowAddInterviewModal(false);
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.post(`${API_URL}/api/customer_interviews`, {
-                product_id: selectedProduct.id,
-                customer_name: newInterviewCustomerName,
-                customer_email: newInterviewCustomerEmail,
-                interview_date: newInterviewDate,
-                interview_notes_json: JSON.stringify({ blocks: [{ type: "paragraph", data: { text: "Start typing interview notes here..." } }] }),
-                ai_summary_json: null
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setCustomerInterviews(prev => [response.data, ...prev]);
-            setNewInterviewCustomerName('');
-            setNewInterviewCustomerEmail('');
-            setNewInterviewDate(new Date().toISOString().slice(0, 16));
-            setSnackbarMessage("Customer interview added!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            console.error("Error adding customer interview:", err);
-            setSnackbarMessage("Failed to add customer interview.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleSelectInterview = async (interview) => {
+    const handleViewDetails = (interview) => {
         setSelectedInterview(interview);
-        try {
-            setInterviewNotesData(interview.interview_notes_json ? JSON.parse(interview.interview_notes_json) : { blocks: [] });
-            setInterviewSummaryData(interview.ai_summary_json ? JSON.parse(interview.ai_summary_json) : { blocks: [] });
-        } catch (e) {
-            console.error("Error parsing interview notes/summary JSON:", e);
-            setSnackbarMessage("Error loading interview content. It might be malformed.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-            setInterviewNotesData({ blocks: [] });
-            setInterviewSummaryData({ blocks: [] });
-        }
+        setShowDetailModal(true);
     };
 
-    const handleSaveInterviewNotes = useCallback(async (data) => {
-        if (!selectedInterview) return;
-        setLoading(true);
+    const handleUpdateInterview = async (updatedData) => {
+        setError(null);
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.put(`${API_URL}/api/customer_interviews/${selectedInterview.id}`, {
-                interview_notes_json: JSON.stringify(data)
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setSelectedInterview(response.data); // Update selected interview with saved notes
-            setCustomerInterviews(prev => prev.map(int => int.id === response.data.id ? response.data : int));
-            setSnackbarMessage("Interview notes saved!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
+            await fetcher.put(`/customer_interviews/${updatedData.id}`, updatedData);
+            fetchInterviews(); // Refresh list
+            setSelectedInterview(updatedData); // Update the selected interview in modal
+            alert('Interview updated successfully!');
         } catch (err) {
-            setSnackbarMessage("Failed to save interview notes.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    }, [selectedInterview]);
-
-    const handleGenerateInterviewSummary = async () => {
-        if (!selectedInterview || !interviewNotesData || interviewNotesData.blocks.length === 0) {
-            setSnackbarMessage("No interview notes to summarize.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
-            return;
-        }
-        setLoading(true);
-        try {
-            const token = localStorage.getItem('token');
-            // Convert Editor.js data to plain text for AI prompt
-            const plainTextNotes = interviewNotesData.blocks.map(block => block.data.text || '').join('\n');
-
-            const response = await axios.post(`${API_URL}/api/customer_interviews/generate_summary`, {
-                interview_id: selectedInterview.id,
-                notes_content: plainTextNotes
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const summaryText = response.data.ai_summary;
-            const summaryJson = { blocks: [{ type: "paragraph", data: { text: summaryText } }] };
-            setInterviewSummaryData(summaryJson);
-
-            // Update the interview in the backend with the summary
-            const updatedInterview = { ...selectedInterview, ai_summary_json: JSON.stringify(summaryJson) };
-            setCustomerInterviews(prev => prev.map(int => int.id === updatedInterview.id ? updatedInterview : int));
-            setSelectedInterview(updatedInterview);
-
-            setSnackbarMessage("Interview summary generated and saved!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            console.error("Error generating interview summary:", err);
-            setSnackbarMessage("Failed to generate interview summary.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
+            console.error('Error updating interview:', err.response?.data || err.message);
+            setError(err.response?.data?.error || 'Failed to update interview.');
+            alert('Failed to update interview. Check console for details.');
         }
     };
 
     const handleDeleteInterview = async (interviewId) => {
-        setLoading(true);
-        try {
-            const token = localStorage.getItem('token');
-            await axios.delete(`${API_URL}/api/customer_interviews/${interviewId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setCustomerInterviews(prev => prev.filter(int => int.id !== interviewId));
-            if (selectedInterview && selectedInterview.id === interviewId) {
-                setSelectedInterview(null);
-                setInterviewNotesData(null);
-                setInterviewSummaryData(null);
+        if (window.confirm('Are you sure you want to delete this interview?')) {
+            setError(null);
+            try {
+                await fetcher.delete(`/customer_interviews/${interviewId}`);
+                fetchInterviews();
+                setShowDetailModal(false); // Close modal if deleted
+            } catch (err) {
+                console.error('Error deleting interview:', err.response?.data || err.message);
+                setError(err.response?.data?.error || 'Failed to delete interview.');
             }
-            setSnackbarMessage("Interview deleted!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            console.error("Error deleting interview:", err);
-            setSnackbarMessage("Failed to delete interview.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
         }
     };
 
-    // --- Interview Template Logic ---
-    const fetchInterviewTemplates = useCallback(async () => {
-        setLoading(true);
+    const handleGenerateSummary = async (interviewId, notesContent) => {
+        setAiSummaryLoading(true);
+        setAiSummaryError(null);
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get(`${API_URL}/api/interview_templates`, {
-                headers: { Authorization: `Bearer ${token}` }
+            const response = await fetcher.post('/customer_interviews/generate_summary', {
+                interview_id: interviewId,
+                notes_content: notesContent,
             });
-            setInterviewTemplates(response.data);
+            const updatedInterview = { ...selectedInterview, ai_summary_json: response.data.ai_summary };
+            setSelectedInterview(updatedInterview); // Update in modal
+            // Also update in the main interviews list
+            setInterviews(prev => prev.map(int => int.id === interviewId ? updatedInterview : int));
+            alert('AI Summary generated and saved!');
         } catch (err) {
-            console.error("Error fetching templates:", err);
-            setSnackbarMessage("Failed to load interview templates.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
+            console.error('Error generating AI summary:', err.response?.data || err.message);
+            setAiSummaryError(err.response?.data?.error || 'Failed to generate AI summary.');
+        } finally {
+            setAiSummaryLoading(false);
+        }
+    };
+
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+        return new Date(dateString).toLocaleDateString(undefined, options);
+    };
+
+    if (loading) return <div className="text-center mt-8">Loading customer interviews...</div>;
+    if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h3 className="text-2xl font-semibold text-gray-800">Customer Interviews</h3>
+                {isEditor && (
+                    <button
+                        onClick={() => setShowAddModal(true)}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
+                    >
+                        + Add New Interview
+                    </button>
+                )}
+            </div>
+
+            {interviews.length === 0 ? (
+                <p className="text-center text-gray-600 text-lg">No interviews recorded yet.</p>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {interviews.map(interview => (
+                        <div key={interview.id} className="bg-gray-50 p-6 rounded-lg shadow-md">
+                            <h4 className="text-xl font-semibold text-gray-900 mb-2">{interview.customer_name}</h4>
+                            <p className="text-gray-600 text-sm mb-1">Email: {interview.customer_email || 'N/A'}</p>
+                            <p className="text-gray-600 text-sm mb-4">Date: {formatDate(interview.interview_date)}</p>
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={() => handleViewDetails(interview)}
+                                    className="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-1 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                                >
+                                    View Details
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {showAddModal && (
+                <Modal title="Add New Customer Interview" onClose={() => setShowAddModal(false)}>
+                    <form onSubmit={handleAddInterview} className="space-y-4">
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Customer Name</label>
+                            <input
+                                type="text"
+                                name="customer_name"
+                                value={newInterviewData.customer_name}
+                                onChange={handleInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Customer Email</label>
+                            <input
+                                type="email"
+                                name="customer_email"
+                                value={newInterviewData.customer_email}
+                                onChange={handleInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Interview Date & Time</label>
+                            <input
+                                type="datetime-local"
+                                name="interview_date"
+                                value={newInterviewData.interview_date}
+                                onChange={handleInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Interview Notes</label>
+                            <textarea
+                                name="interview_notes_json"
+                                value={newInterviewData.interview_notes_json}
+                                onChange={handleInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 min-h-[150px]"
+                                placeholder="Enter interview notes here..."
+                            />
+                        </div>
+                        <div className="flex justify-end space-x-4">
+                            <button
+                                type="button"
+                                onClick={() => setShowAddModal(false)}
+                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                            >
+                                Add Interview
+                            </button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
+
+            {showDetailModal && selectedInterview && (
+                <InterviewDetailModal
+                    interview={selectedInterview}
+                    onClose={() => setShowDetailModal(false)}
+                    onUpdate={handleUpdateInterview}
+                    onDelete={handleDeleteInterview}
+                    onGenerateSummary={handleGenerateSummary}
+                    aiSummaryLoading={aiSummaryLoading}
+                    aiSummaryError={aiSummaryError}
+                    isEditor={isEditor}
+                />
+            )}
+        </div>
+    );
+}
+
+// --- Interview Detail Modal Component ---
+function InterviewDetailModal({ interview, onClose, onUpdate, onDelete, onGenerateSummary, aiSummaryLoading, aiSummaryError, isEditor }) {
+    const [editMode, setEditMode] = useState(false);
+    const [editedInterview, setEditedInterview] = useState(interview);
+
+    useEffect(() => {
+        setEditedInterview(interview); // Ensure modal updates if parent interview prop changes
+    }, [interview]);
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setEditedInterview(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSave = async () => {
+        await onUpdate(editedInterview);
+        setEditMode(false);
+    };
+
+    const handleGenerateClick = () => {
+        if (editedInterview.interview_notes_json) {
+            onGenerateSummary(editedInterview.id, editedInterview.interview_notes_json);
+        } else {
+            alert('Please add interview notes before generating a summary.');
+        }
+    };
+
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+        return new Date(dateString).toLocaleDateString(undefined, options);
+    };
+
+    return (
+        <Modal title={`Interview with ${interview.customer_name}`} onClose={onClose}>
+            <div className="space-y-4">
+                <div>
+                    <label className="block text-gray-700 text-sm font-bold mb-1">Customer Name</label>
+                    {editMode && isEditor ? (
+                        <input
+                            type="text"
+                            name="customer_name"
+                            value={editedInterview.customer_name}
+                            onChange={handleInputChange}
+                            className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                        />
+                    ) : (
+                        <p className="text-gray-900">{interview.customer_name}</p>
+                    )}
+                </div>
+                <div>
+                    <label className="block text-gray-700 text-sm font-bold mb-1">Customer Email</label>
+                    {editMode && isEditor ? (
+                        <input
+                            type="email"
+                            name="customer_email"
+                            value={editedInterview.customer_email || ''}
+                            onChange={handleInputChange}
+                            className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                        />
+                    ) : (
+                        <p className="text-gray-900">{interview.customer_email || 'N/A'}</p>
+                    )}
+                </div>
+                <div>
+                    <label className="block text-gray-700 text-sm font-bold mb-1">Interview Date & Time</label>
+                    {editMode && isEditor ? (
+                        <input
+                            type="datetime-local"
+                            name="interview_date"
+                            value={editedInterview.interview_date ? editedInterview.interview_date.slice(0, 16) : ''}
+                            onChange={handleInputChange}
+                            className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                        />
+                    ) : (
+                        <p className="text-gray-900">{formatDate(interview.interview_date)}</p>
+                    )}
+                </div>
+                <div>
+                    <label className="block text-gray-700 text-sm font-bold mb-1">Interview Notes</label>
+                    {editMode && isEditor ? (
+                        <textarea
+                            name="interview_notes_json"
+                            value={editedInterview.interview_notes_json || ''}
+                            onChange={handleInputChange}
+                            className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 min-h-[150px]"
+                            placeholder="Enter interview notes here..."
+                        />
+                    ) : (
+                        <div className="bg-gray-100 p-3 rounded-lg prose max-w-none" dangerouslySetInnerHTML={{ __html: interview.interview_notes_json ? interview.interview_notes_json.replace(/\n/g, '<br/>') : '<p class="text-gray-500">No notes available.</p>' }} />
+                    )}
+                </div>
+
+                <div className="flex justify-between items-center mt-4">
+                    <h4 className="text-lg font-semibold text-gray-800">AI Summary</h4>
+                    {isEditor && (
+                        <button
+                            onClick={handleGenerateClick}
+                            disabled={aiSummaryLoading || !editedInterview.interview_notes_json}
+                            className={`px-4 py-2 rounded-lg font-bold text-white shadow transition duration-300 ease-in-out ${
+                                aiSummaryLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
+                            }`}
+                        >
+                            {aiSummaryLoading ? 'Generating...' : 'Generate AI Summary'}
+                        </button>
+                    )}
+                </div>
+                {aiSummaryError && <p className="text-red-500 text-sm mt-2">{aiSummaryError}</p>}
+                <div className="bg-gray-100 p-3 rounded-lg prose max-w-none">
+                    {editedInterview.ai_summary_json ? (
+                        <div dangerouslySetInnerHTML={{ __html: editedInterview.ai_summary_json.replace(/\n/g, '<br/>') }} />
+                    ) : (
+                        <p className="text-gray-500">No AI summary available.</p>
+                    )}
+                </div>
+
+                <div className="flex justify-end space-x-4 mt-6">
+                    {isEditor && (
+                        <>
+                            {editMode ? (
+                                <button
+                                    onClick={handleSave}
+                                    className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg"
+                                >
+                                    Save Changes
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => setEditMode(true)}
+                                    className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                                >
+                                    Edit
+                                </button>
+                            )}
+                            <button
+                                onClick={() => onDelete(interview.id)}
+                                className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg"
+                            >
+                                Delete
+                            </button>
+                        </>
+                    )}
+                    <button
+                        onClick={onClose}
+                        className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+
+// --- Interview Template Tab Component ---
+function InterviewTemplateTab() {
+    const { user } = useContext(AuthContext);
+    const [templates, setTemplates] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [newTemplateData, setNewTemplateData] = useState({
+        template_name: '',
+        template_questions_json: '',
+    });
+    const [selectedTemplate, setSelectedTemplate] = useState(null);
+    const [showDetailModal, setShowDetailModal] = useState(false);
+    const [aiQuestionsLoading, setAiQuestionsLoading] = useState(false);
+    const [aiQuestionsError, setAiQuestionsError] = useState(null);
+    const [featureIdeaForAI, setFeatureIdeaForAI] = useState('');
+
+    const fetchTemplates = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await fetcher.get('/interview_templates');
+            setTemplates(response.data);
+        } catch (err) {
+            console.error('Error fetching templates:', err.response?.data || err.message);
+            setError('Failed to fetch interview templates.');
         } finally {
             setLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        if (isLoggedIn) {
-            fetchInterviewTemplates();
+        if (user) {
+            fetchTemplates();
         }
-    }, [isLoggedIn, fetchInterviewTemplates]);
+    }, [user, fetchTemplates]);
 
-    const handleCreateTemplate = async () => {
-        if (!templateName.trim()) {
-            setSnackbarMessage("Template name is required.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
-            return;
-        }
-        setLoading(true);
-        setShowTemplateModal(false);
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setNewTemplateData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleAddTemplate = async (e) => {
+        e.preventDefault();
+        setError(null);
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.post(`${API_URL}/api/interview_templates`, {
-                template_name: templateName,
-                template_questions_json: templateQuestionsData ? JSON.stringify(templateQuestionsData) : null
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
+            await fetcher.post('/interview_templates', newTemplateData);
+            setNewTemplateData({
+                template_name: '',
+                template_questions_json: '',
             });
-            setInterviewTemplates(prev => [response.data, ...prev]);
-            setTemplateName('');
-            setTemplateQuestionsData(null);
-            setSnackbarMessage("Template created!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
+            setShowAddModal(false);
+            fetchTemplates();
         } catch (err) {
-            console.error("Error creating template:", err);
-            setSnackbarMessage("Failed to create template.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
+            console.error('Error adding template:', err.response?.data || err.message);
+            setError(err.response?.data?.error || 'Failed to add template.');
         }
     };
 
-    const handleSelectTemplate = (template) => {
+    const handleViewDetails = (template) => {
         setSelectedTemplate(template);
-        try {
-            setTemplateQuestionsData(template.template_questions_json ? JSON.parse(template.template_questions_json) : { blocks: [] });
-        } catch (e) {
-            console.error("Error parsing template questions JSON:", e);
-            setSnackbarMessage("Error loading template content. It might be malformed.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-            setTemplateQuestionsData({ blocks: [] });
-        }
-        setShowTemplateModal(true); // Open modal to edit selected template
+        setShowDetailModal(true);
     };
 
-    const handleUpdateTemplate = async () => {
-        if (!selectedTemplate) return;
-        setLoading(true);
-        setShowTemplateModal(false);
+    const handleUpdateTemplate = async (updatedData) => {
+        setError(null);
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.put(`${API_URL}/api/interview_templates/${selectedTemplate.id}`, {
-                template_name: templateName,
-                template_questions_json: templateQuestionsData ? JSON.stringify(templateQuestionsData) : null
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setInterviewTemplates(prev => prev.map(t => t.id === response.data.id ? response.data : t));
-            setSnackbarMessage("Template updated!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
+            await fetcher.put(`/interview_templates/${updatedData.id}`, updatedData);
+            fetchTemplates();
+            setSelectedTemplate(updatedData);
+            alert('Template updated successfully!');
         } catch (err) {
-            console.error("Error updating template:", err);
-            setSnackbarMessage("Failed to update template.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
+            console.error('Error updating template:', err.response?.data || err.message);
+            setError(err.response?.data?.error || 'Failed to update template.');
+            alert('Failed to update template. Check console for details.');
         }
     };
 
     const handleDeleteTemplate = async (templateId) => {
-        setLoading(true);
-        try {
-            const token = localStorage.getItem('token');
-            await axios.delete(`${API_URL}/api/interview_templates/${templateId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setInterviewTemplates(prev => prev.filter(t => t.id !== templateId));
-            if (selectedTemplate && selectedTemplate.id === templateId) {
-                setSelectedTemplate(null);
-                setTemplateName('');
-                setTemplateQuestionsData(null);
+        if (window.confirm('Are you sure you want to delete this template?')) {
+            setError(null);
+            try {
+                await fetcher.delete(`/interview_templates/${templateId}`);
+                fetchTemplates();
+                setShowDetailModal(false);
+            } catch (err) {
+                console.error('Error deleting template:', err.response?.data || err.message);
+                setError(err.response?.data?.error || 'Failed to delete template.');
             }
-            setSnackbarMessage("Template deleted!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            console.error("Error deleting template:", err);
-            setSnackbarMessage("Failed to delete template.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
         }
     };
 
-    const handleGenerateTemplateQuestions = async (featureIdea, existingQuestions) => {
-        setIsTemplateAILoading(true);
+    const handleGenerateQuestions = async (templateId, existingQuestions) => {
+        if (!featureIdeaForAI) {
+            setAiQuestionsError('Please enter a feature idea to generate questions.');
+            return;
+        }
+        setAiQuestionsLoading(true);
+        setAiQuestionsError(null);
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.post(`${API_URL}/api/interview_templates/generate_questions`, {
-                feature_idea: featureIdea,
-                existing_questions: existingQuestions
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
+            const response = await fetcher.post('/interview_templates/generate_questions', {
+                feature_idea: featureIdeaForAI,
+                existing_questions: existingQuestions,
             });
-            const generatedText = response.data.generated_questions;
-            setTemplateQuestionsData({ blocks: [{ type: "paragraph", data: { text: generatedText } }] });
-            setSnackbarMessage("Questions generated!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
+            const generatedContent = response.data.generated_questions;
+            
+            // Update the selected template's questions in the modal
+            const updatedTemplate = { ...selectedTemplate, template_questions_json: generatedContent };
+            setSelectedTemplate(updatedTemplate);
+            
+            // Update the template in the main list
+            setTemplates(prev => prev.map(t => t.id === templateId ? updatedTemplate : t));
+            
+            alert('AI Questions generated and saved!');
         } catch (err) {
-            console.error("Error generating template questions:", err);
-            setSnackbarMessage("Failed to generate questions.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
+            console.error('Error generating AI questions:', err.response?.data || err.message);
+            setAiQuestionsError(err.response?.data?.error || 'Failed to generate AI questions.');
         } finally {
-            setIsTemplateAILoading(false);
+            setAiQuestionsLoading(false);
         }
     };
 
-    const handleProductStatusChange = async (productId, newStatus) => {
-        setLoading(true);
-        try {
-            await handleUpdateProduct(productId, { status: newStatus });
-            setSnackbarMessage(`Product status updated to ${newStatus}!`);
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            setSnackbarMessage("Failed to update product status.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleTabStatusChange = async (tabName, newStatus) => {
-        if (!selectedProduct) return;
-        setLoading(true);
-        const statusKey = `${tabName.toLowerCase().replace(/ /g, '_')}_status`;
-        try {
-            const updatedProductData = { [statusKey]: newStatus };
-            await handleUpdateProduct(selectedProduct.id, updatedProductData);
-            setSnackbarMessage(`${tabName} status updated to ${newStatus}!`);
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            setSnackbarMessage(`Failed to update ${tabName} status.`);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-
-    const handleProfileMenuOpen = (event) => {
-        setAnchorElProfileMenu(event.currentTarget);
-    };
-
-    const handleProfileMenuClose = () => {
-        setAnchorElProfileMenu(null);
-    };
-
-    const handleOpenSettings = () => {
-        setCurrentPage('settings'); 
-        handleProfileMenuClose();
-    };
-
-    const handleSaveSettings = async () => {
-        setLoading(true);
-        setSnackbarOpen(false);
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.put(`${API_URL}/api/user/profile`, {
-                username: userName,
-                timezone: userTimezone
-            }, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
-            setSnackbarMessage(response.data.message);
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-            setCurrentPage('dashboard'); 
-        } catch (err) {
-            console.error("Error saving profile settings:", err);
-            const errorMessage = err.response && err.response.data && err.response.data.message 
-                                ? err.response.data.message 
-                                : "Failed to save profile settings. Please try again.";
-            setSnackbarMessage(errorMessage);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const displayHeaderProfileInitial = useMemo(() => {
-        return userName ? userName.charAt(0).toUpperCase() : 'U';
-    }, [userName]);
-
-
-    if (!isLoggedIn) {
-        return <AuthPage 
-            setIsLoggedIn={setIsLoggedIn} 
-            setAuthMessage={setAuthMessage} 
-            setUserName={setUserName} 
-            setUserTimezone={setUserTimezone} 
-        />;
-    }
-
-    if (currentPage === 'settings') {
-        return (
-            <SettingsPage 
-                setCurrentPage={setCurrentPage}
-                userName={userName}
-                setUserName={setUserName}
-                userTimezone={userTimezone}
-                setUserTimezone={setUserTimezone}
-                handleSaveSettings={handleSaveSettings}
-                setSnackbarMessage={setSnackbarMessage}
-                setSnackbarSeverity={setSnackbarSeverity}
-                setSnackbarOpen={setSnackbarOpen}
-            />
-        );
-    }
+    if (loading) return <div className="text-center mt-8">Loading interview templates...</div>;
+    if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
 
     return (
-        <Box
-            sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                height: '100vh', 
-                width: '100vw',  
-                fontFamily: 'Inter',
-                background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)',
-                overflow: 'hidden', 
-            }}
-        >
-            {/* Editor.js CDN includes - REQUIRED for Editor component to work */}
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/editorjs@2.28.2/dist/editor.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/header@2.8.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/paragraph@2.11.3/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/list@1.9.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/code@2.9.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/table@2.5.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/quote@2.6.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/raw@2.5.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/image@2.9.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/marker@1.4.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/warning@2.8.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/delimiter@1.4.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/inline-code@1.4.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/link@2.5.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/embed@2.5.3/dist/bundle.min.js"></script>
-            {/* Add more Editor.js tool CDNs here as needed */}
-
-            {/* Inject the keyframes for the pulse animation */}
-            <style>{pulseAnimation}</style>
-
-            {/* Main Header */}
-            <Box
-                component="header"
-                sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '1rem 2rem', 
-                    backgroundColor: '#fff',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', 
-                    borderRadius: '0.75rem', 
-                    margin: '1rem', 
-                    flexShrink: 0, 
-                }}
-            >
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Sparkles size={32} color="#4f46e5" style={{ marginRight: '0.5rem' }} />
-                    <Box>
-                        <Typography variant="h6" component="h1" sx={{ fontWeight: 'bold', color: '#111827', lineHeight: 1 }}>
-                            Auto Product Manager
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: '#4b5563', display: 'block' }}>
-                            Your Product Management in Auto Pilot mode
-                        </Typography>
-                    </Box>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    {/* Personalized Quote of the Day */}
-                    <Box sx={{ 
-                        textAlign: 'right', 
-                        marginRight: 3,
-                        '@keyframes fadeInOut': {
-                            '0%': { opacity: 0, transform: 'translateY(10px)' },
-                            '5%': { opacity: 1, transform: 'translateY(0)' },
-                            '95%': { opacity: 1, transform: 'translateY(0)' },
-                            '100%': { opacity: 0, transform: 'translateY(-10px)' },
-                        },
-                        animation: 'fadeInOut 15s infinite', 
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                    }}>
-                        <Typography variant="body2" sx={{ color: '#4f46e5', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                            Hey {userName}, quote of the day for you:
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: '#6b7280', fontStyle: 'italic', fontSize: '0.8rem', display: 'flex', alignItems: 'center' }}>
-                            <Box component="span" sx={{ fontSize: '1.2em', marginRight: '0.3em' }}>{quoteEmoji}</Box>
-                            "{quoteOfTheDay}"
-                        </Typography>
-                    </Box>
-
-                    {/* Profile Initial and Menu */}
-                    <IconButton
-                        aria-label="profile menu"
-                        aria-controls="profile-menu"
-                        aria-haspopup="true"
-                        onClick={handleProfileMenuOpen}
-                        sx={{ p: 0 }}
-                    >
-                        <Box
-                            sx={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: '50%',
-                                backgroundColor: '#e0e7ff', 
-                                color: '#4f46e5', 
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '1.2rem',
-                                fontWeight: 'bold',
-                                border: '2px solid #4f46e5',
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                animation: 'pulse-initial 2s infinite', 
-                            }}
-                        >
-                            {displayHeaderProfileInitial}
-                        </Box>
-                    </IconButton>
-                    <Menu
-                        id="profile-menu"
-                        anchorEl={anchorElProfileMenu}
-                        open={openProfileMenu}
-                        onClose={handleProfileMenuClose}
-                        MenuListProps={{
-                            'aria-labelledby': 'profile-button',
-                        }}
-                        anchorOrigin={{
-                            vertical: 'bottom',
-                            horizontal: 'right',
-                        }}
-                        transformOrigin={{
-                            vertical: 'top',
-                            horizontal: 'right',
-                        }}
-                        PaperProps={{
-                            sx: {
-                                borderRadius: '0.75rem',
-                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                                minWidth: 180,
-                            }
-                        }}
-                    >
-                        <MenuItem onClick={handleOpenSettings} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.5 }}>
-                            <Settings size={18} />
-                            <Typography variant="body2" fontWeight="medium">Settings</Typography>
-                        </MenuItem>
-                        <MenuItem onClick={handleLogout} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.5 }}>
-                            <LogOut size={18} />
-                            <Typography variant="body2" fontWeight="medium">Logout</Typography>
-                        </MenuItem>
-                    </Menu>
-                </Box>
-            </Box>
-
-            {/* Main Content Area: Sidebar + Product Detail View */}
-            <Box sx={{ flexGrow: 1, display: 'flex', padding: '1rem', gap: '1rem', overflow: 'hidden' }}> 
-                {/* Left Sidebar */}
-                <Paper
-                    elevation={3}
-                    sx={{
-                        width: '280px', 
-                        flexShrink: 0, 
-                        backgroundColor: '#fff',
-                        borderRadius: '1rem', 
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                        p: 2,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        height: '100%', 
-                        '@media (max-width: 600px)': { 
-                            width: '100%',
-                            marginBottom: '1rem',
-                            height: 'auto', 
-                        },
-                    }}
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h3 className="text-2xl font-semibold text-gray-800">Interview Templates</h3>
+                <button
+                    onClick={() => setShowAddModal(true)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
                 >
-                    {/* Add New Item Button */}
-                    <Button
-                        variant="contained"
-                        startIcon={<Plus size={20} />}
-                        sx={{
-                            backgroundColor: '#9333ea', 
-                            '&:hover': { backgroundColor: '#7e22ce' }, 
-                            color: '#fff',
-                            fontWeight: 600,
-                            borderRadius: '0.75rem',
-                            textTransform: 'none',
-                            padding: '0.75rem 1rem',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.06)',
-                            marginBottom: 3,
-                        }}
-                        onClick={() => setShowAddProductModal(true)}
-                    >
-                        Add New Item
-                    </Button>
+                    + Create New Template
+                </button>
+            </div>
 
-                    {/* Global Tasks Button (Placeholder for Phase 2) */}
-                    <Button
-                        variant="outlined"
-                        startIcon={<CheckCircle size={20} />}
-                        sx={{
-                            borderColor: '#4f46e5',
-                            color: '#4f46e5',
-                            '&:hover': { backgroundColor: '#eef2ff', borderColor: '#4338ca' },
-                            fontWeight: 600,
-                            borderRadius: '0.75rem',
-                            textTransform: 'none',
-                            padding: '0.75rem 1rem',
-                            marginBottom: 3,
-                        }}
-                        disabled // Disabled for Phase 1
-                    >
-                        Tasks (Coming Soon)
-                    </Button>
-
-                    {/* Search and Sort/Filter Controls */}
-                    <Box sx={{ marginBottom: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                        <TextField
-                            fullWidth
-                            variant="outlined"
-                            size="small"
-                            placeholder="Search items..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            InputProps={{
-                                startAdornment: (
-                                    <InputAdornment position="start">
-                                        <Search size={18} color="#9ca3af" />
-                                    </InputAdornment>
-                                ),
-                                sx: { borderRadius: '0.5rem' }
-                            }}
-                        />
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                            <FormControl fullWidth variant="outlined" size="small">
-                                <InputLabel id="sort-by-label">Sort By</InputLabel>
-                                <Select
-                                    labelId="sort-by-label"
-                                    id="sort-by-select"
-                                    value={sortBy}
-                                    onChange={(e) => setSortBy(e.target.value)}
-                                    label="Sort By"
-                                    sx={{ borderRadius: '0.5rem' }}
+            {templates.length === 0 ? (
+                <p className="text-center text-gray-600 text-lg">No templates created yet.</p>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {templates.map(template => (
+                        <div key={template.id} className="bg-gray-50 p-6 rounded-lg shadow-md">
+                            <h4 className="text-xl font-semibold text-gray-900 mb-2">{template.template_name}</h4>
+                            <p className="text-gray-600 text-sm mb-4">Created: {new Date(template.created_at).toLocaleDateString()}</p>
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={() => handleViewDetails(template)}
+                                    className="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-1 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
                                 >
-                                    <MenuItem value="newest">Created Date (Newest First)</MenuItem>
-                                    <MenuItem value="oldest">Created Date (Oldest First)</MenuItem>
-                                    <MenuItem value="alpha-asc">Alphabetical (A-Z)</MenuItem>
-                                    <MenuItem value="alpha-desc">Alphabetical (Z-A)</MenuItem>
-                                    <MenuItem value="progress-asc">Progress (Low to High)</MenuItem>
-                                    <MenuItem value="progress-desc">Progress (High to Low)</MenuItem>
-                                </Select>
-                            </FormControl>
-                            <FormControl fullWidth variant="outlined" size="small">
-                                <InputLabel id="filter-by-status-label">Filter By Status</InputLabel>
-                                <Select
-                                    labelId="filter-by-status-label"
-                                    id="filter-by-status-select"
-                                    value={filterByStatus}
-                                    onChange={(e) => setFilterByStatus(e.target.value)}
-                                    label="Filter By Status"
-                                    sx={{ borderRadius: '0.5rem' }}
-                                >
-                                    <MenuItem value="All">All Statuses</MenuItem>
-                                    <MenuItem value="Active">Active</MenuItem>
-                                    <MenuItem value="Completed">Completed</MenuItem>
-                                    <MenuItem value="Cancelled">Cancelled</MenuItem>
-                                    <MenuItem value="On-Hold">On-Hold</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Box>
-                    </Box>
+                                    View Details
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
-                    {/* Product List */}
-                    <List
-                        subheader={
-                            <ListSubheader component="div" sx={{ 
-                                backgroundColor: 'transparent', 
-                                fontWeight: 'bold', 
-                                fontSize: '1.125rem', 
-                                color: '#1f2937', 
-                                lineHeight: '1.75rem', 
-                                paddingX: 0,
-                                paddingY: 1,
-                                display: 'flex',
-                                alignItems: 'center',
-                            }}>
-                                <Box sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', marginRight: '0.5rem' }} />
-                                All Products
-                            </ListSubheader>
-                        }
-                        sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', flexGrow: 1 }} 
-                    >
-                        {loading && <Typography sx={{ color: '#9333ea', textAlign: 'center', marginY: 3, fontSize: '0.9rem', fontWeight: 500 }}>Loading...</Typography>}
-                        {error && <Alert severity="error" sx={{ marginY: 3, borderRadius: '0.5rem' }}>{error}</Alert>}
-                        {!loading && !error && filteredAndSortedProducts.length === 0 ? (
-                            <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 3 }}>
-                                No products matching criteria.
-                            </Typography>
-                        ) : (
-                            filteredAndSortedProducts.map(product => (
-                                <ListItem
-                                    key={product.id}
-                                    onClick={() => handleSelectProduct(product)}
-                                    sx={{
-                                        display: 'flex',
-                                        flexDirection: 'column', // Stack content vertically
-                                        alignItems: 'flex-start',
-                                        padding: 1.5,
-                                        borderRadius: '0.5rem',
-                                        marginBottom: '0.5rem',
-                                        backgroundColor: selectedProduct && selectedProduct.id === product.id ? '#eef2ff' : '#fff',
-                                        border: selectedProduct && selectedProduct.id === product.id ? '1px solid #c7d2fe' : '1px solid #f3f4f6',
-                                        '&:hover': { backgroundColor: '#e0e7ff' },
-                                        transition: 'background-color 0.2s, border-color 0.2s',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                                        <ListItemText
-                                            primary={product.name}
-                                            primaryTypographyProps={{ fontWeight: 'medium', color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                        />
-                                        <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleUpdateProduct(product.id, { is_archived: !product.is_archived }); }}>
-                                                {product.is_archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
-                                            </IconButton>
-                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); confirmDeleteProduct(product.id); }}>
-                                                <Trash2 size={16} />
-                                            </IconButton>
-                                        </Box>
-                                    </Box>
-                                    <Typography component="span" variant="body2" sx={{ fontSize: '0.75rem', color: '#6b7280', width: '100%', marginTop: 0.5 }}>
-                                        Status: {product.status} | Progress: {product.progress}%
-                                    </Typography>
-                                    <LinearProgress 
-                                        variant="determinate" 
-                                        value={product.progress} 
-                                        sx={{ 
-                                            width: '100%', 
-                                            borderRadius: 5, 
-                                            height: 4, 
-                                            backgroundColor: '#e0e7ff', 
-                                            '& .MuiLinearProgress-bar': { backgroundColor: '#4f46e5' } 
-                                        }} 
-                                    />
-                                </ListItem>
-                            ))
-                        )}
-                    </List>
-                </Paper>
-
-                {/* Right Main Content: Product Detail Tabs */}
-                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {/* Product Detail Header */}
-                    <Paper
-                        elevation={3}
-                        sx={{
-                            backgroundColor: '#fff',
-                            p: 2,
-                            borderRadius: '1rem', 
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            flexWrap: 'wrap', 
-                            gap: 2, 
-                            flexShrink: 0, 
-                        }}
-                    >
-                        <Box>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1f2937' }}>
-                                {selectedProduct ? selectedProduct.name : "Select a Product/Item"} 
-                                <Typography component="span" variant="body2" sx={{ color: '#6b7280', marginLeft: 1 }}>
-                                    {selectedProduct ? `(Status: ${selectedProduct.status})` : ""}
-                                </Typography>
-                            </Typography>
-                            {selectedProduct && (
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 1 }}>
-                                    <Typography variant="body2" sx={{ color: '#4b5563' }}>
-                                        Overall Progress: {selectedProduct.progress}%
-                                    </Typography>
-                                    <LinearProgress 
-                                        variant="determinate" 
-                                        value={selectedProduct.progress} 
-                                        sx={{ 
-                                            width: 100, 
-                                            borderRadius: 5, 
-                                            height: 8, 
-                                            backgroundColor: '#e0e7ff', 
-                                            '& .MuiLinearProgress-bar': { backgroundColor: '#4f46e5' } 
-                                        }} 
-                                    />
-                                </Box>
-                            )}
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                            {selectedProduct && (
-                                <FormControl variant="outlined" size="small" sx={{ minWidth: 120 }}>
-                                    <InputLabel id="product-status-label">Status</InputLabel>
-                                    <Select
-                                        labelId="product-status-label"
-                                        value={selectedProduct.status}
-                                        onChange={(e) => handleProductStatusChange(selectedProduct.id, e.target.value)}
-                                        label="Status"
-                                        sx={{ borderRadius: '0.5rem' }}
-                                    >
-                                        {['Active', 'Completed', 'Cancelled', 'On-Hold'].map(status => (
-                                            <MenuItem key={status} value={status}>{status}</MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                            )}
-                            {/* Feature Assistant button (Placeholder for future general AI assistant) */}
-                            <Button
-                                variant="contained"
-                                startIcon={<MessageSquare size={20} />}
-                                sx={{
-                                    backgroundColor: '#4f46e5', 
-                                    '&:hover': { backgroundColor: '#4338ca' }, 
-                                    color: '#fff',
-                                    fontWeight: 600,
-                                    borderRadius: '0.5rem',
-                                    textTransform: 'none',
-                                    padding: '0.5rem 1rem',
-                                    boxShadow: 'none',
-                                }}
-                                disabled // Disabled for Phase 1
-                            >
-                                Feature Assistant (Coming Soon)
-                            </Button>
-                        </Box>
-                    </Paper>
-
-                    {/* Product Detail Tabs Container */}
-                    <Paper
-                        elevation={1}
-                        sx={{
-                            backgroundColor: '#fff',
-                            borderRadius: '1rem',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            flexGrow: 1, 
-                            overflow: 'hidden' 
-                        }}
-                    >
-                        {selectedProduct === null ? (
-                            <Box sx={{ 
-                                display: 'flex', 
-                                flexDirection: 'column', 
-                                alignItems: 'center', 
-                                justifyContent: 'center', 
-                                height: '100%', 
-                                minHeight: '300px', 
-                                p: 4,
-                            }}>
-                                <Box ref={lottieContainer} sx={{ width: '200px', height: '200px', marginBottom: 2 }}></Box>
-                                <Typography variant="h6" sx={{ color: '#4f46e5', fontWeight: 'bold', textAlign: 'center' }}>
-                                    Select a Product or Item
-                                </Typography>
-                                <Typography variant="body1" sx={{ color: '#6b7280', textAlign: 'center', maxWidth: '400px' }}>
-                                    Choose an item from the left sidebar to view its details and manage its lifecycle.
-                                </Typography>
-                            </Box>
-                        ) : (
-                            <>
-                                <Tabs 
-                                    value={selectedProductTab} 
-                                    onChange={(event, newValue) => setSelectedProductTab(newValue)} 
-                                    aria-label="Product detail tabs"
-                                    variant="scrollable" 
-                                    scrollButtons="auto"
-                                    sx={{
-                                        borderBottom: 1,
-                                        borderColor: 'divider',
-                                        '& .MuiTabs-indicator': { backgroundColor: '#4f46e5' }, 
-                                    }}
-                                >
-                                    {PRODUCT_TABS_ORDER.map((tabName, index) => (
-                                        <Tab 
-                                            key={tabName} 
-                                            label={tabName} 
-                                            id={`product-tab-${index}`} 
-                                            aria-controls={`product-tabpanel-${index}`}
-                                            sx={{
-                                                textTransform: 'none',
-                                                fontWeight: 'bold',
-                                                color: selectedProduct[`${tabName.toLowerCase().replace(/ /g, '_')}_status`] === 'Completed' ? '#16a34a' : '#4f46e5',
-                                                '&.Mui-selected': {
-                                                    color: '#4f46e5', 
-                                                },
-                                                '&:hover': {
-                                                    backgroundColor: '#eef2ff',
-                                                },
-                                                borderRadius: '0.5rem 0.5rem 0 0', 
-                                                minHeight: '48px', 
-                                            }}
-                                        />
-                                    ))}
-                                </Tabs>
-
-                                {/* Tab Panels for each section */}
-                                {PRODUCT_TABS_ORDER.map((tabName, index) => (
-                                    <TabPanel value={selectedProductTab} index={index} key={tabName}>
-                                        {/* Common Status Controls for each tab */}
-                                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1, marginBottom: 2 }}>
-                                            <Typography variant="body2" color="textSecondary">
-                                                Status:
-                                            </Typography>
-                                            <FormControl variant="outlined" size="small" sx={{ minWidth: 120 }}>
-                                                <Select
-                                                    value={selectedProduct[`${tabName.toLowerCase().replace(/ /g, '_')}_status`]}
-                                                    onChange={(e) => handleTabStatusChange(tabName, e.target.value)}
-                                                    sx={{ borderRadius: '0.5rem' }}
-                                                >
-                                                    {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(status => (
-                                                        <MenuItem key={status} value={status}>{status}</MenuItem>
-                                                    ))}
-                                                </Select>
-                                            </FormControl>
-                                        </Box>
-
-                                        {/* --- Research Tab Content --- */}
-                                        {tabName === 'Research' && (
-                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, flexGrow: 1, overflowY: 'auto' }}>
-                                                {/* Market Research Section */}
-                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #d8b4fe', backgroundColor: '#f5f3ff' }}>
-                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#4f46e5', marginBottom: 2 }}>
-                                                        Market Research
-                                                    </Typography>
-                                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: '300px', overflowY: 'auto', marginBottom: 2 }}>
-                                                        {researchChatHistory.map((msg, idx) => (
-                                                            <Box key={idx} sx={{ 
-                                                                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                                                                backgroundColor: msg.role === 'user' ? '#eef2ff' : '#f0f4f8',
-                                                                borderRadius: '0.75rem',
-                                                                p: 1.5,
-                                                                maxWidth: '80%',
-                                                                wordBreak: 'break-word',
-                                                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                                                            }}>
-                                                                <Typography variant="body2" sx={{ color: msg.role === 'user' ? '#4f46e5' : '#374151' }}>
-                                                                    {msg.content}
-                                                                </Typography>
-                                                            </Box>
-                                                        ))}
-                                                        {isResearchAILoading && (
-                                                            <Box sx={{ alignSelf: 'flex-start', p: 1.5 }}>
-                                                                <CircularProgress size={20} />
-                                                                <Typography variant="body2" sx={{ color: '#6b7280', ml: 1 }}>AI is thinking...</Typography>
-                                                            </Box>
-                                                        )}
-                                                    </Box>
-                                                    <form onSubmit={handleResearchPromptSubmit} style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                                                        <TextField
-                                                            fullWidth
-                                                            variant="outlined"
-                                                            size="small"
-                                                            placeholder="Ask AI about market research..."
-                                                            value={currentResearchPrompt}
-                                                            onChange={(e) => setCurrentResearchPrompt(e.target.value)}
-                                                            disabled={isResearchAILoading}
-                                                            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
-                                                        />
-                                                        <IconButton type="submit" color="primary" disabled={isResearchAILoading}>
-                                                            <Send />
-                                                        </IconButton>
-                                                        {/* Speech-to-text (Mic) button - Placeholder for now */}
-                                                        <IconButton color="primary" disabled> 
-                                                            <Mic />
-                                                        </IconButton>
-                                                    </form>
-                                                </Paper>
-
-                                                {/* Market Research Document Editor */}
-                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #e0e7ff', backgroundColor: '#f9fafb', flexGrow: 1 }}>
-                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 2 }}>
-                                                        Market Research Document
-                                                    </Typography>
-                                                    <Editor 
-                                                        initialData={researchDocumentData} 
-                                                        onChange={handleResearchDocumentSave} 
-                                                        holder="research-editor-container"
-                                                    />
-                                                </Paper>
-
-                                                {/* Customer Interviews Section */}
-                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #d8b4fe', backgroundColor: '#f5f3ff' }}>
-                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                                                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
-                                                            Customer Interviews
-                                                        </Typography>
-                                                        <Button 
-                                                            variant="contained" 
-                                                            startIcon={<PlusCircle size={20} />} 
-                                                            onClick={() => setShowAddInterviewModal(true)}
-                                                            sx={{ textTransform: 'none', borderRadius: '0.5rem', backgroundColor: '#16a34a', '&:hover': { backgroundColor: '#15803d' } }}
-                                                        >
-                                                            Add Interview
-                                                        </Button>
-                                                    </Box>
-                                                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 2 }}>
-                                                        <Button 
-                                                            variant="outlined" 
-                                                            startIcon={<Sparkles size={16} />} 
-                                                            onClick={fetchInterviewTemplates}
-                                                            sx={{ textTransform: 'none', borderRadius: '0.5rem', borderColor: '#9333ea', color: '#9333ea', '&:hover': { backgroundColor: '#f3e8ff' } }}
-                                                        >
-                                                            Manage Templates
-                                                        </Button>
-                                                    </Box>
-
-                                                    <List dense sx={{ maxHeight: 300, overflowY: 'auto', border: '1px solid #e0e7ff', borderRadius: '0.5rem' }}>
-                                                        {customerInterviews.length === 0 ? (
-                                                            <ListItem><ListItemText secondary="No interviews added yet." sx={{ textAlign: 'center' }} /></ListItem>
-                                                        ) : (
-                                                            customerInterviews.map(interview => (
-                                                                <ListItem 
-                                                                    key={interview.id} 
-                                                                    onClick={() => handleSelectInterview(interview)}
-                                                                    secondaryAction={
-                                                                        <IconButton edge="end" aria-label="delete" onClick={(e) => { e.stopPropagation(); handleDeleteInterview(interview.id); }}>
-                                                                            <Trash2 size={16} />
-                                                                        </IconButton>
-                                                                    }
-                                                                    sx={{ 
-                                                                        backgroundColor: selectedInterview && selectedInterview.id === interview.id ? '#eef2ff' : 'transparent',
-                                                                        '&:hover': { backgroundColor: '#eef2ff' },
-                                                                        borderRadius: '0.5rem',
-                                                                        marginBottom: '0.25rem'
-                                                                    }}
-                                                                >
-                                                                    <ListItemText 
-                                                                        primary={interview.customer_name} 
-                                                                        secondary={`${new Date(interview.interview_date).toLocaleDateString()} - ${interview.customer_email || 'N/A'}`} 
-                                                                    />
-                                                                </ListItem>
-                                                            ))
-                                                        )}
-                                                    </List>
-
-                                                    {selectedInterview && (
-                                                        <Box sx={{ marginTop: 3, borderTop: '1px solid #e0e7ff', paddingTop: 3 }}>
-                                                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 2 }}>
-                                                                Interview Notes for {selectedInterview.customer_name}
-                                                            </Typography>
-                                                            <Editor 
-                                                                initialData={interviewNotesData} 
-                                                                onChange={handleSaveInterviewNotes} 
-                                                                holder={`interview-notes-editor-${selectedInterview.id}`}
-                                                            />
-                                                            <Button 
-                                                                variant="contained" 
-                                                                startIcon={<Sparkles size={20} />} 
-                                                                onClick={handleGenerateInterviewSummary}
-                                                                disabled={loading}
-                                                                sx={{ textTransform: 'none', borderRadius: '0.5rem', backgroundColor: '#9333ea', '&:hover': { backgroundColor: '#7e22ce' }, marginTop: 2 }}
-                                                            >
-                                                                {loading ? <CircularProgress size={20} color="inherit" /> : 'Generate Summary'}
-                                                            </Button>
-
-                                                            {interviewSummaryData && (
-                                                                <Box sx={{ marginTop: 3 }}>
-                                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 1 }}>
-                                                                        AI Summary:
-                                                                    </Typography>
-                                                                    <Editor 
-                                                                        initialData={interviewSummaryData} 
-                                                                        readOnly={true} 
-                                                                        holder={`interview-summary-editor-${selectedInterview.id}`}
-                                                                    />
-                                                                </Box>
-                                                            )}
-                                                        </Box>
-                                                    )}
-                                                </Paper>
-                                            </Box>
-                                        )}
-
-                                        {/* --- PRD Tab Content --- */}
-                                        {tabName === 'PRD' && (
-                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, flexGrow: 1, overflowY: 'auto' }}>
-                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #d8b4fe', backgroundColor: '#f5f3ff' }}>
-                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#4f46e5', marginBottom: 2 }}>
-                                                        PRD Generation Assistant
-                                                    </Typography>
-                                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: '300px', overflowY: 'auto', marginBottom: 2 }}>
-                                                        {prdChatHistory.map((msg, idx) => (
-                                                            <Box key={idx} sx={{ 
-                                                                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                                                                backgroundColor: msg.role === 'user' ? '#eef2ff' : '#f0f4f8',
-                                                                borderRadius: '0.75rem',
-                                                                p: 1.5,
-                                                                maxWidth: '80%',
-                                                                wordBreak: 'break-word',
-                                                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                                                            }}>
-                                                                <Typography variant="body2" sx={{ color: msg.role === 'user' ? '#4f46e5' : '#374151' }}>
-                                                                    {msg.content}
-                                                                </Typography>
-                                                            </Box>
-                                                        ))}
-                                                        {isPrdAILoading && (
-                                                            <Box sx={{ alignSelf: 'flex-start', p: 1.5 }}>
-                                                                <CircularProgress size={20} />
-                                                                <Typography variant="body2" sx={{ color: '#6b7280', ml: 1 }}>AI is thinking...</Typography>
-                                                            </Box>
-                                                        )}
-                                                    </Box>
-                                                    <form onSubmit={handlePrdPromptSubmit} style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                                                        <TextField
-                                                            fullWidth
-                                                            variant="outlined"
-                                                            size="small"
-                                                            placeholder="Tell AI about your PRD requirements..."
-                                                            value={currentPrdPrompt}
-                                                            onChange={(e) => setCurrentPrdPrompt(e.target.value)}
-                                                            disabled={isPrdAILoading}
-                                                            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
-                                                        />
-                                                        <IconButton type="submit" color="primary" disabled={isPrdAILoading}>
-                                                            <Send />
-                                                        </IconButton>
-                                                        {/* Speech-to-text (Mic) button - Placeholder for now */}
-                                                        <IconButton color="primary" disabled> 
-                                                            <Mic />
-                                                        </IconButton>
-                                                    </form>
-                                                </Paper>
-
-                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #e0e7ff', backgroundColor: '#f9fafb', flexGrow: 1 }}>
-                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 2 }}>
-                                                        Product Requirements Document
-                                                    </Typography>
-                                                    <Editor 
-                                                        initialData={prdDocumentData} 
-                                                        onChange={handlePrdDocumentSave} 
-                                                        holder="prd-editor-container"
-                                                    />
-                                                </Paper>
-                                            </Box>
-                                        )}
-
-                                        {/* --- Other Tabs (Placeholders for now) --- */}
-                                        {tabName !== 'Research' && tabName !== 'PRD' && (
-                                            <Box sx={{ p: 3, textAlign: 'center', color: '#6b7280', flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-                                                <Typography variant="h6" sx={{ marginBottom: 2 }}>
-                                                    {tabName} Tab
-                                                </Typography>
-                                                <Typography variant="body1">
-                                                    Content for the {tabName} tab will be implemented in future phases.
-                                                </Typography>
-                                            </Box>
-                                        )}
-                                    </TabPanel>
-                                ))}
-                            </>
-                        )}
-                    </Paper>
-                </Box>
-            </Box>
-
-            {/* Add Product Modal */}
-            <Dialog open={showAddProductModal} onClose={() => setShowAddProductModal(false)} PaperProps={{ sx: { borderRadius: '1rem' } }}>
-                <DialogTitle sx={{ fontWeight: 'bold', color: '#1f2937' }}>Add New Product/Item</DialogTitle>
-                <DialogContent dividers>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        id="new-product-name"
-                        label="Product/Item Name"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={newProductName}
-                        onChange={(e) => setNewProductName(e.target.value)}
-                        sx={{ marginBottom: 2 }}
-                    />
-                    <FormControl fullWidth margin="dense" sx={{ marginBottom: 2 }}>
-                        <InputLabel id="new-product-status-label">Status</InputLabel>
-                        <Select
-                            labelId="new-product-status-label"
-                            value={newProductStatus}
-                            onChange={(e) => setNewProductStatus(e.target.value)}
-                            label="Status"
-                        >
-                            {['Active', 'Completed', 'Cancelled', 'On-Hold'].map(status => (
-                                <MenuItem key={status} value={status}>{status}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                    <FormControl fullWidth margin="dense">
-                        <InputLabel id="new-product-parent-label">Parent Item (for Iteration)</InputLabel>
-                        <Select
-                            labelId="new-product-parent-label"
-                            value={newProductParentId}
-                            onChange={(e) => setNewProductParentId(e.target.value)}
-                            label="Parent Item (for Iteration)"
-                        >
-                            <MenuItem value=""><em>None</em></MenuItem>
-                            {products.filter(p => !p.parent_id).map(p => ( // Only show top-level products as parents
-                                <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-                </DialogContent>
-                <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
-                    <Button 
-                        onClick={() => setShowAddProductModal(false)} 
-                        sx={{ 
-                            textTransform: 'none', 
-                            color: '#6b7280', 
-                            borderRadius: '0.5rem', 
-                            '&:hover': { backgroundColor: '#f3f4f6' } 
-                        }}
-                    >
-                        Cancel
-                    </Button>
-                    <Button 
-                        onClick={handleAddProduct} 
-                        variant="contained" 
-                        disabled={loading || !newProductName.trim()}
-                        sx={{ 
-                            textTransform: 'none', 
-                            backgroundColor: '#4f46e5', 
-                            color: '#fff', 
-                            borderRadius: '0.5rem',
-                            '&:hover': { backgroundColor: '#4338ca' },
-                            '&:disabled': { opacity: 0.5, color: '#fff' }
-                        }}
-                    >
-                        Add Product
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Add Customer Interview Modal */}
-            <Dialog open={showAddInterviewModal} onClose={() => setShowAddInterviewModal(false)} PaperProps={{ sx: { borderRadius: '1rem' } }}>
-                <DialogTitle sx={{ fontWeight: 'bold', color: '#1f2937' }}>Add New Customer Interview</DialogTitle>
-                <DialogContent dividers>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        id="interview-customer-name"
-                        label="Customer Name"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={newInterviewCustomerName}
-                        onChange={(e) => setNewInterviewCustomerName(e.target.value)}
-                        sx={{ marginBottom: 2 }}
-                    />
-                    <TextField
-                        margin="dense"
-                        id="interview-customer-email"
-                        label="Customer Email (Optional)"
-                        type="email"
-                        fullWidth
-                        variant="outlined"
-                        value={newInterviewCustomerEmail}
-                        onChange={(e) => setNewInterviewCustomerEmail(e.target.value)}
-                        sx={{ marginBottom: 2 }}
-                    />
-                    <TextField
-                        margin="dense"
-                        id="interview-date"
-                        label="Interview Date"
-                        type="datetime-local"
-                        fullWidth
-                        variant="outlined"
-                        value={newInterviewDate}
-                        onChange={(e) => setNewInterviewDate(e.target.value)}
-                        InputLabelProps={{
-                            shrink: true,
-                        }}
-                    />
-                </DialogContent>
-                <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
-                    <Button 
-                        onClick={() => setShowAddInterviewModal(false)} 
-                        sx={{ 
-                            textTransform: 'none', 
-                            color: '#6b7280', 
-                            borderRadius: '0.5rem', 
-                            '&:hover': { backgroundColor: '#f3f4f6' } 
-                        }}
-                    >
-                        Cancel
-                    </Button>
-                    <Button 
-                        onClick={handleAddCustomerInterview} 
-                        variant="contained" 
-                        disabled={loading || !newInterviewCustomerName.trim()}
-                        sx={{ 
-                            textTransform: 'none', 
-                            backgroundColor: '#4f46e5', 
-                            color: '#fff', 
-                            borderRadius: '0.5rem',
-                            '&:hover': { backgroundColor: '#4338ca' },
-                            '&:disabled': { opacity: 0.5, color: '#fff' }
-                        }}
-                    >
-                        Add Interview
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Interview Template Modal */}
-            <Dialog open={showTemplateModal} onClose={() => { setShowTemplateModal(false); setSelectedTemplate(null); setTemplateName(''); setTemplateQuestionsData(null); }} PaperProps={{ sx: { borderRadius: '1rem', maxWidth: '800px' } }} fullWidth>
-                <DialogTitle sx={{ fontWeight: 'bold', color: '#1f2937' }}>
-                    {selectedTemplate ? 'Edit Interview Template' : 'Manage Interview Templates'}
-                </DialogTitle>
-                <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {!selectedTemplate ? (
-                        <>
-                            <Box sx={{ display: 'flex', gap: 2, marginBottom: 2 }}>
-                                <TextField
-                                    autoFocus
-                                    margin="dense"
-                                    id="template-name-input"
-                                    label="New Template Name"
-                                    type="text"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={templateName}
-                                    onChange={(e) => setTemplateName(e.target.value)}
-                                />
-                                <Button 
-                                    onClick={handleCreateTemplate} 
-                                    variant="contained" 
-                                    disabled={loading || !templateName.trim()}
-                                    sx={{ textTransform: 'none', borderRadius: '0.5rem', backgroundColor: '#16a34a', '&:hover': { backgroundColor: '#15803d' } }}
-                                >
-                                    Create
-                                </Button>
-                            </Box>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 1 }}>Existing Templates</Typography>
-                            <List dense sx={{ maxHeight: 300, overflowY: 'auto', border: '1px solid #e0e7ff', borderRadius: '0.5rem' }}>
-                                {interviewTemplates.length === 0 ? (
-                                    <ListItem><ListItemText secondary="No templates created yet." sx={{ textAlign: 'center' }} /></ListItem>
-                                ) : (
-                                    interviewTemplates.map(template => (
-                                        <ListItem 
-                                            key={template.id} 
-                                            onClick={() => handleSelectTemplate(template)}
-                                            secondaryAction={
-                                                <IconButton edge="end" aria-label="delete" onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(template.id); }}>
-                                                    <Trash2 size={16} />
-                                                </IconButton>
-                                            }
-                                            sx={{ 
-                                                backgroundColor: selectedTemplate && selectedTemplate.id === template.id ? '#eef2ff' : 'transparent',
-                                                '&:hover': { backgroundColor: '#eef2ff' },
-                                                borderRadius: '0.5rem',
-                                                marginBottom: '0.25rem'
-                                            }}
-                                        >
-                                            <ListItemText primary={template.template_name} />
-                                        </ListItem>
-                                    ))
-                                )}
-                            </List>
-                        </>
-                    ) : (
-                        <>
-                            <TextField
-                                margin="dense"
-                                id="edit-template-name"
-                                label="Template Name"
+            {showAddModal && (
+                <Modal title="Create New Interview Template" onClose={() => setShowAddModal(false)}>
+                    <form onSubmit={handleAddTemplate} className="space-y-4">
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Template Name</label>
+                            <input
                                 type="text"
-                                fullWidth
-                                variant="outlined"
-                                value={templateName}
-                                onChange={(e) => setTemplateName(e.target.value)}
-                                sx={{ marginBottom: 2 }}
+                                name="template_name"
+                                value={newTemplateData.template_name}
+                                onChange={handleInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                required
                             />
-                            <Typography variant="body1" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 1 }}>
-                                Template Questions
-                            </Typography>
-                            <Editor 
-                                initialData={templateQuestionsData} 
-                                onChange={setTemplateQuestionsData} 
-                                holder={`template-editor-${selectedTemplate.id}`}
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Template Questions (Editor.js JSON)</label>
+                            <textarea
+                                name="template_questions_json"
+                                value={newTemplateData.template_questions_json}
+                                onChange={handleInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 min-h-[150px]"
+                                placeholder="Enter template questions here (e.g., 'What problem are you trying to solve?')."
                             />
-                            <Button 
-                                variant="contained" 
-                                startIcon={<Sparkles size={20} />} 
-                                onClick={() => handleGenerateTemplateQuestions(selectedProduct?.name || '', templateQuestionsData ? JSON.stringify(templateQuestionsData) : '')}
-                                disabled={isTemplateAILoading || !selectedProduct}
-                                sx={{ textTransform: 'none', borderRadius: '0.5rem', backgroundColor: '#9333ea', '&:hover': { backgroundColor: '#7e22ce' }, marginTop: 2 }}
+                        </div>
+                        <div className="flex justify-end space-x-4">
+                            <button
+                                type="button"
+                                onClick={() => setShowAddModal(false)}
+                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
                             >
-                                {isTemplateAILoading ? <CircularProgress size={20} color="inherit" /> : 'Generate Questions with AI'}
-                            </Button>
-                        </>
-                    )}
-                </DialogContent>
-                <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
-                    <Button 
-                        onClick={() => { setShowTemplateModal(false); setSelectedTemplate(null); setTemplateName(''); setTemplateQuestionsData(null); }} 
-                        sx={{ 
-                            textTransform: 'none', 
-                            color: '#6b7280', 
-                            borderRadius: '0.5rem', 
-                            '&:hover': { backgroundColor: '#f3f4f6' } 
-                        }}
-                    >
-                        {selectedTemplate ? 'Close' : 'Cancel'}
-                    </Button>
-                    {selectedTemplate && (
-                        <Button 
-                            onClick={handleUpdateTemplate} 
-                            variant="contained" 
-                            disabled={loading || !templateName.trim()}
-                            sx={{ 
-                                textTransform: 'none', 
-                                backgroundColor: '#4f46e5', 
-                                color: '#fff', 
-                                borderRadius: '0.5rem',
-                                '&:hover': { backgroundColor: '#4338ca' },
-                                '&:disabled': { opacity: 0.5, color: '#fff' }
-                            }}
-                        >
-                            Save Changes
-                        </Button>
-                    )}
-                </DialogActions>
-            </Dialog>
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                            >
+                                Create Template
+                            </button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
 
-
-            {/* Delete Confirmation Modal */}
-            <Dialog
-                open={showDeleteConfirmModal}
-                onClose={() => setShowDeleteConfirmModal(false)}
-                aria-labelledby="alert-dialog-title"
-                aria-describedby="alert-dialog-description"
-                PaperProps={{ sx: { borderRadius: '1rem' } }}
-            >
-                <DialogTitle id="alert-dialog-title" sx={{ fontWeight: 'bold', color: '#ef4444' }}>
-                    {"Confirm Deletion"}
-                </DialogTitle>
-                <DialogContent>
-                    <DialogContentText id="alert-dialog-description" sx={{ color: '#4b5563' }}>
-                        Are you sure you want to delete this product/item? This action cannot be undone.
-                    </DialogContentText>
-                </DialogContent>
-                <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
-                    <Button 
-                        onClick={() => setShowDeleteConfirmModal(false)} 
-                        sx={{ 
-                            textTransform: 'none', 
-                            color: '#6b7280', 
-                            borderRadius: '0.5rem', 
-                            '&:hover': { backgroundColor: '#f3f4f6' } 
-                        }}
-                    >
-                        Cancel
-                    </Button>
-                    <Button 
-                        onClick={handleDeleteProduct} 
-                        variant="contained" 
-                        color="error" 
-                        autoFocus
-                        disabled={loading}
-                        sx={{ 
-                            textTransform: 'none', 
-                            backgroundColor: '#ef4444', 
-                            color: '#fff', 
-                            borderRadius: '0.5rem',
-                            '&:hover': { backgroundColor: '#dc2626' },
-                            '&:disabled': { opacity: 0.5, color: '#fff' }
-                        }}
-                    >
-                        Delete
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
-                <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
-                    {snackbarMessage}
-                </Alert>
-            </Snackbar>
-        </Box>
-    );
-}
-
-// Helper function for TabPanel content
-const TabPanel = (props) => {
-    const { children, value, index, ...other } = props;
-    return (
-        <div
-            role="tabpanel"
-            hidden={value !== index}
-            id={`product-tabpanel-${index}`}
-            aria-labelledby={`product-tab-${index}`}
-            {...other}
-            style={{ flexGrow: 1, display: value === index ? 'flex' : 'none', flexDirection: 'column', overflowY: 'auto' }}
-        >
-            {value === index && (
-                <Box sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-                    {children}
-                </Box>
+            {showDetailModal && selectedTemplate && (
+                <TemplateDetailModal
+                    template={selectedTemplate}
+                    onClose={() => setShowDetailModal(false)}
+                    onUpdate={handleUpdateTemplate}
+                    onDelete={handleDeleteTemplate}
+                    onGenerateQuestions={handleGenerateQuestions}
+                    aiQuestionsLoading={aiQuestionsLoading}
+                    aiQuestionsError={aiQuestionsError}
+                    featureIdeaForAI={featureIdeaForAI}
+                    setFeatureIdeaForAI={setFeatureIdeaForAI}
+                />
             )}
         </div>
     );
-};
+}
 
-export default App;
+// --- Template Detail Modal Component ---
+function TemplateDetailModal({ template, onClose, onUpdate, onDelete, onGenerateQuestions, aiQuestionsLoading, aiQuestionsError, featureIdeaForAI, setFeatureIdeaForAI }) {
+    const [editMode, setEditMode] = useState(false);
+    const [editedTemplate, setEditedTemplate] = useState(template);
+
+    useEffect(() => {
+        setEditedTemplate(template);
+    }, [template]);
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setEditedTemplate(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSave = async () => {
+        await onUpdate(editedTemplate);
+        setEditMode(false);
+    };
+
+    const handleGenerateClick = () => {
+        onGenerateQuestions(editedTemplate.id, editedTemplate.template_questions_json);
+    };
+
+    return (
+        <Modal title={`Template: ${template.template_name}`} onClose={onClose}>
+            <div className="space-y-4">
+                <div>
+                    <label className="block text-gray-700 text-sm font-bold mb-1">Template Name</label>
+                    {editMode ? (
+                        <input
+                            type="text"
+                            name="template_name"
+                            value={editedTemplate.template_name}
+                            onChange={handleInputChange}
+                            className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                        />
+                    ) : (
+                        <p className="text-gray-900">{template.template_name}</p>
+                    )}
+                </div>
+                <div>
+                    <label className="block text-gray-700 text-sm font-bold mb-1">Template Questions</label>
+                    {editMode ? (
+                        <textarea
+                            name="template_questions_json"
+                            value={editedTemplate.template_questions_json || ''}
+                            onChange={handleInputChange}
+                            className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 min-h-[150px]"
+                            placeholder="Enter template questions here..."
+                        />
+                    ) : (
+                        <div className="bg-gray-100 p-3 rounded-lg prose max-w-none" dangerouslySetInnerHTML={{ __html: template.template_questions_json ? template.template_questions_json.replace(/\n/g, '<br/>') : '<p class="text-gray-500">No questions available.</p>' }} />
+                    )}
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg shadow-sm mt-4">
+                    <h4 className="text-xl font-semibold text-gray-800 mb-3">AI Question Generator</h4>
+                    <textarea
+                        className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[80px] mb-4"
+                        placeholder="Enter a feature idea to generate interview questions (e.g., 'A new social media feature for sharing short videos')."
+                        value={featureIdeaForAI}
+                        onChange={(e) => setFeatureIdeaForAI(e.target.value)}
+                        disabled={aiQuestionsLoading}
+                    />
+                    <button
+                        onClick={handleGenerateClick}
+                        disabled={aiQuestionsLoading || !featureIdeaForAI}
+                        className={`px-6 py-2 rounded-lg font-bold text-white shadow transition duration-300 ease-in-out ${
+                            aiQuestionsLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
+                        }`}
+                    >
+                        {aiQuestionsLoading ? 'Generating...' : 'Generate Questions'}
+                    </button>
+                    {aiQuestionsError && <p className="text-red-500 text-sm mt-2">{aiQuestionsError}</p>}
+                </div>
+
+                <div className="flex justify-end space-x-4 mt-6">
+                    {editMode ? (
+                        <button
+                            onClick={handleSave}
+                            className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg"
+                        >
+                            Save Changes
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => setEditMode(true)}
+                            className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                        >
+                            Edit
+                        </button>
+                    )}
+                    <button
+                        onClick={() => onDelete(template.id)}
+                        className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg"
+                    >
+                        Delete
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+// --- Reusable Modal Component ---
+function Modal({ title, onClose, children }) {
+    return (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
+                <h3 className="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">{title}</h3>
+                <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl font-bold"
+                >
+                    &times;
+                </button>
+                {children}
+            </div>
+        </div>
+    );
+}
+
+// --- Task Tab Component (NEW for Phase 2) ---
+function TaskTab({ productId, isEditor }) {
+    const { user } = useContext(AuthContext);
+    const [tasks, setTasks] = useState([]);
+    const [allUsers, setAllUsers] = useState([]); // For assigning tasks
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+    const [newTaskData, setNewTaskData] = useState({
+        title: '',
+        description: '',
+        assigned_to_user_id: '',
+        status: 'To Do',
+        priority: 'Medium',
+        due_date: '',
+    });
+    const [showEditTaskModal, setShowEditTaskModal] = useState(false);
+    const [editingTask, setEditingTask] = useState(null);
+
+    const fetchTasks = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await fetcher.get(`/products/${productId}/tasks`);
+            setTasks(response.data);
+        } catch (err) {
+            console.error('Error fetching tasks:', err.response?.data || err.message);
+            setError('Failed to fetch tasks.');
+        } finally {
+            setLoading(false);
+        }
+    }, [productId]);
+
+    const fetchAllUsers = useCallback(async () => {
+        try {
+            const response = await fetcher.get('/users');
+            setAllUsers(response.data);
+        } catch (err) {
+            console.error('Error fetching users:', err.response?.data || err.message);
+            // Don't block if users fail, just log error
+        }
+    }, []);
+
+    useEffect(() => {
+        if (user && productId) {
+            fetchTasks();
+            fetchAllUsers();
+        }
+    }, [user, productId, fetchTasks, fetchAllUsers]);
+
+    const handleNewTaskInputChange = (e) => {
+        const { name, value } = e.target;
+        setNewTaskData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleCreateTask = async (e) => {
+        e.preventDefault();
+        setError(null);
+        try {
+            const payload = {
+                ...newTaskData,
+                assigned_to_user_id: newTaskData.assigned_to_user_id === '' ? null : parseInt(newTaskData.assigned_to_user_id),
+                due_date: newTaskData.due_date || null,
+            };
+            await fetcher.post(`/products/${productId}/tasks`, payload);
+            setNewTaskData({
+                title: '',
+                description: '',
+                assigned_to_user_id: '',
+                status: 'To Do',
+                priority: 'Medium',
+                due_date: '',
+            });
+            setShowAddTaskModal(false);
+            fetchTasks();
+        } catch (err) {
+            console.error('Error creating task:', err.response?.data || err.message);
+            setError(err.response?.data?.error || 'Failed to create task.');
+        }
+    };
+
+    const handleEditTaskClick = (task) => {
+        setEditingTask({
+            ...task,
+            due_date: task.due_date ? task.due_date.slice(0, 16) : '', // Format for datetime-local input
+            assigned_to_user_id: task.assigned_to_user_id || '',
+        });
+        setShowEditTaskModal(true);
+    };
+
+    const handleEditTaskInputChange = (e) => {
+        const { name, value } = e.target;
+        setEditingTask(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleUpdateTask = async (e) => {
+        e.preventDefault();
+        setError(null);
+        try {
+            const payload = {
+                ...editingTask,
+                assigned_to_user_id: editingTask.assigned_to_user_id === '' ? null : parseInt(editingTask.assigned_to_user_id),
+                due_date: editingTask.due_date || null,
+            };
+            await fetcher.put(`/tasks/${editingTask.id}`, payload);
+            setShowEditTaskModal(false);
+            setEditingTask(null);
+            fetchTasks();
+        } catch (err) {
+            console.error('Error updating task:', err.response?.data || err.message);
+            setError(err.response?.data?.error || 'Failed to update task.');
+        }
+    };
+
+    const handleDeleteTask = async (taskId) => {
+        if (window.confirm('Are you sure you want to delete this task?')) {
+            setError(null);
+            try {
+                await fetcher.delete(`/tasks/${taskId}`);
+                fetchTasks();
+            } catch (err) {
+                console.error('Error deleting task:', err.response?.data || err.message);
+                setError(err.response?.data?.error || 'Failed to delete task.');
+            }
+        }
+    };
+
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        return new Date(dateString).toLocaleDateString(undefined, options);
+    };
+
+    if (loading) return <div className="text-center mt-8">Loading tasks...</div>;
+    if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h3 className="text-2xl font-semibold text-gray-800">Tasks</h3>
+                {isEditor && (
+                    <button
+                        onClick={() => setShowAddTaskModal(true)}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
+                    >
+                        + Add New Task
+                    </button>
+                )}
+            </div>
+
+            {tasks.length === 0 ? (
+                <p className="text-center text-gray-600 text-lg">No tasks for this product yet.</p>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {tasks.map(task => (
+                        <div key={task.id} className="bg-gray-50 p-6 rounded-lg shadow-md">
+                            <h4 className="text-xl font-semibold text-gray-900 mb-2">{task.title}</h4>
+                            <p className="text-gray-700 text-sm mb-1">{task.description}</p>
+                            <p className="text-gray-600 text-sm mb-1">Status: <span className="font-medium">{task.status}</span></p>
+                            <p className="text-gray-600 text-sm mb-1">Priority: <span className="font-medium">{task.priority}</span></p>
+                            <p className="text-gray-600 text-sm mb-1">Assigned To: <span className="font-medium">{task.assigned_to_username || 'Unassigned'}</span></p>
+                            <p className="text-gray-600 text-sm mb-4">Due Date: <span className="font-medium">{formatDate(task.due_date)}</span></p>
+                            {isEditor && (
+                                <div className="flex justify-end space-x-2">
+                                    <button
+                                        onClick={() => handleEditTaskClick(task)}
+                                        className="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-1 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteTask(task.id)}
+                                        className="bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-1 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {showAddTaskModal && (
+                <Modal title="Add New Task" onClose={() => setShowAddTaskModal(false)}>
+                    <form onSubmit={handleCreateTask} className="space-y-4">
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Title</label>
+                            <input
+                                type="text"
+                                name="title"
+                                value={newTaskData.title}
+                                onChange={handleNewTaskInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Description</label>
+                            <textarea
+                                name="description"
+                                value={newTaskData.description}
+                                onChange={handleNewTaskInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 min-h-[100px]"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Assigned To</label>
+                            <select
+                                name="assigned_to_user_id"
+                                value={newTaskData.assigned_to_user_id}
+                                onChange={handleNewTaskInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                            >
+                                <option value="">Unassigned</option>
+                                {allUsers.map(u => (
+                                    <option key={u.id} value={u.id}>{u.username} ({u.email})</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Status</label>
+                            <select
+                                name="status"
+                                value={newTaskData.status}
+                                onChange={handleNewTaskInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                            >
+                                {['To Do', 'In Progress', 'Done', 'Blocked', 'Archived'].map(s => (
+                                    <option key={s} value={s}>{s}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Priority</label>
+                            <select
+                                name="priority"
+                                value={newTaskData.priority}
+                                onChange={handleNewTaskInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                            >
+                                {['Low', 'Medium', 'High', 'Critical'].map(p => (
+                                    <option key={p} value={p}>{p}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Due Date</label>
+                            <input
+                                type="datetime-local"
+                                name="due_date"
+                                value={newTaskData.due_date}
+                                onChange={handleNewTaskInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                            />
+                        </div>
+                        <div className="flex justify-end space-x-4">
+                            <button
+                                type="button"
+                                onClick={() => setShowAddTaskModal(false)}
+                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                            >
+                                Add Task
+                            </button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
+
+            {showEditTaskModal && editingTask && (
+                <Modal title="Edit Task" onClose={() => setShowEditTaskModal(false)}>
+                    <form onSubmit={handleUpdateTask} className="space-y-4">
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Title</label>
+                            <input
+                                type="text"
+                                name="title"
+                                value={editingTask.title}
+                                onChange={handleEditTaskInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Description</label>
+                            <textarea
+                                name="description"
+                                value={editingTask.description || ''}
+                                onChange={handleEditTaskInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 min-h-[100px]"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Assigned To</label>
+                            <select
+                                name="assigned_to_user_id"
+                                value={editingTask.assigned_to_user_id}
+                                onChange={handleEditTaskInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                            >
+                                <option value="">Unassigned</option>
+                                {allUsers.map(u => (
+                                    <option key={u.id} value={u.id}>{u.username} ({u.email})</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Status</label>
+                            <select
+                                name="status"
+                                value={editingTask.status}
+                                onChange={handleEditTaskInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                            >
+                                {['To Do', 'In Progress', 'Done', 'Blocked', 'Archived'].map(s => (
+                                    <option key={s} value={s}>{s}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Priority</label>
+                            <select
+                                name="priority"
+                                value={editingTask.priority}
+                                onChange={handleEditTaskInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                            >
+                                {['Low', 'Medium', 'High', 'Critical'].map(p => (
+                                    <option key={p} value={p}>{p}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Due Date</label>
+                            <input
+                                type="datetime-local"
+                                name="due_date"
+                                value={editingTask.due_date}
+                                onChange={handleEditTaskInputChange}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                            />
+                        </div>
+                        <div className="flex justify-end space-x-4">
+                            <button
+                                type="button"
+                                onClick={() => setShowEditTaskModal(false)}
+                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                            >
+                                Update Task
+                            </button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
+        </div>
+    );
+}
+
+// --- Collaboration Tab Component (NEW for Phase 2) ---
+function CollaborationTab({ productId, isOwner }) {
+    const { user } = useContext(AuthContext);
+    const [accesses, setAccesses] = useState([]);
+    const [allUsers, setAllUsers] = useState([]); // For inviting users
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [showInviteModal, setShowInviteModal] = useState(false);
+    const [inviteEmail, setInviteEmail] = useState('');
+    const [inviteRole, setInviteRole] = useState('viewer');
+    const [inviteMessage, setInviteMessage] = useState('');
+
+    const fetchAccesses = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await fetcher.get(`/products/${productId}/access`);
+            setAccesses(response.data);
+        } catch (err) {
+            console.error('Error fetching product accesses:', err.response?.data || err.message);
+            setError('Failed to fetch collaboration details.');
+        } finally {
+            setLoading(false);
+        }
+    }, [productId]);
+
+    const fetchAllUsers = useCallback(async () => {
+        try {
+            const response = await fetcher.get('/users');
+            setAllUsers(response.data);
+        } catch (err) {
+            console.error('Error fetching all users:', err.response?.data || err.message);
+            // Log error but don't block UI
+        }
+    }, []);
+
+    useEffect(() => {
+        if (user && productId) {
+            fetchAccesses();
+            if (isOwner) { // Only fetch all users if current user is owner for inviting
+                fetchAllUsers();
+            }
+        }
+    }, [user, productId, isOwner, fetchAccesses, fetchAllUsers]);
+
+    const handleInviteUser = async (e) => {
+        e.preventDefault();
+        setInviteMessage('');
+        setError(null);
+        try {
+            await fetcher.post(`/products/${productId}/access`, {
+                user_email: inviteEmail,
+                role: inviteRole,
+            });
+            setInviteEmail('');
+            setInviteRole('viewer');
+            setShowInviteModal(false);
+            setInviteMessage('User invited successfully!');
+            fetchAccesses(); // Refresh the access list
+        } catch (err) {
+            console.error('Error inviting user:', err.response?.data || err.message);
+            setInviteMessage(err.response?.data?.error || 'Failed to invite user.');
+            setError(err.response?.data?.error || 'Failed to invite user.');
+        }
+    };
+
+    const handleUpdateRole = async (accessId, userId, newRole) => {
+        setError(null);
+        try {
+            await fetcher.put(`/products/${productId}/access/${userId}`, { role: newRole });
+            fetchAccesses(); // Refresh the access list
+        } catch (err) {
+            console.error('Error updating user role:', err.response?.data || err.message);
+            setError(err.response?.data?.error || 'Failed to update user role.');
+        }
+    };
+
+    const handleRemoveAccess = async (userIdToRemove) => {
+        if (window.confirm('Are you sure you want to remove this user\'s access?')) {
+            setError(null);
+            try {
+                await fetcher.delete(`/products/${productId}/access/${userIdToRemove}`);
+                fetchAccesses(); // Refresh the access list
+            } catch (err) {
+                console.error('Error removing user access:', err.response?.data || err.message);
+                setError(err.response?.data?.error || 'Failed to remove user access.');
+            }
+        }
+    };
+
+    if (loading) return <div className="text-center mt-8">Loading collaboration details...</div>;
+    if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h3 className="text-2xl font-semibold text-gray-800">Product Collaboration</h3>
+                {isOwner && (
+                    <button
+                        onClick={() => setShowInviteModal(true)}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
+                    >
+                        + Invite User
+                    </button>
+                )}
+            </div>
+
+            {accesses.length === 0 ? (
+                <p className="text-center text-gray-600 text-lg">No collaborators for this product yet.</p>
+            ) : (
+                <div className="overflow-x-auto">
+                    <table className="min-w-full bg-white border border-gray-200 rounded-lg shadow-md">
+                        <thead className="bg-gray-100">
+                            <tr>
+                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">User</th>
+                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Email</th>
+                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Role</th>
+                                {isOwner && <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Actions</th>}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {accesses.map(access => (
+                                <tr key={access.id} className="border-t border-gray-200 hover:bg-gray-50">
+                                    <td className="py-3 px-4 text-gray-800">{access.user_username || 'N/A'}</td>
+                                    <td className="py-3 px-4 text-gray-800">{access.user_email}</td>
+                                    <td className="py-3 px-4 text-gray-800">
+                                        {isOwner && access.user_id !== user.id ? ( // Owner can change others' roles
+                                            <select
+                                                value={access.role}
+                                                onChange={(e) => handleUpdateRole(access.id, access.user_id, e.target.value)}
+                                                className="border rounded-lg py-1 px-2 text-gray-700"
+                                            >
+                                                <option value="owner">Owner</option>
+                                                <option value="editor">Editor</option>
+                                                <option value="viewer">Viewer</option>
+                                            </select>
+                                        ) : (
+                                            <span className="font-medium capitalize">{access.role}</span>
+                                        )}
+                                    </td>
+                                    {isOwner && (
+                                        <td className="py-3 px-4">
+                                            {access.user_id !== user.id && ( // Cannot remove self as owner
+                                                <button
+                                                    onClick={() => handleRemoveAccess(access.user_id)}
+                                                    className="bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-1 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                                                >
+                                                    Remove
+                                                </button>
+                                            )}
+                                        </td>
+                                    )}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {showInviteModal && (
+                <Modal title="Invite User to Product" onClose={() => setShowInviteModal(false)}>
+                    <form onSubmit={handleInviteUser} className="space-y-4">
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">User Email</label>
+                            <input
+                                type="email"
+                                name="user_email"
+                                value={inviteEmail}
+                                onChange={(e) => setInviteEmail(e.target.value)}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                required
+                            />
+                            <p className="text-gray-500 text-xs mt-1">
+                                User must be registered in the system.
+                            </p>
+                        </div>
+                        <div>
+                            <label className="block text-gray-700 text-sm font-bold mb-2">Role</label>
+                            <select
+                                name="role"
+                                value={inviteRole}
+                                onChange={(e) => setInviteRole(e.target.value)}
+                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                            >
+                                <option value="viewer">Viewer</option>
+                                <option value="editor">Editor</option>
+                            </select>
+                        </div>
+                        <div className="flex justify-end space-x-4">
+                            <button
+                                type="button"
+                                onClick={() => setShowInviteModal(false)}
+                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                            >
+                                Send Invite
+                            </button>
+                        </div>
+                    </form>
+                    {inviteMessage && (
+                        <p className={`mt-4 text-center ${inviteMessage.includes('success') ? 'text-green-500' : 'text-red-500'}`}>
+                            {inviteMessage}
+                        </p>
+                    )}
+                </Modal>
+            )}
+        </div>
+    );
+}
+
+
+// --- Main App Wrapper ---
+export default function MainApp() {
+    return (
+        <AuthProvider>
+            <App />
+        </AuthProvider>
+    );
+}
