@@ -6,7 +6,6 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:500
 
 // --- Contexts ---
 const AuthContext = createContext(null);
-const ProductContext = createContext(null);
 
 // --- Utility Functions ---
 const fetcher = axios.create({
@@ -16,7 +15,7 @@ const fetcher = axios.create({
     },
 });
 
-// Interceptor to add Authorization header
+// Interceptor to add Authorization header for all authenticated requests
 fetcher.interceptors.request.use(
     config => {
         const token = localStorage.getItem('token');
@@ -32,15 +31,17 @@ fetcher.interceptors.request.use(
 
 // --- Auth Provider Component ---
 function AuthProvider({ children }) {
-    const [user, setUser] = useState(null);
+    const [user, setUser] = useState(null); // Stores { token, username, timezone, email }
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const token = localStorage.getItem('token');
         const username = localStorage.getItem('username');
         const timezone = localStorage.getItem('timezone');
-        if (token && username) {
-            setUser({ token, username, timezone });
+        const email = localStorage.getItem('email'); // Store email as well for convenience
+
+        if (token && username && email) {
+            setUser({ token, username, timezone, email });
         }
         setLoading(false);
     }, []);
@@ -52,7 +53,8 @@ function AuthProvider({ children }) {
             localStorage.setItem('token', token);
             localStorage.setItem('username', username);
             localStorage.setItem('timezone', timezone);
-            setUser({ token, username, timezone });
+            localStorage.setItem('email', email); // Save email on login
+            setUser({ token, username, timezone, email });
             return { success: true };
         } catch (error) {
             console.error('Login failed:', error.response?.data || error.message);
@@ -74,6 +76,7 @@ function AuthProvider({ children }) {
         localStorage.removeItem('token');
         localStorage.removeItem('username');
         localStorage.removeItem('timezone');
+        localStorage.removeItem('email');
         setUser(null);
     };
 
@@ -101,7 +104,7 @@ function AuthProvider({ children }) {
     );
 }
 
-// --- App Component ---
+// --- App Component (Main Router) ---
 function App() {
     const { user, loading } = useContext(AuthContext);
     const [currentPage, setCurrentPage] = useState('login'); // 'login', 'signup', 'dashboard', 'productDetail', 'profile'
@@ -123,7 +126,11 @@ function App() {
     };
 
     if (loading) {
-        return <div className="flex items-center justify-center min-h-screen bg-gray-100">Loading...</div>;
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
+                <div style={{ fontSize: '1.25rem', fontWeight: '600', color: '#4b5563' }}>Loading application...</div>
+            </div>
+        );
     }
 
     let content;
@@ -148,9 +155,9 @@ function App() {
     }
 
     return (
-        <div className="min-h-screen bg-gray-100 font-inter">
+        <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6', fontFamily: 'Inter, sans-serif', WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale' }}>
             {user && <Navbar navigateTo={navigateTo} username={user.username} />}
-            <main className="container mx-auto p-4">
+            <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '1rem' }}>
                 {content}
             </main>
         </div>
@@ -161,22 +168,26 @@ function App() {
 function Navbar({ navigateTo, username }) {
     const { logout } = useContext(AuthContext);
     return (
-        <nav className="bg-gradient-to-r from-purple-600 to-indigo-700 p-4 shadow-lg">
-            <div className="container mx-auto flex justify-between items-center">
-                <h1 className="text-white text-2xl font-bold cursor-pointer" onClick={() => navigateTo('dashboard')}>
+        <nav style={{ background: 'linear-gradient(to right, #8b5cf6, #6366f1)', padding: '1rem', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)' }}>
+            <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h1 style={{ color: 'white', fontSize: '1.5rem', fontWeight: 'bold', cursor: 'pointer' }} onClick={() => navigateTo('dashboard')}>
                     Auto Product Manager
                 </h1>
-                <div className="flex items-center space-x-4">
-                    <span className="text-white text-lg">Hello, {username}!</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <span style={{ color: 'white', fontSize: '1.125rem' }}>Hello, {username}!</span>
                     <button
                         onClick={() => navigateTo('profile')}
-                        className="bg-white text-purple-700 px-4 py-2 rounded-lg shadow hover:bg-gray-100 transition duration-300 ease-in-out transform hover:scale-105"
+                        style={{ backgroundColor: 'white', color: '#7c3aed', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                        onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
                     >
                         Profile
                     </button>
                     <button
                         onClick={logout}
-                        className="bg-red-500 text-white px-4 py-2 rounded-lg shadow hover:bg-red-600 transition duration-300 ease-in-out transform hover:scale-105"
+                        style={{ backgroundColor: '#ef4444', color: 'white', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                        onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
                     >
                         Logout
                     </button>
@@ -205,31 +216,35 @@ function LoginPage({ navigateTo }) {
     };
 
     return (
-        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
-            <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
-                <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">Login</h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 80px)' }}>
+            <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '0.5rem', boxShadow: '0 10px 15px rgba(0, 0, 0, 0.1)', width: '100%', maxWidth: '448px' }}>
+                <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', textAlign: 'center', color: '#1f2937', marginBottom: '1.5rem' }}>Login</h2>
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div>
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
+                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="email">
                             Email
                         </label>
                         <input
                             type="email"
                             id="email"
-                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
                         />
                     </div>
                     <div>
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="password">
                             Password
                         </label>
                         <input
                             type="password"
                             id="password"
-                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
@@ -237,17 +252,19 @@ function LoginPage({ navigateTo }) {
                     </div>
                     <button
                         type="submit"
-                        className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105"
+                        style={{ width: '100%', backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.75rem 1rem', borderRadius: '0.5rem', outline: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
                     >
                         Login
                     </button>
                 </form>
-                {message && <p className="mt-4 text-center text-red-500">{message}</p>}
-                <p className="mt-6 text-center text-gray-600">
+                {message && <p style={{ marginTop: '1rem', textAlign: 'center', color: '#ef4444' }}>{message}</p>}
+                <p style={{ marginTop: '1.5rem', textAlign: 'center', color: '#4b5563' }}>
                     Don't have an account?{' '}
                     <button
                         onClick={() => navigateTo('signup')}
-                        className="text-purple-600 hover:underline font-bold"
+                        style={{ color: '#8b5cf6', textDecoration: 'underline', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer' }}
                     >
                         Sign Up
                     </button>
@@ -271,7 +288,6 @@ function SignupPage({ navigateTo }) {
         const result = await signup(email, password, username);
         setMessage(result.message);
         if (result.success) {
-            // Optionally navigate to login or show success message only
             setEmail('');
             setUsername('');
             setPassword('');
@@ -280,44 +296,50 @@ function SignupPage({ navigateTo }) {
     };
 
     return (
-        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
-            <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
-                <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">Sign Up</h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 80px)' }}>
+            <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '0.5rem', boxShadow: '0 10px 15px rgba(0, 0, 0, 0.1)', width: '100%', maxWidth: '448px' }}>
+                <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', textAlign: 'center', color: '#1f2937', marginBottom: '1.5rem' }}>Sign Up</h2>
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div>
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
+                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="email">
                             Email
                         </label>
                         <input
                             type="email"
                             id="email"
-                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
                         />
                     </div>
                     <div>
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
+                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="username">
                             Username
                         </label>
                         <input
                             type="text"
                             id="username"
-                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             required
                         />
                     </div>
                     <div>
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="password">
                             Password
                         </label>
                         <input
                             type="password"
                             id="password"
-                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
@@ -325,17 +347,19 @@ function SignupPage({ navigateTo }) {
                     </div>
                     <button
                         type="submit"
-                        className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105"
+                        style={{ width: '100%', backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.75rem 1rem', borderRadius: '0.5rem', outline: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
                     >
                         Sign Up
                     </button>
                 </form>
-                {message && <p className="mt-4 text-center text-green-500">{message}</p>}
-                <p className="mt-6 text-center text-gray-600">
+                {message && <p style={{ marginTop: '1rem', textAlign: 'center', color: '#10b981' }}>{message}</p>}
+                <p style={{ marginTop: '1.5rem', textAlign: 'center', color: '#4b5563' }}>
                     Already have an account?{' '}
                     <button
                         onClick={() => navigateTo('login')}
-                        className="text-purple-600 hover:underline font-bold"
+                        style={{ color: '#8b5cf6', textDecoration: 'underline', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer' }}
                     >
                         Login
                     </button>
@@ -358,68 +382,75 @@ function ProfilePage({ navigateTo }) {
         const result = await updateProfile(username, timezone);
         setMessage(result.message);
         if (result.success) {
-            // Optionally, clear message after a few seconds
-            setTimeout(() => setMessage(''), 3000);
+            setTimeout(() => setMessage(''), 3000); // Clear message after 3 seconds
         }
     };
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-80px)]">
-            <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
-                <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">User Profile</h2>
-                <form onSubmit={handleUpdate} className="space-y-4">
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 80px)' }}>
+            <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '0.5rem', boxShadow: '0 10px 15px rgba(0, 0, 0, 0.1)', width: '100%', maxWidth: '448px' }}>
+                <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', textAlign: 'center', color: '#1f2937', marginBottom: '1.5rem' }}>User Profile</h2>
+                <form onSubmit={handleUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div>
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
+                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="email">
                             Email (Read-only)
                         </label>
                         <input
                             type="email"
                             id="email"
-                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight bg-gray-100 cursor-not-allowed"
+                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', backgroundColor: '#e5e7eb', cursor: 'not-allowed' }}
                             value={user?.email || ''}
                             disabled
                         />
                     </div>
                     <div>
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
+                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="username">
                             Username
                         </label>
                         <input
                             type="text"
                             id="username"
-                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             required
                         />
                     </div>
                     <div>
-                        <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="timezone">
+                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="timezone">
                             Timezone
                         </label>
                         <input
                             type="text"
                             id="timezone"
-                            className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             value={timezone}
                             onChange={(e) => setTimezone(e.target.value)}
                         />
                     </div>
                     <button
                         type="submit"
-                        className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105"
+                        style={{ width: '100%', backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.75rem 1rem', borderRadius: '0.5rem', outline: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
                     >
                         Update Profile
                     </button>
                 </form>
                 {message && (
-                    <p className={`mt-4 text-center ${message.includes('success') ? 'text-green-500' : 'text-red-500'}`}>
+                    <p style={{ marginTop: '1rem', textAlign: 'center', color: message.includes('success') ? '#10b981' : '#ef4444' }}>
                         {message}
                     </p>
                 )}
                 <button
                     onClick={() => navigateTo('dashboard')}
-                    className="mt-6 w-full bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105"
+                    style={{ marginTop: '1.5rem', width: '100%', backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.75rem 1rem', borderRadius: '0.5rem', outline: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#9ca3af'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#d1d5db'; e.currentTarget.style.transform = 'scale(1)'; }}
                 >
                     Back to Dashboard
                 </button>
@@ -488,24 +519,28 @@ function DashboardPage({ navigateTo }) {
         product.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    if (loading) return <div className="text-center mt-8">Loading products...</div>;
-    if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
+    if (loading) return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Loading products...</div>;
+    if (error) return <div style={{ textAlign: 'center', marginTop: '2rem', color: '#ef4444' }}>{error}</div>;
 
     return (
-        <div className="mt-8">
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-3xl font-bold text-gray-800">My Products</h2>
-                <div className="flex items-center space-x-4">
+        <div style={{ marginTop: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', color: '#1f2937' }}>My Products</h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <input
                         type="text"
                         placeholder="Search products..."
-                        className="shadow appearance-none border rounded-lg py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                        onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                        onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
                     <button
                         onClick={() => setShowCreateModal(true)}
-                        className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
+                        style={{ backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#16a34a'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#22c55e'; e.currentTarget.style.transform = 'scale(1)'; }}
                     >
                         + Create New Product
                     </button>
@@ -513,27 +548,34 @@ function DashboardPage({ navigateTo }) {
             </div>
 
             {filteredProducts.length === 0 ? (
-                <p className="text-center text-gray-600 text-lg">No products found. Start by creating one!</p>
+                <p style={{ textAlign: 'center', color: '#4b5563', fontSize: '1.125rem' }}>No products found. Start by creating one!</p>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
                     {filteredProducts.map((product) => (
-                        <div key={product.id} className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300">
-                            <h3 className="text-xl font-semibold text-gray-900 mb-2">{product.name}</h3>
-                            <p className="text-gray-600 text-sm mb-4">Status: <span className={`font-medium ${product.status === 'Active' ? 'text-green-600' : 'text-yellow-600'}`}>{product.status}</span></p>
-                            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
-                                <div className="bg-purple-600 h-2.5 rounded-full" style={{ width: `${product.progress}%` }}></div>
+                        <div key={product.id} style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '0.5rem', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)', transition: 'box-shadow 0.3s', cursor: 'pointer' }}
+                            onMouseOver={(e) => e.currentTarget.style.boxShadow = '0 10px 15px rgba(0, 0, 0, 0.1)'}
+                            onMouseOut={(e) => e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)'}
+                        >
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: 'semibold', color: '#111827', marginBottom: '0.5rem' }}>{product.name}</h3>
+                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '1rem' }}>Status: <span style={{ fontWeight: 'medium', color: product.status === 'Active' ? '#10b981' : '#d97706' }}>{product.status}</span></p>
+                            <div style={{ width: '100%', backgroundColor: '#e5e7eb', borderRadius: '9999px', height: '0.625rem', marginBottom: '1rem' }}>
+                                <div style={{ backgroundColor: '#8b5cf6', height: '0.625rem', borderRadius: '9999px', width: `${product.progress}%` }}></div>
                             </div>
-                            <p className="text-gray-600 text-sm mb-4">Progress: {product.progress}%</p>
-                            <div className="flex justify-end space-x-2">
+                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '1rem' }}>Progress: {product.progress}%</p>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                                 <button
                                     onClick={() => navigateTo('productDetail', product.id)}
-                                    className="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-1 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                                    style={{ backgroundColor: '#3b82f6', color: 'white', fontSize: '0.875rem', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#2563eb'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#3b82f6'; e.currentTarget.style.transform = 'scale(1)'; }}
                                 >
                                     View Details
                                 </button>
                                 <button
                                     onClick={() => handleDeleteProduct(product.id)}
-                                    className="bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-1 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                                    style={{ backgroundColor: '#ef4444', color: 'white', fontSize: '0.875rem', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#dc2626'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#ef4444'; e.currentTarget.style.transform = 'scale(1)'; }}
                                 >
                                     Delete
                                 </button>
@@ -544,34 +586,40 @@ function DashboardPage({ navigateTo }) {
             )}
 
             {showCreateModal && (
-                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
-                        <h3 className="text-2xl font-bold text-gray-800 mb-4">Create New Product</h3>
-                        <form onSubmit={handleCreateProduct} className="space-y-4">
+                <div style={{ position: 'fixed', inset: '0', backgroundColor: 'rgba(107, 114, 128, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '50' }}>
+                    <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '0.5rem', boxShadow: '0 10px 15px rgba(0, 0, 0, 0.1)', width: '100%', maxWidth: '448px' }}>
+                        <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1f2937', marginBottom: '1rem' }}>Create New Product</h3>
+                        <form onSubmit={handleCreateProduct} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <div>
-                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="productName">
+                                <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="productName">
                                     Product Name
                                 </label>
                                 <input
                                     type="text"
                                     id="productName"
-                                    className="shadow appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                    onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                    onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                                     value={newProductName}
                                     onChange={(e) => setNewProductName(e.target.value)}
                                     required
                                 />
                             </div>
-                            <div className="flex justify-end space-x-4">
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                                 <button
                                     type="button"
                                     onClick={() => setShowCreateModal(false)}
-                                    className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg transition duration-300 ease-in-out"
+                                    style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
+                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300 ease-in-out"
+                                    style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
+                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
                                 >
                                     Create Product
                                 </button>
@@ -643,80 +691,117 @@ function ProductDetailView({ productId, navigateTo }) {
 
     // Determine if the current user is the owner of the product
     const isProductOwner = product && user && product.user_id === user.id;
+    // Determine if the current user has editor role (owner implicitly has editor)
+    const isEditor = isProductOwner || (product && product.product_accesses && product.product_accesses.some(pa => pa.user_email === user.email && (pa.role === 'editor' || pa.role === 'owner')));
 
-    if (loading) return <div className="text-center mt-8">Loading product details...</div>;
-    if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
-    if (!product) return <div className="text-center mt-8">Product not found.</div>;
+
+    if (loading) return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Loading product details...</div>;
+    if (error) return <div style={{ textAlign: 'center', marginTop: '2rem', color: '#ef4444' }}>{error}</div>;
+    if (!product) return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Product not found.</div>;
 
     return (
-        <div className="mt-8 bg-white p-6 rounded-lg shadow-xl">
+        <div style={{ marginTop: '2rem', backgroundColor: 'white', padding: '1.5rem', borderRadius: '0.5rem', boxShadow: '0 10px 15px rgba(0, 0, 0, 0.1)' }}>
             <button
                 onClick={() => navigateTo('dashboard')}
-                className="mb-4 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                style={{ marginBottom: '1rem', backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#9ca3af'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#d1d5db'; e.currentTarget.style.transform = 'scale(1)'; }}
             >
                 &larr; Back to Dashboard
             </button>
 
-            <h2 className="text-3xl font-bold text-gray-800 mb-4">{product.name}</h2>
+            <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', color: '#1f2937', marginBottom: '1rem' }}>{product.name}</h2>
 
-            <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center space-x-4">
-                    <span className="text-gray-700 text-lg">Status:</span>
-                    {editMode ? (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <span style={{ color: '#374151', fontSize: '1.125rem' }}>Status:</span>
+                    {editMode && isEditor ? ( // Only allow edit if user is editor
                         <select
                             value={editedProduct.status}
                             onChange={(e) => handleStatusChange(e.target.value)}
-                            className="border rounded-lg py-2 px-3 shadow focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            style={{ border: '1px solid #d1d5db', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s' }}
+                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                         >
                             {['Active', 'Completed', 'Cancelled', 'On-Hold'].map(s => (
                                 <option key={s} value={s}>{s}</option>
                             ))}
                         </select>
                     ) : (
-                        <span className={`font-semibold text-lg ${product.status === 'Active' ? 'text-green-600' : 'text-yellow-600'}`}>
+                        <span style={{ fontWeight: 'semibold', fontSize: '1.125rem', color: product.status === 'Active' ? '#10b981' : '#d97706' }}>
                             {product.status}
                         </span>
                     )}
                 </div>
                 <div>
-                    {editMode ? (
-                        <div className="space-x-2">
+                    {isEditor && ( // Only show edit button if user is editor
+                        editMode ? (
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button
+                                    onClick={handleUpdateProduct}
+                                    style={{ backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#16a34a'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#22c55e'; e.currentTarget.style.transform = 'scale(1)'; }}
+                                >
+                                    Save Changes
+                                </button>
+                                <button
+                                    onClick={() => { setEditMode(false); setEditedProduct(product); }} // Revert changes
+                                    style={{ backgroundColor: '#9ca3af', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#6b7280'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#9ca3af'; e.currentTarget.style.transform = 'scale(1)'; }}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        ) : (
                             <button
-                                onClick={handleUpdateProduct}
-                                className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
+                                onClick={() => setEditMode(true)}
+                                style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                                onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
                             >
-                                Save Changes
+                                Edit Product
                             </button>
-                            <button
-                                onClick={() => { setEditMode(false); setEditedProduct(product); }} // Revert changes
-                                className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    ) : (
-                        <button
-                            onClick={() => setEditMode(true)}
-                            className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
-                        >
-                            Edit Product
-                        </button>
+                        )
                     )}
                 </div>
             </div>
 
             {/* Tabs Navigation */}
-            <div className="border-b border-gray-200 mb-6">
-                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+            <div style={{ borderBottom: '1px solid #e5e7eb', marginBottom: '1.5rem' }}>
+                <nav style={{ display: 'flex', gap: '2rem' }} aria-label="Tabs">
                     {['overview', 'research', 'prd', 'design', 'development', 'tech_doc', 'launch_training', 'important_notes', 'interviews', 'templates', 'tasks', 'collaboration'].map((tab) => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
-                            className={`${
-                                activeTab === tab
-                                    ? 'border-purple-500 text-purple-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            } whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors duration-200`}
+                            style={{
+                                whiteSpace: 'nowrap',
+                                padding: '0.75rem 0.25rem',
+                                borderBottom: '2px solid transparent',
+                                fontWeight: 'medium',
+                                fontSize: '0.875rem',
+                                transition: 'all 0.2s',
+                                background: 'none',
+                                borderTop: 'none',
+                                borderLeft: 'none',
+                                borderRight: 'none',
+                                cursor: 'pointer',
+                                borderColor: activeTab === tab ? '#8b5cf6' : 'transparent',
+                                color: activeTab === tab ? '#7c3aed' : '#6b7280',
+                            }}
+                            onMouseOver={(e) => {
+                                if (activeTab !== tab) {
+                                    e.currentTarget.style.color = '#4b5563';
+                                    e.currentTarget.style.borderColor = '#d1d5db';
+                                }
+                            }}
+                            onMouseOut={(e) => {
+                                if (activeTab !== tab) {
+                                    e.currentTarget.style.color = '#6b7280';
+                                    e.currentTarget.style.borderColor = 'transparent';
+                                }
+                            }}
                         >
                             {tab.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                         </button>
@@ -732,7 +817,7 @@ function ProductDetailView({ productId, navigateTo }) {
                 {activeTab === 'research' && (
                     <ResearchTab
                         product={product}
-                        editMode={editMode}
+                        editMode={editMode && isEditor} // Pass editMode only if user is editor
                         onContentChange={(content) => handleContentChange('research_document', content)}
                         onStatusChange={(status) => handleTabStatusChange('research', status)}
                     />
@@ -740,7 +825,7 @@ function ProductDetailView({ productId, navigateTo }) {
                 {activeTab === 'prd' && (
                     <PRDTab
                         product={product}
-                        editMode={editMode}
+                        editMode={editMode && isEditor}
                         onContentChange={(content) => handleContentChange('prd_document', content)}
                         onStatusChange={(status) => handleTabStatusChange('prd', status)}
                     />
@@ -751,7 +836,7 @@ function ProductDetailView({ productId, navigateTo }) {
                         product={product}
                         contentKey="design_notes_json"
                         statusKey="design_status"
-                        editMode={editMode}
+                        editMode={editMode && isEditor}
                         onContentChange={(content) => handleContentChange('design_notes', content)}
                         onStatusChange={(status) => handleTabStatusChange('design', status)}
                     />
@@ -762,7 +847,7 @@ function ProductDetailView({ productId, navigateTo }) {
                         product={product}
                         contentKey="dev_specs_json"
                         statusKey="development_status"
-                        editMode={editMode}
+                        editMode={editMode && isEditor}
                         onContentChange={(content) => handleContentChange('dev_specs', content)}
                         onStatusChange={(status) => handleTabStatusChange('development', status)}
                     />
@@ -773,7 +858,7 @@ function ProductDetailView({ productId, navigateTo }) {
                         product={product}
                         contentKey="tech_doc_json"
                         statusKey="tech_doc_status"
-                        editMode={editMode}
+                        editMode={editMode && isEditor}
                         onContentChange={(content) => handleContentChange('tech_doc', content)}
                         onStatusChange={(status) => handleTabStatusChange('tech_doc', status)}
                     />
@@ -784,7 +869,7 @@ function ProductDetailView({ productId, navigateTo }) {
                         product={product}
                         contentKey="launch_training_json"
                         statusKey="launch_training_status"
-                        editMode={editMode}
+                        editMode={editMode && isEditor}
                         onContentChange={(content) => handleContentChange('launch_training', content)}
                         onStatusChange={(status) => handleTabStatusChange('launch_training', status)}
                     />
@@ -795,19 +880,19 @@ function ProductDetailView({ productId, navigateTo }) {
                         product={product}
                         contentKey="important_notes_json"
                         statusKey="important_notes_status" // Note: This status key doesn't exist in backend, but keeping for consistency if added later
-                        editMode={editMode}
+                        editMode={editMode && isEditor}
                         onContentChange={(content) => handleContentChange('important_notes', content)}
                         onStatusChange={(status) => handleTabStatusChange('important_notes', status)}
                     />
                 )}
                 {activeTab === 'interviews' && (
-                    <CustomerInterviewTab productId={productId} isEditor={isProductOwner || (product && product.product_accesses.some(pa => pa.user_id === user.id && pa.role === 'editor'))} />
+                    <CustomerInterviewTab productId={productId} isEditor={isEditor} />
                 )}
                 {activeTab === 'templates' && (
                     <InterviewTemplateTab />
                 )}
                 {activeTab === 'tasks' && (
-                    <TaskTab productId={productId} isEditor={isProductOwner || (product && product.product_accesses.some(pa => pa.user_id === user.id && pa.role === 'editor'))} />
+                    <TaskTab productId={productId} isEditor={isEditor} />
                 )}
                 {activeTab === 'collaboration' && (
                     <CollaborationTab productId={productId} isOwner={isProductOwner} />
@@ -827,27 +912,23 @@ function OverviewTab({ product }) {
     };
 
     return (
-        <div className="space-y-4">
-            <h3 className="text-2xl font-semibold text-gray-800 mb-4">Product Overview</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <p className="text-gray-700"><strong>Product Name:</strong> {product.name}</p>
-                <p className="text-gray-700"><strong>Status:</strong> <span className={`font-medium ${product.status === 'Active' ? 'text-green-600' : 'text-yellow-600'}`}>{product.status}</span></p>
-                <p className="text-gray-700"><strong>Archived:</strong> {product.is_archived ? 'Yes' : 'No'}</p>
-                <p className="text-gray-700"><strong>Overall Progress:</strong> {product.progress}%</p>
-                <p className="text-gray-700"><strong>Created At:</strong> {formatDate(product.created_at)}</p>
-                <p className="text-gray-700"><strong>Last Updated:</strong> {formatDate(product.updated_at)}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '1rem' }}>Product Overview</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
+                <p style={{ color: '#374151' }}><strong>Product Name:</strong> {product.name}</p>
+                <p style={{ color: '#374151' }}><strong>Status:</strong> <span style={{ fontWeight: 'medium', color: product.status === 'Active' ? '#10b981' : '#d97706' }}>{product.status}</span></p>
+                <p style={{ color: '#374151' }}><strong>Archived:</strong> {product.is_archived ? 'Yes' : 'No'}</p>
+                <p style={{ color: '#374151' }}><strong>Overall Progress:</strong> {product.progress}%</p>
+                <p style={{ color: '#374151' }}><strong>Created At:</strong> {formatDate(product.created_at)}</p>
+                <p style={{ color: '#374151' }}><strong>Last Updated:</strong> {formatDate(product.updated_at)}</p>
             </div>
 
-            <h4 className="text-xl font-semibold text-gray-800 mt-6 mb-3">Section Progress</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <h4 style={{ fontSize: '1.25rem', fontWeight: 'semibold', color: '#1f2937', marginTop: '1.5rem', marginBottom: '0.75rem' }}>Section Progress</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
                 {['research', 'prd', 'design', 'development', 'tech_doc', 'launch_training'].map(section => (
-                    <div key={section} className="bg-gray-50 p-4 rounded-lg shadow-sm">
-                        <p className="font-medium text-gray-800">{section.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}:</p>
-                        <span className={`text-sm font-semibold ${
-                            product[`${section}_status`] === 'Completed' ? 'text-green-600' :
-                            product[`${section}_status`] === 'In Progress' ? 'text-blue-600' :
-                            'text-gray-500'
-                        }`}>
+                    <div key={section} style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)' }}>
+                        <p style={{ fontWeight: 'medium', color: '#1f2937' }}>{section.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}:</p>
+                        <span style={{ fontSize: '0.875rem', fontWeight: 'semibold', color: product[`${section}_status`] === 'Completed' ? '#10b981' : product[`${section}_status`] === 'In Progress' ? '#3b82f6' : '#6b7280' }}>
                             {product[`${section}_status`]}
                         </span>
                     </div>
@@ -881,35 +962,39 @@ function GenericContentTab({ title, product, contentKey, statusKey, editMode, on
     };
 
     return (
-        <div className="space-y-4">
-            <h3 className="text-2xl font-semibold text-gray-800 mb-4">{title}</h3>
-            <div className="flex items-center space-x-4 mb-4">
-                <span className="text-gray-700 text-lg">Status:</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '1rem' }}>{title}</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                <span style={{ color: '#374151', fontSize: '1.125rem' }}>Status:</span>
                 {editMode ? (
                     <select
                         value={status}
                         onChange={handleStatusUpdate}
-                        className="border rounded-lg py-2 px-3 shadow focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        style={{ border: '1px solid #d1d5db', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s' }}
+                        onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                        onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                     >
                         {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(s => (
                             <option key={s} value={s}>{s}</option>
                         ))}
                     </select>
                 ) : (
-                    <span className={`font-semibold text-lg ${status === 'Completed' ? 'text-green-600' : 'text-gray-600'}`}>
+                    <span style={{ fontWeight: 'semibold', fontSize: '1.125rem', color: status === 'Completed' ? '#10b981' : '#4b5563' }}>
                         {status}
                     </span>
                 )}
             </div>
             {editMode ? (
                 <textarea
-                    className="w-full p-4 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[300px]"
+                    style={{ width: '100%', padding: '1rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '300px' }}
+                    onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                    onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                     value={content}
                     onChange={handleContentUpdate}
                     placeholder={`Enter ${title} here...`}
                 />
             ) : (
-                <div className="bg-gray-50 p-4 rounded-lg shadow-inner prose max-w-none" dangerouslySetInnerHTML={{ __html: content ? content.replace(/\n/g, '<br/>') : '<p class="text-gray-500">No content available.</p>' }} />
+                <div style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.05)', lineHeight: '1.6', color: '#374151' }} dangerouslySetInnerHTML={{ __html: content ? content.replace(/\n/g, '<br/>') : '<p style="color: #6b7280;">No content available.</p>' }} />
             )}
         </div>
     );
@@ -946,31 +1031,35 @@ function ResearchTab({ product, editMode, onContentChange, onStatusChange }) {
     };
 
     return (
-        <div className="space-y-4">
-            <h3 className="text-2xl font-semibold text-gray-800 mb-4">Market Research</h3>
-            <div className="flex items-center space-x-4 mb-4">
-                <span className="text-gray-700 text-lg">Status:</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '1rem' }}>Market Research</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                <span style={{ color: '#374151', fontSize: '1.125rem' }}>Status:</span>
                 {editMode ? (
                     <select
                         value={product.research_status}
                         onChange={(e) => onStatusChange(e.target.value)}
-                        className="border rounded-lg py-2 px-3 shadow focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        style={{ border: '1px solid #d1d5db', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s' }}
+                        onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                        onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                     >
                         {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(s => (
                             <option key={s} value={s}>{s}</option>
                         ))}
                     </select>
                 ) : (
-                    <span className={`font-semibold text-lg ${product.research_status === 'Completed' ? 'text-green-600' : 'text-gray-600'}`}>
+                    <span style={{ fontWeight: 'semibold', fontSize: '1.125rem', color: product.research_status === 'Completed' ? '#10b981' : '#4b5563' }}>
                         {product.research_status}
                     </span>
                 )}
             </div>
 
-            <div className="bg-gray-50 p-4 rounded-lg shadow-sm mb-6">
-                <h4 className="text-xl font-semibold text-gray-800 mb-3">AI Research Assistant</h4>
+            <div style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)', marginBottom: '1.5rem' }}>
+                <h4 style={{ fontSize: '1.25rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '0.75rem' }}>AI Research Assistant</h4>
                 <textarea
-                    className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[100px] mb-4"
+                    style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '100px', marginBottom: '1rem' }}
+                    onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                    onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                     placeholder="Enter product idea or research prompt for AI (e.g., 'A mobile app for tracking personal finance with budgeting features')."
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
@@ -979,25 +1068,48 @@ function ResearchTab({ product, editMode, onContentChange, onStatusChange }) {
                 <button
                     onClick={handleGenerateResearch}
                     disabled={loadingAI || !editMode}
-                    className={`px-6 py-2 rounded-lg font-bold text-white shadow transition duration-300 ease-in-out ${
-                        loadingAI ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 transform hover:scale-105'
-                    }`}
+                    style={{
+                        padding: '0.5rem 1.5rem',
+                        borderRadius: '0.5rem',
+                        fontWeight: 'bold',
+                        color: 'white',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                        transition: 'all 0.3s ease-in-out',
+                        transform: 'scale(1)',
+                        border: 'none',
+                        cursor: loadingAI || !editMode ? 'not-allowed' : 'pointer',
+                        backgroundColor: loadingAI || !editMode ? '#9ca3af' : '#8b5cf6',
+                    }}
+                    onMouseOver={(e) => {
+                        if (!loadingAI && editMode) {
+                            e.currentTarget.style.backgroundColor = '#7c3aed';
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                        }
+                    }}
+                    onMouseOut={(e) => {
+                        if (!loadingAI && editMode) {
+                            e.currentTarget.style.backgroundColor = '#8b5cf6';
+                            e.currentTarget.style.transform = 'scale(1)';
+                        }
+                    }}
                 >
                     {loadingAI ? 'Generating...' : 'Generate Research Document'}
                 </button>
-                {aiError && <p className="text-red-500 text-sm mt-2">{aiError}</p>}
+                {aiError && <p style={{ color: '#ef4444', fontSize: '0.875rem', marginTop: '0.5rem' }}>{aiError}</p>}
             </div>
 
-            <h4 className="text-xl font-semibold text-gray-800 mb-3">Research Document Content</h4>
+            <h4 style={{ fontSize: '1.25rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '0.75rem' }}>Research Document Content</h4>
             {editMode ? (
                 <textarea
-                    className="w-full p-4 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[400px]"
+                    style={{ width: '100%', padding: '1rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '400px' }}
+                    onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                    onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                     value={product.research_document_json || ''}
                     onChange={(e) => onContentChange(e.target.value)}
                     placeholder="AI-generated or manually entered research content will appear here."
                 />
             ) : (
-                <div className="bg-gray-50 p-4 rounded-lg shadow-inner prose max-w-none" dangerouslySetInnerHTML={{ __html: product.research_document_json ? product.research_document_json.replace(/\n/g, '<br/>') : '<p class="text-gray-500">No research document available.</p>' }} />
+                <div style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.05)', lineHeight: '1.6', color: '#374151' }} dangerouslySetInnerHTML={{ __html: product.research_document_json ? product.research_document_json.replace(/\n/g, '<br/>') : '<p style="color: #6b7280;">No research document available.</p>' }} />
             )}
         </div>
     );
@@ -1040,41 +1152,47 @@ function PRDTab({ product, editMode, onContentChange, onStatusChange }) {
     };
 
     return (
-        <div className="space-y-4">
-            <h3 className="text-2xl font-semibold text-gray-800 mb-4">Product Requirements Document (PRD)</h3>
-            <div className="flex items-center space-x-4 mb-4">
-                <span className="text-gray-700 text-lg">Status:</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '1rem' }}>Product Requirements Document (PRD)</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                <span style={{ color: '#374151', fontSize: '1.125rem' }}>Status:</span>
                 {editMode ? (
                     <select
                         value={product.prd_status}
                         onChange={(e) => onStatusChange(e.target.value)}
-                        className="border rounded-lg py-2 px-3 shadow focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        style={{ border: '1px solid #d1d5db', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s' }}
+                        onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                        onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                     >
                         {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(s => (
                             <option key={s} value={s}>{s}</option>
                         ))}
                     </select>
                 ) : (
-                    <span className={`font-semibold text-lg ${product.prd_status === 'Completed' ? 'text-green-600' : 'text-gray-600'}`}>
+                    <span style={{ fontWeight: 'semibold', fontSize: '1.125rem', color: product.prd_status === 'Completed' ? '#10b981' : '#4b5563' }}>
                         {product.prd_status}
                     </span>
                 )}
             </div>
 
-            <div className="bg-gray-50 p-4 rounded-lg shadow-sm mb-6">
-                <h4 className="text-xl font-semibold text-gray-800 mb-3">AI PRD Generator</h4>
-                <p className="text-gray-700 text-sm mb-2">
+            <div style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)', marginBottom: '1.5rem' }}>
+                <h4 style={{ fontSize: '1.25rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '0.75rem' }}>AI PRD Generator</h4>
+                <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
                     *Note: A Research Document is highly recommended before generating a PRD for best results.
                 </p>
                 <textarea
-                    className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[100px] mb-4"
+                    style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '100px', marginBottom: '1rem' }}
+                    onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                    onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                     placeholder="Enter user-specific requirements or additional details for the PRD (e.g., 'Focus on mobile-first design, integrate with Stripe for payments')."
                     value={userRequirements}
                     onChange={(e) => setUserRequirements(e.target.value)}
                     disabled={loadingAI || !editMode}
                 />
                 <textarea
-                    className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[80px] mb-4"
+                    style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '80px', marginBottom: '1rem' }}
+                    onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                    onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                     placeholder="Confirm or suggest a PRD structure (e.g., 'Standard PRD structure' or 'Include detailed user stories')."
                     value={prdStructureConfirmation}
                     onChange={(e) => setPrdStructureConfirmation(e.target.value)}
@@ -1083,25 +1201,48 @@ function PRDTab({ product, editMode, onContentChange, onStatusChange }) {
                 <button
                     onClick={handleGeneratePRD}
                     disabled={loadingAI || !editMode}
-                    className={`px-6 py-2 rounded-lg font-bold text-white shadow transition duration-300 ease-in-out ${
-                        loadingAI ? 'bg-gray-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 transform hover:scale-105'
-                    }`}
+                    style={{
+                        padding: '0.5rem 1.5rem',
+                        borderRadius: '0.5rem',
+                        fontWeight: 'bold',
+                        color: 'white',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                        transition: 'all 0.3s ease-in-out',
+                        transform: 'scale(1)',
+                        border: 'none',
+                        cursor: loadingAI || !editMode ? 'not-allowed' : 'pointer',
+                        backgroundColor: loadingAI || !editMode ? '#9ca3af' : '#8b5cf6',
+                    }}
+                    onMouseOver={(e) => {
+                        if (!loadingAI && editMode) {
+                            e.currentTarget.style.backgroundColor = '#7c3aed';
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                        }
+                    }}
+                    onMouseOut={(e) => {
+                        if (!loadingAI && editMode) {
+                            e.currentTarget.style.backgroundColor = '#8b5cf6';
+                            e.currentTarget.style.transform = 'scale(1)';
+                        }
+                    }}
                 >
                     {loadingAI ? 'Generating...' : 'Generate PRD'}
                 </button>
-                {aiError && <p className="text-red-500 text-sm mt-2">{aiError}</p>}
+                {aiError && <p style={{ color: '#ef4444', fontSize: '0.875rem', marginTop: '0.5rem' }}>{aiError}</p>}
             </div>
 
-            <h4 className="text-xl font-semibold text-gray-800 mb-3">PRD Content</h4>
+            <h4 style={{ fontSize: '1.25rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '0.75rem' }}>PRD Content</h4>
             {editMode ? (
                 <textarea
-                    className="w-full p-4 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[400px]"
+                    style={{ width: '100%', padding: '1rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '400px' }}
+                    onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                    onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                     value={product.prd_document_json || ''}
                     onChange={(e) => onContentChange(e.target.value)}
                     placeholder="AI-generated or manually entered PRD content will appear here."
                 />
             ) : (
-                <div className="bg-gray-50 p-4 rounded-lg shadow-inner prose max-w-none" dangerouslySetInnerHTML={{ __html: product.prd_document_json ? product.prd_document_json.replace(/\n/g, '<br/>') : '<p class="text-gray-500">No PRD available.</p>' }} />
+                <div style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.05)', lineHeight: '1.6', color: '#374151' }} dangerouslySetInnerHTML={{ __html: product.prd_document_json ? product.prd_document_json.replace(/\n/g, '<br/>') : '<p style="color: #6b7280;">No PRD available.</p>' }} />
             )}
         </div>
     );
@@ -1117,7 +1258,7 @@ function CustomerInterviewTab({ productId, isEditor }) {
     const [newInterviewData, setNewInterviewData] = useState({
         customer_name: '',
         customer_email: '',
-        interview_date: new Date().toISOString().slice(0, 16), // YYYY-MM-DDTHH:MM
+        interview_date: new Date().toISOString().slice(0, 16), //YYYY-MM-DDTHH:MM
         interview_notes_json: '',
     });
     const [selectedInterview, setSelectedInterview] = useState(null);
@@ -1232,17 +1373,19 @@ function CustomerInterviewTab({ productId, isEditor }) {
         return new Date(dateString).toLocaleDateString(undefined, options);
     };
 
-    if (loading) return <div className="text-center mt-8">Loading customer interviews...</div>;
-    if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
+    if (loading) return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Loading customer interviews...</div>;
+    if (error) return <div style={{ textAlign: 'center', marginTop: '2rem', color: '#ef4444' }}>{error}</div>;
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h3 className="text-2xl font-semibold text-gray-800">Customer Interviews</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937' }}>Customer Interviews</h3>
                 {isEditor && (
                     <button
                         onClick={() => setShowAddModal(true)}
-                        className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
+                        style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
                     >
                         + Add New Interview
                     </button>
@@ -1250,18 +1393,20 @@ function CustomerInterviewTab({ productId, isEditor }) {
             </div>
 
             {interviews.length === 0 ? (
-                <p className="text-center text-gray-600 text-lg">No interviews recorded yet.</p>
+                <p style={{ textAlign: 'center', color: '#4b5563', fontSize: '1.125rem' }}>No interviews recorded yet.</p>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
                     {interviews.map(interview => (
-                        <div key={interview.id} className="bg-gray-50 p-6 rounded-lg shadow-md">
-                            <h4 className="text-xl font-semibold text-gray-900 mb-2">{interview.customer_name}</h4>
-                            <p className="text-gray-600 text-sm mb-1">Email: {interview.customer_email || 'N/A'}</p>
-                            <p className="text-gray-600 text-sm mb-4">Date: {formatDate(interview.interview_date)}</p>
-                            <div className="flex justify-end">
+                        <div key={interview.id} style={{ backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '0.5rem', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)' }}>
+                            <h4 style={{ fontSize: '1.125rem', fontWeight: 'semibold', color: '#111827', marginBottom: '0.5rem' }}>{interview.customer_name}</h4>
+                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Email: {interview.customer_email || 'N/A'}</p>
+                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '1rem' }}>Date: {formatDate(interview.interview_date)}</p>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                                 <button
                                     onClick={() => handleViewDetails(interview)}
-                                    className="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-1 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                                    style={{ backgroundColor: '#3b82f6', color: 'white', fontSize: '0.875rem', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#2563eb'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#3b82f6'; e.currentTarget.style.transform = 'scale(1)'; }}
                                 >
                                     View Details
                                 </button>
@@ -1273,60 +1418,72 @@ function CustomerInterviewTab({ productId, isEditor }) {
 
             {showAddModal && (
                 <Modal title="Add New Customer Interview" onClose={() => setShowAddModal(false)}>
-                    <form onSubmit={handleAddInterview} className="space-y-4">
+                    <form onSubmit={handleAddInterview} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Customer Name</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Customer Name</label>
                             <input
                                 type="text"
                                 name="customer_name"
                                 value={newInterviewData.customer_name}
                                 onChange={handleInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                                 required
                             />
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Customer Email</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Customer Email</label>
                             <input
                                 type="email"
                                 name="customer_email"
                                 value={newInterviewData.customer_email}
                                 onChange={handleInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             />
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Interview Date & Time</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Interview Date & Time</label>
                             <input
                                 type="datetime-local"
                                 name="interview_date"
                                 value={newInterviewData.interview_date}
                                 onChange={handleInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                                 required
                             />
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Interview Notes</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Interview Notes</label>
                             <textarea
                                 name="interview_notes_json"
                                 value={newInterviewData.interview_notes_json}
                                 onChange={handleInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 min-h-[150px]"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '150px' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                                 placeholder="Enter interview notes here..."
                             />
                         </div>
-                        <div className="flex justify-end space-x-4">
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                             <button
                                 type="button"
                                 onClick={() => setShowAddModal(false)}
-                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+                                style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
+                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
-                                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                                style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
+                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
                             >
                                 Add Interview
                             </button>
@@ -1386,108 +1543,143 @@ function InterviewDetailModal({ interview, onClose, onUpdate, onDelete, onGenera
 
     return (
         <Modal title={`Interview with ${interview.customer_name}`} onClose={onClose}>
-            <div className="space-y-4">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
-                    <label className="block text-gray-700 text-sm font-bold mb-1">Customer Name</label>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem' }}>Customer Name</label>
                     {editMode && isEditor ? (
                         <input
                             type="text"
                             name="customer_name"
                             value={editedInterview.customer_name}
                             onChange={handleInputChange}
-                            className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                         />
                     ) : (
-                        <p className="text-gray-900">{interview.customer_name}</p>
+                        <p style={{ color: '#111827' }}>{interview.customer_name}</p>
                     )}
                 </div>
                 <div>
-                    <label className="block text-gray-700 text-sm font-bold mb-1">Customer Email</label>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem' }}>Customer Email</label>
                     {editMode && isEditor ? (
                         <input
                             type="email"
                             name="customer_email"
                             value={editedInterview.customer_email || ''}
                             onChange={handleInputChange}
-                            className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                         />
                     ) : (
-                        <p className="text-gray-900">{interview.customer_email || 'N/A'}</p>
+                        <p style={{ color: '#111827' }}>{interview.customer_email || 'N/A'}</p>
                     )}
                 </div>
                 <div>
-                    <label className="block text-gray-700 text-sm font-bold mb-1">Interview Date & Time</label>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem' }}>Interview Date & Time</label>
                     {editMode && isEditor ? (
                         <input
                             type="datetime-local"
                             name="interview_date"
                             value={editedInterview.interview_date ? editedInterview.interview_date.slice(0, 16) : ''}
                             onChange={handleInputChange}
-                            className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                         />
                     ) : (
-                        <p className="text-gray-900">{formatDate(interview.interview_date)}</p>
+                        <p style={{ color: '#111827' }}>{formatDate(interview.interview_date)}</p>
                     )}
                 </div>
                 <div>
-                    <label className="block text-gray-700 text-sm font-bold mb-1">Interview Notes</label>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem' }}>Interview Notes</label>
                     {editMode && isEditor ? (
                         <textarea
                             name="interview_notes_json"
                             value={editedInterview.interview_notes_json || ''}
                             onChange={handleInputChange}
-                            className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 min-h-[150px]"
+                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '150px' }}
+                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             placeholder="Enter interview notes here..."
                         />
                     ) : (
-                        <div className="bg-gray-100 p-3 rounded-lg prose max-w-none" dangerouslySetInnerHTML={{ __html: interview.interview_notes_json ? interview.interview_notes_json.replace(/\n/g, '<br/>') : '<p class="text-gray-500">No notes available.</p>' }} />
+                        <div style={{ backgroundColor: '#e5e7eb', padding: '0.75rem', borderRadius: '0.5rem', lineHeight: '1.6', color: '#374151' }} dangerouslySetInnerHTML={{ __html: interview.interview_notes_json ? interview.interview_notes_json.replace(/\n/g, '<br/>') : '<p style="color: #6b7280;">No notes available.</p>' }} />
                     )}
                 </div>
 
-                <div className="flex justify-between items-center mt-4">
-                    <h4 className="text-lg font-semibold text-gray-800">AI Summary</h4>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
+                    <h4 style={{ fontSize: '1.125rem', fontWeight: 'semibold', color: '#1f2937' }}>AI Summary</h4>
                     {isEditor && (
                         <button
                             onClick={handleGenerateClick}
                             disabled={aiSummaryLoading || !editedInterview.interview_notes_json}
-                            className={`px-4 py-2 rounded-lg font-bold text-white shadow transition duration-300 ease-in-out ${
-                                aiSummaryLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
-                            }`}
+                            style={{
+                                padding: '0.5rem 1rem',
+                                borderRadius: '0.5rem',
+                                fontWeight: 'bold',
+                                color: 'white',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                transition: 'all 0.3s ease-in-out',
+                                transform: 'scale(1)',
+                                border: 'none',
+                                cursor: aiSummaryLoading || !editedInterview.interview_notes_json ? 'not-allowed' : 'pointer',
+                                backgroundColor: aiSummaryLoading || !editedInterview.interview_notes_json ? '#9ca3af' : '#3b82f6',
+                            }}
+                            onMouseOver={(e) => {
+                                if (!aiSummaryLoading && editedInterview.interview_notes_json) {
+                                    e.currentTarget.style.backgroundColor = '#2563eb';
+                                    e.currentTarget.style.transform = 'scale(1.05)';
+                                }
+                            }}
+                            onMouseOut={(e) => {
+                                if (!aiSummaryLoading && editedInterview.interview_notes_json) {
+                                    e.currentTarget.style.backgroundColor = '#3b82f6';
+                                    e.currentTarget.style.transform = 'scale(1)';
+                                }
+                            }}
                         >
                             {aiSummaryLoading ? 'Generating...' : 'Generate AI Summary'}
                         </button>
                     )}
                 </div>
-                {aiSummaryError && <p className="text-red-500 text-sm mt-2">{aiSummaryError}</p>}
-                <div className="bg-gray-100 p-3 rounded-lg prose max-w-none">
+                {aiSummaryError && <p style={{ color: '#ef4444', fontSize: '0.875rem', marginTop: '0.5rem' }}>{aiSummaryError}</p>}
+                <div style={{ backgroundColor: '#e5e7eb', padding: '0.75rem', borderRadius: '0.5rem', lineHeight: '1.6', color: '#374151' }}>
                     {editedInterview.ai_summary_json ? (
                         <div dangerouslySetInnerHTML={{ __html: editedInterview.ai_summary_json.replace(/\n/g, '<br/>') }} />
                     ) : (
-                        <p className="text-gray-500">No AI summary available.</p>
+                        <p style={{ color: '#6b7280' }}>No AI summary available.</p>
                     )}
                 </div>
 
-                <div className="flex justify-end space-x-4 mt-6">
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
                     {isEditor && (
                         <>
                             {editMode ? (
                                 <button
                                     onClick={handleSave}
-                                    className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg"
+                                    style={{ backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#16a34a'}
+                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#22c55e'}
                                 >
                                     Save Changes
                                 </button>
                             ) : (
                                 <button
                                     onClick={() => setEditMode(true)}
-                                    className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                                    style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
+                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
                                 >
                                     Edit
                                 </button>
                             )}
                             <button
                                 onClick={() => onDelete(interview.id)}
-                                className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg"
+                                style={{ backgroundColor: '#ef4444', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
                             >
                                 Delete
                             </button>
@@ -1495,7 +1687,9 @@ function InterviewDetailModal({ interview, onClose, onUpdate, onDelete, onGenera
                     )}
                     <button
                         onClick={onClose}
-                        className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+                        style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
                     >
                         Close
                     </button>
@@ -1628,33 +1822,37 @@ function InterviewTemplateTab() {
         }
     };
 
-    if (loading) return <div className="text-center mt-8">Loading interview templates...</div>;
-    if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
+    if (loading) return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Loading interview templates...</div>;
+    if (error) return <div style={{ textAlign: 'center', marginTop: '2rem', color: '#ef4444' }}>{error}</div>;
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h3 className="text-2xl font-semibold text-gray-800">Interview Templates</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937' }}>Interview Templates</h3>
                 <button
                     onClick={() => setShowAddModal(true)}
-                    className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
+                    style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
                 >
                     + Create New Template
                 </button>
             </div>
 
             {templates.length === 0 ? (
-                <p className="text-center text-gray-600 text-lg">No templates created yet.</p>
+                <p style={{ textAlign: 'center', color: '#4b5563', fontSize: '1.125rem' }}>No templates created yet.</p>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
                     {templates.map(template => (
-                        <div key={template.id} className="bg-gray-50 p-6 rounded-lg shadow-md">
-                            <h4 className="text-xl font-semibold text-gray-900 mb-2">{template.template_name}</h4>
-                            <p className="text-gray-600 text-sm mb-4">Created: {new Date(template.created_at).toLocaleDateString()}</p>
-                            <div className="flex justify-end">
+                        <div key={template.id} style={{ backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '0.5rem', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)' }}>
+                            <h4 style={{ fontSize: '1.125rem', fontWeight: 'semibold', color: '#111827', marginBottom: '0.5rem' }}>{template.template_name}</h4>
+                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '1rem' }}>Created: {new Date(template.created_at).toLocaleDateString()}</p>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                                 <button
                                     onClick={() => handleViewDetails(template)}
-                                    className="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-1 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                                    style={{ backgroundColor: '#3b82f6', color: 'white', fontSize: '0.875rem', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#2563eb'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#3b82f6'; e.currentTarget.style.transform = 'scale(1)'; }}
                                 >
                                     View Details
                                 </button>
@@ -1666,39 +1864,47 @@ function InterviewTemplateTab() {
 
             {showAddModal && (
                 <Modal title="Create New Interview Template" onClose={() => setShowAddModal(false)}>
-                    <form onSubmit={handleAddTemplate} className="space-y-4">
+                    <form onSubmit={handleAddTemplate} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Template Name</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Template Name</label>
                             <input
                                 type="text"
                                 name="template_name"
                                 value={newTemplateData.template_name}
                                 onChange={handleInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                                 required
                             />
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Template Questions (Editor.js JSON)</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Template Questions (Editor.js JSON)</label>
                             <textarea
                                 name="template_questions_json"
                                 value={newTemplateData.template_questions_json}
                                 onChange={handleInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 min-h-[150px]"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '150px' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                                 placeholder="Enter template questions here (e.g., 'What problem are you trying to solve?')."
                             />
                         </div>
-                        <div className="flex justify-end space-x-4">
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                             <button
                                 type="button"
                                 onClick={() => setShowAddModal(false)}
-                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+                                style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
+                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
-                                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                                style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
+                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
                             >
                                 Create Template
                             </button>
@@ -1749,40 +1955,46 @@ function TemplateDetailModal({ template, onClose, onUpdate, onDelete, onGenerate
 
     return (
         <Modal title={`Template: ${template.template_name}`} onClose={onClose}>
-            <div className="space-y-4">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
-                    <label className="block text-gray-700 text-sm font-bold mb-1">Template Name</label>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem' }}>Template Name</label>
                     {editMode ? (
                         <input
                             type="text"
                             name="template_name"
                             value={editedTemplate.template_name}
                             onChange={handleInputChange}
-                            className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                         />
                     ) : (
-                        <p className="text-gray-900">{template.template_name}</p>
+                        <p style={{ color: '#111827' }}>{template.template_name}</p>
                     )}
                 </div>
                 <div>
-                    <label className="block text-gray-700 text-sm font-bold mb-1">Template Questions</label>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem' }}>Template Questions</label>
                     {editMode ? (
                         <textarea
                             name="template_questions_json"
                             value={editedTemplate.template_questions_json || ''}
                             onChange={handleInputChange}
-                            className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 min-h-[150px]"
+                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '150px' }}
+                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             placeholder="Enter template questions here..."
                         />
                     ) : (
-                        <div className="bg-gray-100 p-3 rounded-lg prose max-w-none" dangerouslySetInnerHTML={{ __html: template.template_questions_json ? template.template_questions_json.replace(/\n/g, '<br/>') : '<p class="text-gray-500">No questions available.</p>' }} />
+                        <div style={{ backgroundColor: '#e5e7eb', padding: '0.75rem', borderRadius: '0.5rem', lineHeight: '1.6', color: '#374151' }} dangerouslySetInnerHTML={{ __html: template.template_questions_json ? template.template_questions_json.replace(/\n/g, '<br/>') : '<p style="color: #6b7280;">No questions available.</p>' }} />
                     )}
                 </div>
 
-                <div className="bg-gray-50 p-4 rounded-lg shadow-sm mt-4">
-                    <h4 className="text-xl font-semibold text-gray-800 mb-3">AI Question Generator</h4>
+                <div style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)', marginTop: '1rem' }}>
+                    <h4 style={{ fontSize: '1.25rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '0.75rem' }}>AI Question Generator</h4>
                     <textarea
-                        className="w-full p-3 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[80px] mb-4"
+                        style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '80px', marginBottom: '1rem' }}
+                        onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                        onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                         placeholder="Enter a feature idea to generate interview questions (e.g., 'A new social media feature for sharing short videos')."
                         value={featureIdeaForAI}
                         onChange={(e) => setFeatureIdeaForAI(e.target.value)}
@@ -1791,40 +2003,69 @@ function TemplateDetailModal({ template, onClose, onUpdate, onDelete, onGenerate
                     <button
                         onClick={handleGenerateClick}
                         disabled={aiQuestionsLoading || !featureIdeaForAI}
-                        className={`px-6 py-2 rounded-lg font-bold text-white shadow transition duration-300 ease-in-out ${
-                            aiQuestionsLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
-                        }`}
+                        style={{
+                            padding: '0.5rem 1.5rem',
+                            borderRadius: '0.5rem',
+                            fontWeight: 'bold',
+                            color: 'white',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                            transition: 'all 0.3s ease-in-out',
+                            transform: 'scale(1)',
+                            border: 'none',
+                            cursor: aiQuestionsLoading || !featureIdeaForAI ? 'not-allowed' : 'pointer',
+                            backgroundColor: aiQuestionsLoading || !featureIdeaForAI ? '#9ca3af' : '#3b82f6',
+                        }}
+                        onMouseOver={(e) => {
+                            if (!aiQuestionsLoading && featureIdeaForAI) {
+                                e.currentTarget.style.backgroundColor = '#2563eb';
+                                e.currentTarget.style.transform = 'scale(1.05)';
+                            }
+                        }}
+                        onMouseOut={(e) => {
+                            if (!aiQuestionsLoading && featureIdeaForAI) {
+                                e.currentTarget.style.backgroundColor = '#3b82f6';
+                                e.currentTarget.style.transform = 'scale(1)';
+                            }
+                        }}
                     >
                         {aiQuestionsLoading ? 'Generating...' : 'Generate Questions'}
                     </button>
-                    {aiQuestionsError && <p className="text-red-500 text-sm mt-2">{aiQuestionsError}</p>}
+                    {aiQuestionsError && <p style={{ color: '#ef4444', fontSize: '0.875rem', marginTop: '0.5rem' }}>{aiQuestionsError}</p>}
                 </div>
 
-                <div className="flex justify-end space-x-4 mt-6">
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
                     {editMode ? (
                         <button
                             onClick={handleSave}
-                            className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg"
+                            style={{ backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#16a34a'}
+                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#22c55e'}
                         >
                             Save Changes
                         </button>
                     ) : (
                         <button
                             onClick={() => setEditMode(true)}
-                            className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                            style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
+                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
                         >
                             Edit
                         </button>
                     )}
                     <button
                         onClick={() => onDelete(template.id)}
-                        className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg"
+                        style={{ backgroundColor: '#ef4444', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
                     >
                         Delete
                     </button>
                     <button
                         onClick={onClose}
-                        className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+                        style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
                     >
                         Close
                     </button>
@@ -1837,12 +2078,14 @@ function TemplateDetailModal({ template, onClose, onUpdate, onDelete, onGenerate
 // --- Reusable Modal Component ---
 function Modal({ title, onClose, children }) {
     return (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
-                <h3 className="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">{title}</h3>
+        <div style={{ position: 'fixed', inset: '0', backgroundColor: 'rgba(107, 114, 128, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '50', padding: '1rem' }}>
+            <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '0.5rem', boxShadow: '0 10px 15px rgba(0, 0, 0, 0.1)', width: '100%', maxWidth: '672px', maxHeight: '90vh', overflowY: 'auto', position: 'relative' }}>
+                <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1f2937', marginBottom: '1rem', borderBottom: '1px solid #e5e7eb', paddingBottom: '0.5rem' }}>{title}</h3>
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl font-bold"
+                    style={{ position: 'absolute', top: '1rem', right: '1rem', color: '#6b7280', fontSize: '1.5rem', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer' }}
+                    onMouseOver={(e) => e.currentTarget.style.color = '#374151'}
+                    onMouseOut={(e) => e.currentTarget.style.color = '#6b7280'}
                 >
                     &times;
                 </button>
@@ -1985,17 +2228,19 @@ function TaskTab({ productId, isEditor }) {
         return new Date(dateString).toLocaleDateString(undefined, options);
     };
 
-    if (loading) return <div className="text-center mt-8">Loading tasks...</div>;
-    if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
+    if (loading) return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Loading tasks...</div>;
+    if (error) return <div style={{ textAlign: 'center', marginTop: '2rem', color: '#ef4444' }}>{error}</div>;
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h3 className="text-2xl font-semibold text-gray-800">Tasks</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937' }}>Tasks</h3>
                 {isEditor && (
                     <button
                         onClick={() => setShowAddTaskModal(true)}
-                        className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
+                        style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
                     >
                         + Add New Task
                     </button>
@@ -2003,28 +2248,32 @@ function TaskTab({ productId, isEditor }) {
             </div>
 
             {tasks.length === 0 ? (
-                <p className="text-center text-gray-600 text-lg">No tasks for this product yet.</p>
+                <p style={{ textAlign: 'center', color: '#4b5563', fontSize: '1.125rem' }}>No tasks for this product yet.</p>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
                     {tasks.map(task => (
-                        <div key={task.id} className="bg-gray-50 p-6 rounded-lg shadow-md">
-                            <h4 className="text-xl font-semibold text-gray-900 mb-2">{task.title}</h4>
-                            <p className="text-gray-700 text-sm mb-1">{task.description}</p>
-                            <p className="text-gray-600 text-sm mb-1">Status: <span className="font-medium">{task.status}</span></p>
-                            <p className="text-gray-600 text-sm mb-1">Priority: <span className="font-medium">{task.priority}</span></p>
-                            <p className="text-gray-600 text-sm mb-1">Assigned To: <span className="font-medium">{task.assigned_to_username || 'Unassigned'}</span></p>
-                            <p className="text-gray-600 text-sm mb-4">Due Date: <span className="font-medium">{formatDate(task.due_date)}</span></p>
+                        <div key={task.id} style={{ backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '0.5rem', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)' }}>
+                            <h4 style={{ fontSize: '1.125rem', fontWeight: 'semibold', color: '#111827', marginBottom: '0.5rem' }}>{task.title}</h4>
+                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '0.25rem' }}>{task.description}</p>
+                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Status: <span style={{ fontWeight: 'medium' }}>{task.status}</span></p>
+                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Priority: <span style={{ fontWeight: 'medium' }}>{task.priority}</span></p>
+                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Assigned To: <span style={{ fontWeight: 'medium' }}>{task.assigned_to_username || 'Unassigned'}</span></p>
+                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '1rem' }}>Due Date: <span style={{ fontWeight: 'medium' }}>{formatDate(task.due_date)}</span></p>
                             {isEditor && (
-                                <div className="flex justify-end space-x-2">
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                                     <button
                                         onClick={() => handleEditTaskClick(task)}
-                                        className="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-1 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                                        style={{ backgroundColor: '#3b82f6', color: 'white', fontSize: '0.875rem', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#2563eb'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#3b82f6'; e.currentTarget.style.transform = 'scale(1)'; }}
                                     >
                                         Edit
                                     </button>
                                     <button
                                         onClick={() => handleDeleteTask(task.id)}
-                                        className="bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-1 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                                        style={{ backgroundColor: '#ef4444', color: 'white', fontSize: '0.875rem', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#dc2626'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#ef4444'; e.currentTarget.style.transform = 'scale(1)'; }}
                                     >
                                         Delete
                                     </button>
@@ -2037,34 +2286,40 @@ function TaskTab({ productId, isEditor }) {
 
             {showAddTaskModal && (
                 <Modal title="Add New Task" onClose={() => setShowAddTaskModal(false)}>
-                    <form onSubmit={handleCreateTask} className="space-y-4">
+                    <form onSubmit={handleCreateTask} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Title</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Title</label>
                             <input
                                 type="text"
                                 name="title"
                                 value={newTaskData.title}
                                 onChange={handleNewTaskInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                                 required
                             />
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Description</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Description</label>
                             <textarea
                                 name="description"
                                 value={newTaskData.description}
                                 onChange={handleNewTaskInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 min-h-[100px]"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '100px' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             />
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Assigned To</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Assigned To</label>
                             <select
                                 name="assigned_to_user_id"
                                 value={newTaskData.assigned_to_user_id}
                                 onChange={handleNewTaskInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             >
                                 <option value="">Unassigned</option>
                                 {allUsers.map(u => (
@@ -2073,12 +2328,14 @@ function TaskTab({ productId, isEditor }) {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Status</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Status</label>
                             <select
                                 name="status"
                                 value={newTaskData.status}
                                 onChange={handleNewTaskInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             >
                                 {['To Do', 'In Progress', 'Done', 'Blocked', 'Archived'].map(s => (
                                     <option key={s} value={s}>{s}</option>
@@ -2086,12 +2343,14 @@ function TaskTab({ productId, isEditor }) {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Priority</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Priority</label>
                             <select
                                 name="priority"
                                 value={newTaskData.priority}
                                 onChange={handleNewTaskInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             >
                                 {['Low', 'Medium', 'High', 'Critical'].map(p => (
                                     <option key={p} value={p}>{p}</option>
@@ -2099,26 +2358,32 @@ function TaskTab({ productId, isEditor }) {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Due Date</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Due Date</label>
                             <input
                                 type="datetime-local"
                                 name="due_date"
                                 value={newTaskData.due_date}
                                 onChange={handleNewTaskInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             />
                         </div>
-                        <div className="flex justify-end space-x-4">
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                             <button
                                 type="button"
                                 onClick={() => setShowAddTaskModal(false)}
-                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+                                style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
+                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
-                                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                                style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
+                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
                             >
                                 Add Task
                             </button>
@@ -2129,34 +2394,40 @@ function TaskTab({ productId, isEditor }) {
 
             {showEditTaskModal && editingTask && (
                 <Modal title="Edit Task" onClose={() => setShowEditTaskModal(false)}>
-                    <form onSubmit={handleUpdateTask} className="space-y-4">
+                    <form onSubmit={handleUpdateTask} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Title</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Title</label>
                             <input
                                 type="text"
                                 name="title"
                                 value={editingTask.title}
                                 onChange={handleEditTaskInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                                 required
                             />
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Description</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Description</label>
                             <textarea
                                 name="description"
                                 value={editingTask.description || ''}
                                 onChange={handleEditTaskInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 min-h-[100px]"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '100px' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             />
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Assigned To</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Assigned To</label>
                             <select
                                 name="assigned_to_user_id"
                                 value={editingTask.assigned_to_user_id}
                                 onChange={handleEditTaskInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             >
                                 <option value="">Unassigned</option>
                                 {allUsers.map(u => (
@@ -2165,12 +2436,14 @@ function TaskTab({ productId, isEditor }) {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Status</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Status</label>
                             <select
                                 name="status"
                                 value={editingTask.status}
                                 onChange={handleEditTaskInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             >
                                 {['To Do', 'In Progress', 'Done', 'Blocked', 'Archived'].map(s => (
                                     <option key={s} value={s}>{s}</option>
@@ -2178,12 +2451,14 @@ function TaskTab({ productId, isEditor }) {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Priority</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Priority</label>
                             <select
                                 name="priority"
                                 value={editingTask.priority}
                                 onChange={handleEditTaskInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             >
                                 {['Low', 'Medium', 'High', 'Critical'].map(p => (
                                     <option key={p} value={p}>{p}</option>
@@ -2191,26 +2466,32 @@ function TaskTab({ productId, isEditor }) {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Due Date</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Due Date</label>
                             <input
                                 type="datetime-local"
                                 name="due_date"
                                 value={editingTask.due_date}
                                 onChange={handleEditTaskInputChange}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             />
                         </div>
-                        <div className="flex justify-end space-x-4">
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                             <button
                                 type="button"
                                 onClick={() => setShowEditTaskModal(false)}
-                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+                                style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
+                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
-                                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                                style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
+                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
                             >
                                 Update Task
                             </button>
@@ -2312,17 +2593,19 @@ function CollaborationTab({ productId, isOwner }) {
         }
     };
 
-    if (loading) return <div className="text-center mt-8">Loading collaboration details...</div>;
-    if (error) return <div className="text-center mt-8 text-red-500">{error}</div>;
+    if (loading) return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Loading collaboration details...</div>;
+    if (error) return <div style={{ textAlign: 'center', marginTop: '2rem', color: '#ef4444' }}>{error}</div>;
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h3 className="text-2xl font-semibold text-gray-800">Product Collaboration</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937' }}>Product Collaboration</h3>
                 {isOwner && (
                     <button
                         onClick={() => setShowInviteModal(true)}
-                        className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow transition duration-300 ease-in-out transform hover:scale-105"
+                        style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
                     >
                         + Invite User
                     </button>
@@ -2330,44 +2613,48 @@ function CollaborationTab({ productId, isOwner }) {
             </div>
 
             {accesses.length === 0 ? (
-                <p className="text-center text-gray-600 text-lg">No collaborators for this product yet.</p>
+                <p style={{ textAlign: 'center', color: '#4b5563', fontSize: '1.125rem' }}>No collaborators for this product yet.</p>
             ) : (
-                <div className="overflow-x-auto">
-                    <table className="min-w-full bg-white border border-gray-200 rounded-lg shadow-md">
-                        <thead className="bg-gray-100">
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ minWidth: '100%', backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '0.5rem', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)', borderCollapse: 'collapse' }}>
+                        <thead style={{ backgroundColor: '#f3f4f6' }}>
                             <tr>
-                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">User</th>
-                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Email</th>
-                                <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Role</th>
-                                {isOwner && <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600">Actions</th>}
+                                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 'semibold', color: '#4b5563', borderBottom: '1px solid #e5e7eb' }}>User</th>
+                                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 'semibold', color: '#4b5563', borderBottom: '1px solid #e5e7eb' }}>Email</th>
+                                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 'semibold', color: '#4b5563', borderBottom: '1px solid #e5e7eb' }}>Role</th>
+                                {isOwner && <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 'semibold', color: '#4b5563', borderBottom: '1px solid #e5e7eb' }}>Actions</th>}
                             </tr>
                         </thead>
                         <tbody>
                             {accesses.map(access => (
-                                <tr key={access.id} className="border-t border-gray-200 hover:bg-gray-50">
-                                    <td className="py-3 px-4 text-gray-800">{access.user_username || 'N/A'}</td>
-                                    <td className="py-3 px-4 text-gray-800">{access.user_email}</td>
-                                    <td className="py-3 px-4 text-gray-800">
+                                <tr key={access.id} style={{ borderTop: '1px solid #e5e7eb', transition: 'background-color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'white'}>
+                                    <td style={{ padding: '0.75rem 1rem', color: '#1f2937' }}>{access.user_username || 'N/A'}</td>
+                                    <td style={{ padding: '0.75rem 1rem', color: '#1f2937' }}>{access.user_email}</td>
+                                    <td style={{ padding: '0.75rem 1rem', color: '#1f2937' }}>
                                         {isOwner && access.user_id !== user.id ? ( // Owner can change others' roles
                                             <select
                                                 value={access.role}
                                                 onChange={(e) => handleUpdateRole(access.id, access.user_id, e.target.value)}
-                                                className="border rounded-lg py-1 px-2 text-gray-700"
+                                                style={{ border: '1px solid #d1d5db', borderRadius: '0.5rem', padding: '0.25rem 0.5rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                                             >
                                                 <option value="owner">Owner</option>
                                                 <option value="editor">Editor</option>
                                                 <option value="viewer">Viewer</option>
                                             </select>
                                         ) : (
-                                            <span className="font-medium capitalize">{access.role}</span>
+                                            <span style={{ fontWeight: 'medium', textTransform: 'capitalize' }}>{access.role}</span>
                                         )}
                                     </td>
                                     {isOwner && (
-                                        <td className="py-3 px-4">
+                                        <td style={{ padding: '0.75rem 1rem' }}>
                                             {access.user_id !== user.id && ( // Cannot remove self as owner
                                                 <button
                                                     onClick={() => handleRemoveAccess(access.user_id)}
-                                                    className="bg-red-500 hover:bg-red-600 text-white text-sm px-3 py-1 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                                                    style={{ backgroundColor: '#ef4444', color: 'white', fontSize: '0.875rem', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
+                                                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#dc2626'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#ef4444'; e.currentTarget.style.transform = 'scale(1)'; }}
                                                 >
                                                     Remove
                                                 </button>
@@ -2383,51 +2670,59 @@ function CollaborationTab({ productId, isOwner }) {
 
             {showInviteModal && (
                 <Modal title="Invite User to Product" onClose={() => setShowInviteModal(false)}>
-                    <form onSubmit={handleInviteUser} className="space-y-4">
+                    <form onSubmit={handleInviteUser} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">User Email</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>User Email</label>
                             <input
                                 type="email"
                                 name="user_email"
                                 value={inviteEmail}
                                 onChange={(e) => setInviteEmail(e.target.value)}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                                 required
                             />
-                            <p className="text-gray-500 text-xs mt-1">
+                            <p style={{ color: '#6b7280', fontSize: '0.75rem', marginTop: '0.25rem' }}>
                                 User must be registered in the system.
                             </p>
                         </div>
                         <div>
-                            <label className="block text-gray-700 text-sm font-bold mb-2">Role</label>
+                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Role</label>
                             <select
                                 name="role"
                                 value={inviteRole}
                                 onChange={(e) => setInviteRole(e.target.value)}
-                                className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700"
+                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
+                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
+                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                             >
                                 <option value="viewer">Viewer</option>
                                 <option value="editor">Editor</option>
                             </select>
                         </div>
-                        <div className="flex justify-end space-x-4">
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
                             <button
                                 type="button"
                                 onClick={() => setShowInviteModal(false)}
-                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg"
+                                style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
+                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
                             >
                                 Cancel
                             </button>
                             <button
                                 type="submit"
-                                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg"
+                                style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
+                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
+                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
                             >
                                 Send Invite
                             </button>
                         </div>
                     </form>
                     {inviteMessage && (
-                        <p className={`mt-4 text-center ${inviteMessage.includes('success') ? 'text-green-500' : 'text-red-500'}`}>
+                        <p style={{ marginTop: '1rem', textAlign: 'center', color: inviteMessage.includes('success') ? '#10b981' : '#ef4444' }}>
                             {inviteMessage}
                         </p>
                     )}
