@@ -176,7 +176,9 @@ class Product(db.Model):
             'launch_training_json': self.launch_training_json,
             'important_notes_json': self.important_notes_json,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            # NEW: Include product_accesses in the dictionary representation
+            'product_accesses': [pa.to_dict() for pa in self.product_accesses]
         }
 
 class CustomerInterview(db.Model):
@@ -1142,8 +1144,9 @@ def generate_interview_questions(current_user):
 
 @app.route('/api/products/<int:product_id>/tasks', methods=['POST'])
 @token_required
-def create_task(current_user, product_id):
+def create_task(current_user):
     """Creates a new task for a specific product, checking editor access."""
+    product_id = request.json.get('product_id') # Get product_id from request body for check_product_access
     can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='editor')
     if not can_access:
         return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
