@@ -397,11 +397,11 @@ function AuthPage() {
                 },
             }}
         >
-            {/* Left Side - Hero Section */}
+            {/* Left Side - Hero Section (The "left-side pane") */}
             <Box
                 sx={{
-                    display: { xs: 'none', lg: 'flex' },
-                    width: { lg: '50%' },
+                    display: { xs: 'none', lg: 'flex' }, // Hidden on small screens, flex on large
+                    width: { lg: '50%' }, // Takes 50% width on large screens
                     background: 'linear-gradient(to bottom right, #4f46e5, #9333ea, #3730a3)',
                     position: 'relative',
                     overflow: 'hidden',
@@ -961,7 +961,7 @@ function DashboardPage({ setCurrentPage, setSelectedProductId }) {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen]);
 
     useEffect(() => {
         if (user) {
@@ -1282,7 +1282,7 @@ function ProductDetailView({ productId, setCurrentPage }) {
         } finally {
             setLoading(false);
         }
-    }, [productId]);
+    }, [productId, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen]);
 
     useEffect(() => {
         if (user && productId) {
@@ -1540,7 +1540,7 @@ function ProductDetailView({ productId, setCurrentPage }) {
                             title="Important Notes"
                             product={editedProduct}
                             contentKey="important_notes_json"
-                            statusKey="important_notes_status" // Assuming this status key exists or is handled
+                            statusKey="important_notes_status" // Note: This status key doesn't exist in backend, but keeping for consistency if added later
                             editMode={editMode && isEditor}
                             onContentChange={(content) => handleContentChange('Important Notes', content)}
                             onStatusChange={(status) => handleTabStatusChange('Important Notes', status)}
