@@ -9,7 +9,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 from functools import wraps
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from pydantic import BaseModel, EmailStr
@@ -80,15 +80,18 @@ class User(db.Model):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(120), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
-    username = Column(String(80), nullable=True) # Added username
-    timezone = Column(String(100), default="UTC+05:30 (Chennai)", nullable=True) # Added timezone
+    username = Column(String(80), nullable=True)
+    timezone = Column(String(100), default="UTC+05:30 (Chennai)", nullable=True)
     is_approved = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # Relationships - backref for products is defined in Product model
+    # Relationships
     products = relationship("Product", back_populates="owner")
     interview_templates = relationship("InterviewTemplate", back_populates="user")
-    # No direct relationship to tasks or reminders yet, will add in later phases
+    # New: Tasks assigned to this user
+    assigned_tasks = relationship("Task", back_populates="assigned_user", foreign_keys='Task.assigned_to_user_id')
+    # New: Product access roles for this user across different products
+    product_accesses = relationship("ProductAccess", back_populates="user")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -107,10 +110,10 @@ class User(db.Model):
         }
 
 class Product(db.Model):
-    __tablename__ = 'products' # Renamed from product_feature
+    __tablename__ = 'products'
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False) # Owner of the product
     
     # Core Product Details
     name = Column(String(255), nullable=False)
@@ -131,7 +134,7 @@ class Product(db.Model):
     launch_training_status = Column(String(50), default='Not Started', nullable=False)
 
     # Content for each tab (Editor.js JSON will be stored as TEXT)
-    research_document_json = Column(Text, nullable=True) # Renamed from discovery_document
+    research_document_json = Column(Text, nullable=True)
     prd_document_json = Column(Text, nullable=True)
     design_notes_json = Column(Text, nullable=True)
     dev_specs_json = Column(Text, nullable=True)
@@ -145,7 +148,10 @@ class Product(db.Model):
     # Relationships
     owner = relationship("User", back_populates="products")
     customer_interviews = relationship("CustomerInterview", back_populates="product", cascade="all, delete-orphan")
-    # No direct relationship to tasks, design_links, repo_links, issues, tbd_items, launch_checklists, training_sessions, feedbacks yet, will add in later phases
+    # New: Tasks associated with this product
+    tasks = relationship("Task", back_populates="product", cascade="all, delete-orphan")
+    # New: Users who have access to this product
+    product_accesses = relationship("ProductAccess", back_populates="product", cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -224,6 +230,69 @@ class InterviewTemplate(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+class Task(db.Model):
+    __tablename__ = 'tasks'
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey('products.id'), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    assigned_to_user_id = Column(Integer, ForeignKey('users.id'), nullable=True) # Can be null if unassigned
+    status = Column(String(50), default='To Do', nullable=False) # 'To Do', 'In Progress', 'Done', 'Blocked', 'Archived'
+    priority = Column(String(50), default='Medium', nullable=False) # 'Low', 'Medium', 'High', 'Critical'
+    due_date = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    product = relationship("Product", back_populates="tasks")
+    assigned_user = relationship("User", back_populates="assigned_tasks", foreign_keys=[assigned_to_user_id])
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'title': self.title,
+            'description': self.description,
+            'assigned_to_user_id': self.assigned_to_user_id,
+            'assigned_to_username': self.assigned_user.username if self.assigned_user else None, # Include username for frontend display
+            'status': self.status,
+            'priority': self.priority,
+            'due_date': self.due_date.isoformat() if self.due_date else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+class ProductAccess(db.Model):
+    __tablename__ = 'product_accesses'
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey('products.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    role = Column(String(50), nullable=False) # 'owner', 'editor', 'viewer'
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Ensure a user can only have one role per product
+    __table_args__ = (UniqueConstraint('product_id', 'user_id', name='_product_user_uc'),)
+
+    # Relationships
+    product = relationship("Product", back_populates="product_accesses")
+    user = relationship("User", back_populates="product_accesses")
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'user_id': self.user_id,
+            'user_email': self.user.email, # Include user email for frontend display
+            'user_username': self.user.username, # Include username for frontend display
+            'role': self.role,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
 
 # --- Pydantic Schemas (Adjusted for new models and columns) ---
 class UserCreate(BaseModel):
@@ -347,19 +416,70 @@ class InterviewTemplateResponse(InterviewTemplateBase):
     class Config:
         from_attributes = True
 
+class TaskBase(BaseModel):
+    product_id: int
+    title: str
+    description: Optional[str] = None
+    assigned_to_user_id: Optional[int] = None
+    status: Optional[str] = 'To Do'
+    priority: Optional[str] = 'Medium'
+    due_date: Optional[datetime] = None
+
+class TaskCreate(TaskBase):
+    pass
+
+class TaskUpdate(TaskBase):
+    product_id: Optional[int] = None # Product ID should not be updated for an existing task
+    title: Optional[str] = None
+    description: Optional[str] = None
+    assigned_to_user_id: Optional[int] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    due_date: Optional[datetime] = None
+
+class TaskResponse(TaskBase):
+    id: int
+    assigned_to_username: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class ProductAccessBase(BaseModel):
+    product_id: int
+    user_id: int
+    role: str # 'owner', 'editor', 'viewer'
+
+class ProductAccessCreate(ProductAccessBase):
+    pass
+
+class ProductAccessUpdate(ProductAccessBase):
+    role: Optional[str] = None
+
+class ProductAccessResponse(ProductAccessBase):
+    id: int
+    user_email: EmailStr
+    user_username: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
 class AIDiscoveryDocumentRequest(BaseModel):
     product_name: str
     details: str
-    product_id: int # To update the specific product's research_document_json
+    product_id: int
 
 class AIDiscoveryDocumentResponse(BaseModel):
     discovery_document: str
 
 class AIPRDGenerationRequest(BaseModel):
     product_id: int
-    research_data: str # Input from research tab
-    user_requirements: str # Additional user input for PRD
-    prd_structure_confirmation: str # Confirmation from conversational AI
+    research_data: str
+    user_requirements: str
+    prd_structure_confirmation: str
 
 class AIPRDGenerationResponse(BaseModel):
     prd_document: str
@@ -407,6 +527,29 @@ def token_required(f):
 
         return f(current_user, *args, **kwargs)
     return decorated
+
+# --- Helper function to check product access ---
+def check_product_access(user_id, product_id, required_role='viewer'):
+    product = Product.query.get(product_id)
+    if not product:
+        return False, "Product not found"
+
+    # Owners always have full access
+    if product.user_id == user_id:
+        return True, product
+
+    # Check ProductAccess table
+    access = ProductAccess.query.filter_by(product_id=product_id, user_id=user_id).first()
+    if not access:
+        return False, "Access denied: User does not have any role for this product"
+
+    # Define role hierarchy
+    role_hierarchy = {'viewer': 0, 'editor': 1, 'owner': 2}
+    if role_hierarchy.get(access.role, -1) >= role_hierarchy.get(required_role, 0):
+        return True, product
+    
+    return False, f"Access denied: User role '{access.role}' is insufficient for '{required_role}'"
+
 
 # --- Authentication Endpoints ---
 
@@ -524,15 +667,36 @@ def update_profile(current_user):
         app.logger.error(f"An unexpected error occurred while updating profile for user {current_user.id}: {e}")
         return jsonify({"message": "An unexpected error occurred while updating profile. Please try again."}), 500
 
+@app.route('/api/users', methods=['GET'])
+@token_required
+def get_all_users(current_user):
+    """Fetches all registered users (for assigning tasks/collaboration)."""
+    # In a real app, you might want to restrict this to admins or only return limited user info
+    users = User.query.all()
+    return jsonify([user.to_dict() for user in users])
+
 
 # --- API Routes for Product Management ---
 
 @app.route('/api/products', methods=['GET'])
 @token_required
 def get_products(current_user):
-    """Fetches all products for the current user, ordered by creation date."""
-    products = Product.query.filter_by(user_id=current_user.id).order_by(Product.created_at.desc()).all()
-    return jsonify([product.to_dict() for product in products])
+    """Fetches all products for the current user, ordered by creation date, including those they have access to."""
+    # Get products owned by the user
+    owned_products = Product.query.filter_by(user_id=current_user.id).all()
+    
+    # Get products the user has access to via ProductAccess
+    accessed_products_ids = [pa.product_id for pa in current_user.product_accesses]
+    accessed_products = Product.query.filter(Product.id.in_(accessed_products_ids)).all()
+
+    # Combine and remove duplicates (if a user owns and has access via ProductAccess)
+    all_products = {p.id: p for p in owned_products}
+    for p in accessed_products:
+        all_products[p.id] = p
+    
+    sorted_products = sorted(all_products.values(), key=lambda p: p.created_at, reverse=True)
+
+    return jsonify([product.to_dict() for product in sorted_products])
 
 @app.route('/api/products', methods=['POST'])
 @token_required
@@ -545,12 +709,13 @@ def create_product(current_user):
     # Handle parent_id for iteration items
     parent_id = data.get('parent_id')
     if parent_id:
-        parent_product = Product.query.filter_by(id=parent_id, user_id=current_user.id).first()
-        if not parent_product:
-            return jsonify({"error": "Parent product not found or unauthorized"}), 404
+        # Check if parent product exists and current user has access to it (e.g., owner or editor)
+        can_access_parent, msg = check_product_access(current_user.id, parent_id, required_role='editor')
+        if not can_access_parent:
+            return jsonify({"error": f"Parent product not found or {msg}"}), 404
 
     new_product = Product(
-        user_id=current_user.id,
+        user_id=current_user.id, # Owner is the creator
         name=data['name'],
         status=data.get('status', 'Active'),
         is_archived=data.get('is_archived', False),
@@ -572,25 +737,33 @@ def create_product(current_user):
     )
     db.session.add(new_product)
     db.session.commit()
+
+    # Automatically grant owner access to the creator in ProductAccess table
+    owner_access = ProductAccess(product_id=new_product.id, user_id=current_user.id, role='owner')
+    db.session.add(owner_access)
+    db.session.commit()
+
     return jsonify(new_product.to_dict()), 201
 
 @app.route('/api/products/<int:product_id>', methods=['GET'])
 @token_required
 def get_product(current_user, product_id):
-    """Fetches a single product by ID for the current user."""
-    product = Product.query.filter_by(id=product_id, user_id=current_user.id).first()
-    if not product:
-        return jsonify({"error": "Product not found or unauthorized"}), 404
-    return jsonify(product.to_dict())
+    """Fetches a single product by ID for the current user, checking access."""
+    can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='viewer')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+    
+    return jsonify(product_or_msg.to_dict())
 
 @app.route('/api/products/<int:product_id>', methods=['PUT'])
 @token_required
 def update_product(current_user, product_id):
-    """Updates an existing product by ID for the current user."""
-    product = Product.query.filter_by(id=product_id, user_id=current_user.id).first()
-    if not product:
-        return jsonify({"error": "Product not found or unauthorized"}), 404
+    """Updates an existing product by ID for the current user, checking editor access."""
+    can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='editor')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
     
+    product = product_or_msg # If access is granted, product_or_msg is the product object
     data = request.json
 
     # Update fields from request data
@@ -609,9 +782,10 @@ def update_product(current_user, product_id):
         if data['parent_id'] is None:
             product.parent_id = None
         else:
-            parent_product = Product.query.filter_by(id=data['parent_id'], user_id=current_user.id).first()
-            if not parent_product:
-                return jsonify({"error": "Invalid parent_id or parent product not found"}), 400
+            # Check access to the new parent product
+            can_access_new_parent, msg = check_product_access(current_user.id, data['parent_id'], required_role='editor')
+            if not can_access_new_parent:
+                return jsonify({"error": f"Invalid parent_id or {msg}"}), 400
             product.parent_id = data['parent_id']
 
     try:
@@ -629,11 +803,13 @@ def update_product(current_user, product_id):
 @app.route('/api/products/<int:product_id>', methods=['DELETE'])
 @token_required
 def delete_product(current_user, product_id):
-    """Deletes a product by ID for the current user."""
-    product = Product.query.filter_by(id=product_id, user_id=current_user.id).first()
-    if not product:
-        return jsonify({"error": "Product not found or unauthorized"}), 404
+    """Deletes a product by ID for the current user, checking owner access."""
+    can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='owner')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
     
+    product = product_or_msg
+
     db.session.delete(product)
     db.session.commit()
     return jsonify({"message": "Product deleted successfully"}), 204
@@ -655,12 +831,13 @@ def generate_research_document(current_user):
     if not product_id or not prompt_text:
         return jsonify({"error": "Product ID and prompt text are required"}), 400
 
-    product = Product.query.filter_by(id=product_id, user_id=current_user.id).first()
-    if not product:
-        return jsonify({"error": "Product not found or unauthorized"}), 404
+    can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='editor')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+    
+    product = product_or_msg
 
     # Construct the prompt for Gemini
-    # For a conversational flow, you'd also pass chat history here
     full_prompt = f"Based on the following idea: '{prompt_text}'"
     if scraped_data:
         full_prompt += f"\n\nAlso consider this scraped market data: {scraped_data}"
@@ -699,9 +876,11 @@ def generate_prd_document(current_user):
     if not product_id or not user_requirements or not prd_structure_confirmation:
         return jsonify({"error": "Product ID, user requirements, and PRD structure confirmation are required"}), 400
 
-    product = Product.query.filter_by(id=product_id, user_id=current_user.id).first()
-    if not product:
-        return jsonify({"error": "Product not found or unauthorized"}), 404
+    can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='editor')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+    
+    product = product_or_msg
 
     # Use existing research document if available
     research_data = product.research_document_json if product.research_document_json else "No research document available."
@@ -747,9 +926,11 @@ def create_customer_interview(current_user):
     if not product_id or not customer_name:
         return jsonify({"error": "Product ID and customer name are required"}), 400
 
-    product = Product.query.filter_by(id=product_id, user_id=current_user.id).first()
-    if not product:
-        return jsonify({"error": "Product not found or unauthorized"}), 404
+    can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='editor')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+    
+    product = product_or_msg
 
     try:
         interview_date = datetime.fromisoformat(interview_date_str) if interview_date_str else datetime.utcnow()
@@ -772,17 +953,26 @@ def create_customer_interview(current_user):
 @token_required
 def get_customer_interview(current_user, interview_id):
     interview = CustomerInterview.query.get(interview_id)
-    if not interview or interview.product.user_id != current_user.id:
-        return jsonify({"error": "Customer interview not found or unauthorized"}), 404
+    if not interview:
+        return jsonify({"error": "Customer interview not found"}), 404
+    
+    can_access, product_or_msg = check_product_access(current_user.id, interview.product_id, required_role='viewer')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+
     return jsonify(interview.to_dict())
 
 @app.route('/api/customer_interviews/<int:interview_id>', methods=['PUT'])
 @token_required
 def update_customer_interview(current_user, interview_id):
     interview = CustomerInterview.query.get(interview_id)
-    if not interview or interview.product.user_id != current_user.id:
-        return jsonify({"error": "Customer interview not found or unauthorized"}), 404
+    if not interview:
+        return jsonify({"error": "Customer interview not found"}), 404
     
+    can_access, product_or_msg = check_product_access(current_user.id, interview.product_id, required_role='editor')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+
     data = request.json
     for field in ['customer_name', 'customer_email', 'interview_notes_json', 'ai_summary_json']:
         if field in data:
@@ -801,8 +991,13 @@ def update_customer_interview(current_user, interview_id):
 @token_required
 def delete_customer_interview(current_user, interview_id):
     interview = CustomerInterview.query.get(interview_id)
-    if not interview or interview.product.user_id != current_user.id:
-        return jsonify({"error": "Customer interview not found or unauthorized"}), 404
+    if not interview:
+        return jsonify({"error": "Customer interview not found"}), 404
+    
+    can_access, product_or_msg = check_product_access(current_user.id, interview.product_id, required_role='editor')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+
     db.session.delete(interview)
     db.session.commit()
     return jsonify({"message": "Customer interview deleted"}), 204
@@ -810,9 +1005,9 @@ def delete_customer_interview(current_user, interview_id):
 @app.route('/api/customer_interviews/product/<int:product_id>', methods=['GET'])
 @token_required
 def get_interviews_for_product(current_user, product_id):
-    product = Product.query.filter_by(id=product_id, user_id=current_user.id).first()
-    if not product:
-        return jsonify({"error": "Product not found or unauthorized"}), 404
+    can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='viewer')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
     
     interviews = CustomerInterview.query.filter_by(product_id=product_id).order_by(CustomerInterview.interview_date.desc()).all()
     return jsonify([interview.to_dict() for interview in interviews])
@@ -828,8 +1023,12 @@ def generate_interview_summary(current_user):
         return jsonify({"error": "Interview ID and notes content are required"}), 400
 
     interview = CustomerInterview.query.get(interview_id)
-    if not interview or interview.product.user_id != current_user.id:
-        return jsonify({"error": "Customer interview not found or unauthorized"}), 404
+    if not interview:
+        return jsonify({"error": "Customer interview not found"}), 404
+    
+    can_access, product_or_msg = check_product_access(current_user.id, interview.product_id, required_role='editor')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
 
     prompt_parts = [
         f"Summarize the following customer interview notes, highlighting key insights, pain points, and feature requests:\n\n{notes_content}"
@@ -937,6 +1136,204 @@ def generate_interview_questions(current_user):
             app.logger.error(f"Gemini API error response: {e.response.text}")
             return jsonify({"error": f"Failed to generate questions: {e.response.text}"}), 500
         return jsonify({"error": "Failed to generate questions. Please try again later."}), 500
+
+
+# --- API Routes for Tasks ---
+
+@app.route('/api/products/<int:product_id>/tasks', methods=['POST'])
+@token_required
+def create_task(current_user, product_id):
+    """Creates a new task for a specific product, checking editor access."""
+    can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='editor')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+    
+    data = request.json
+    if not data or 'title' not in data:
+        return jsonify({"error": "Task title is required"}), 400
+
+    new_task = Task(
+        product_id=product_id,
+        title=data['title'],
+        description=data.get('description'),
+        assigned_to_user_id=data.get('assigned_to_user_id'),
+        status=data.get('status', 'To Do'),
+        priority=data.get('priority', 'Medium'),
+        due_date=datetime.fromisoformat(data['due_date']) if data.get('due_date') else None
+    )
+    db.session.add(new_task)
+    db.session.commit()
+    # Fetch task again to include assigned_user.username
+    task_with_user = Task.query.get(new_task.id)
+    return jsonify(task_with_user.to_dict()), 201
+
+@app.route('/api/products/<int:product_id>/tasks', methods=['GET'])
+@token_required
+def get_tasks_for_product(current_user, product_id):
+    """Fetches all tasks for a specific product, checking viewer access."""
+    can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='viewer')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+    
+    tasks = Task.query.filter_by(product_id=product_id).order_by(Task.created_at.desc()).all()
+    return jsonify([task.to_dict() for task in tasks])
+
+@app.route('/api/tasks/<int:task_id>', methods=['GET'])
+@token_required
+def get_task(current_user, task_id):
+    """Fetches a single task by ID, checking viewer access to its product."""
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+    
+    can_access, product_or_msg = check_product_access(current_user.id, task.product_id, required_role='viewer')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+
+    return jsonify(task.to_dict())
+
+@app.route('/api/tasks/<int:task_id>', methods=['PUT'])
+@token_required
+def update_task(current_user, task_id):
+    """Updates an existing task by ID, checking editor access to its product."""
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+    
+    can_access, product_or_msg = check_product_access(current_user.id, task.product_id, required_role='editor')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+
+    data = request.json
+    for field in ['title', 'description', 'assigned_to_user_id', 'status', 'priority']:
+        if field in data:
+            setattr(task, field, data[field])
+    
+    if 'due_date' in data and data['due_date'] is not None:
+        try:
+            task.due_date = datetime.fromisoformat(data['due_date'])
+        except ValueError:
+            return jsonify({"error": "Invalid date format for due_date. Use ISO format (YYYY-MM-DDTHH:MM:SS)."}), 400
+    elif 'due_date' in data and data['due_date'] is None: # Allow clearing due date
+        task.due_date = None
+
+    db.session.commit()
+    # Fetch task again to include assigned_user.username
+    task_with_user = Task.query.get(task.id)
+    return jsonify(task_with_user.to_dict())
+
+@app.route('/api/tasks/<int:task_id>', methods=['DELETE'])
+@token_required
+def delete_task(current_user, task_id):
+    """Deletes a task by ID, checking editor access to its product."""
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({"error": "Task not found"}), 404
+    
+    can_access, product_or_msg = check_product_access(current_user.id, task.product_id, required_role='editor')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+
+    db.session.delete(task)
+    db.session.commit()
+    return jsonify({"message": "Task deleted"}), 204
+
+# --- API Routes for Product Collaboration / Access Control ---
+
+@app.route('/api/products/<int:product_id>/access', methods=['GET'])
+@token_required
+def get_product_accesses(current_user, product_id):
+    """Fetches all users with access to a product, checking viewer access."""
+    can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='viewer')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+    
+    product = product_or_msg
+    accesses = ProductAccess.query.filter_by(product_id=product.id).all()
+    return jsonify([pa.to_dict() for pa in accesses])
+
+@app.route('/api/products/<int:product_id>/access', methods=['POST'])
+@token_required
+def invite_user_to_product(current_user, product_id):
+    """Invites a user to a product (adds ProductAccess entry), checking owner access."""
+    can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='owner')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+    
+    product = product_or_msg
+    data = request.json
+    user_email = data.get('user_email')
+    role = data.get('role')
+
+    if not user_email or not role:
+        return jsonify({"error": "User email and role are required"}), 400
+    if role not in ['editor', 'viewer']: # Owner role is assigned automatically to creator
+        return jsonify({"error": "Invalid role. Must be 'editor' or 'viewer'."}), 400
+
+    target_user = User.query.filter_by(email=user_email).first()
+    if not target_user:
+        return jsonify({"error": "User with this email not found"}), 404
+    
+    if target_user.id == current_user.id:
+        return jsonify({"error": "Cannot invite yourself to a product you own"}), 400
+
+    existing_access = ProductAccess.query.filter_by(product_id=product.id, user_id=target_user.id).first()
+    if existing_access:
+        return jsonify({"message": f"User {user_email} already has '{existing_access.role}' access to this product."}), 409
+
+    new_access = ProductAccess(product_id=product.id, user_id=target_user.id, role=role)
+    db.session.add(new_access)
+    db.session.commit()
+    return jsonify(new_access.to_dict()), 201
+
+@app.route('/api/products/<int:product_id>/access/<int:user_id>', methods=['PUT'])
+@token_required
+def update_user_product_role(current_user, product_id, user_id):
+    """Updates a user's role for a product, checking owner access."""
+    can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='owner')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+    
+    product = product_or_msg
+    data = request.json
+    new_role = data.get('role')
+
+    if not new_role:
+        return jsonify({"error": "New role is required"}), 400
+    if new_role not in ['editor', 'viewer', 'owner']:
+        return jsonify({"error": "Invalid role. Must be 'owner', 'editor', or 'viewer'."}), 400
+
+    if user_id == current_user.id:
+        return jsonify({"error": "Cannot change your own role via this endpoint. You are the product owner."}), 400
+    
+    access = ProductAccess.query.filter_by(product_id=product.id, user_id=user_id).first()
+    if not access:
+        return jsonify({"error": "User does not have access to this product"}), 404
+    
+    access.role = new_role
+    db.session.commit()
+    return jsonify(access.to_dict())
+
+@app.route('/api/products/<int:product_id>/access/<int:user_id>', methods=['DELETE'])
+@token_required
+def remove_user_from_product(current_user, product_id, user_id):
+    """Removes a user's access from a product, checking owner access."""
+    can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='owner')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+    
+    product = product_or_msg
+
+    if user_id == current_user.id:
+        return jsonify({"error": "Cannot remove yourself as owner from a product. Transfer ownership first."}), 400
+
+    access = ProductAccess.query.filter_by(product_id=product.id, user_id=user_id).first()
+    if not access:
+        return jsonify({"message": "User does not have access to this product"}), 404
+    
+    db.session.delete(access)
+    db.session.commit()
+    return jsonify({"message": "User access removed successfully"}), 204
 
 
 if __name__ == '__main__':
