@@ -1,61 +1,155 @@
-import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext } from 'react';
 import axios from 'axios';
 
-// --- Constants ---
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api';
+// Importing Material-UI components
+import {
+    Box,
+    Button,
+    TextField,
+    Typography,
+    Paper,
+    Checkbox,
+    FormControlLabel,
+    CircularProgress,
+    Snackbar,
+    Alert,
+    List,
+    ListItem,
+    ListSubheader,
+    ListItemText,
+    IconButton,
+    InputAdornment,
+    Grid,
+    LinearProgress,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogContentText,
+    DialogTitle,
+    Select,
+    MenuItem,
+    FormControl,
+    InputLabel,
+    Tabs,
+    Tab,
+    Menu,
+    Collapse,
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
+} from '@mui/material';
 
-// --- Contexts ---
+// Importing Lucide icons
+import {
+    Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus,
+    Archive, ArchiveRestore, MessageSquare, CheckCircle, Search, User, Settings,
+    LogOut, ChevronDown, ChevronUp, ArrowLeft, Mic, Send, Edit, Save, X, PlusCircle
+} from 'lucide-react';
+
+// Define the API URL for your backend.
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
+// Define keyframes for the pulse animation (from previous version)
+// This needs to be injected globally, e.g., in index.html or a global CSS file,
+// or via MUI's styled-components/emotion setup if you have one.
+// For now, I'll assume it's available or will be handled by your setup.
+const pulseAnimation = `
+    @keyframes pulse-initial {
+        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.7); }
+        70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(79, 70, 229, 0); }
+        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
+    }
+`;
+
+// Inject the keyframes into the document head
+// This is a workaround for environments where global CSS files aren't directly managed.
+// In a proper CRA/Vite setup, you'd put this in a CSS file.
+if (typeof document !== 'undefined') {
+    const styleSheet = document.createElement("style");
+    styleSheet.type = "text/css";
+    styleSheet.innerText = pulseAnimation;
+    document.head.appendChild(styleSheet);
+}
+
+
+// Define the progress percentages for each tab
+const TAB_PROGRESS_PERCENTAGES = {
+    'Research': 20,
+    'PRD': 10,
+    'Design': 15,
+    'Development': 30,
+    'Tech Documentation': 10,
+    'Launch and Training': 15,
+    'Feedback': 0, // Feedback, Tasks, Repo, Important Notes don't contribute to core progress
+    'Tasks': 0,
+    'Collaboration': 0, // New tab for collaboration
+    'Repo': 0,
+    'Important Notes': 0,
+};
+
+// Define the order of tabs for display
+const PRODUCT_TABS_ORDER = [
+    'Overview', 'Research', 'PRD', 'Design', 'Development', 'Tech Documentation',
+    'Launch and Training', 'Feedback', 'Tasks', 'Collaboration', 'Important Notes'
+];
+
+// --- Auth Context ---
 const AuthContext = createContext(null);
 
-// --- Utility Functions ---
-const fetcher = axios.create({
-    baseURL: API_BASE_URL,
+// --- Axios Instance for API Calls ---
+const api = axios.create({
+    baseURL: API_URL,
     headers: {
         'Content-Type': 'application/json',
     },
 });
 
-// Interceptor to add Authorization header for all authenticated requests
-fetcher.interceptors.request.use(
-    config => {
+// Request interceptor to add the auth token
+api.interceptors.request.use(
+    (config) => {
         const token = localStorage.getItem('token');
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
     },
-    error => {
+    (error) => {
         return Promise.reject(error);
     }
 );
 
-// --- Auth Provider Component ---
+// --- AuthProvider Component ---
 function AuthProvider({ children }) {
-    const [user, setUser] = useState(null); // Stores { token, username, timezone, email }
+    const [user, setUser] = useState(null); // Stores { id, username, email, timezone, token }
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const token = localStorage.getItem('token');
         const username = localStorage.getItem('username');
         const timezone = localStorage.getItem('timezone');
-        const email = localStorage.getItem('email'); // Store email as well for convenience
+        const userId = localStorage.getItem('userId');
+        const userEmail = localStorage.getItem('userEmail'); // Added userEmail to local storage
 
-        if (token && username && email) {
-            setUser({ token, username, timezone, email });
+        if (token && username && timezone && userId && userEmail) {
+            setUser({ id: userId, token, username, timezone, email: userEmail });
         }
         setLoading(false);
     }, []);
 
     const login = async (email, password) => {
         try {
-            const response = await fetcher.post('/login', { email, password });
-            const { token, username, timezone } = response.data;
+            const response = await api.post('/api/login', { email, password });
+            const { token, username, timezone, user_id } = response.data;
             localStorage.setItem('token', token);
-            localStorage.setItem('username', username);
-            localStorage.setItem('timezone', timezone);
-            localStorage.setItem('email', email); // Save email on login
-            setUser({ token, username, timezone, email });
-            return { success: true };
+            localStorage.setItem('username', username || 'User Name');
+            localStorage.setItem('timezone', timezone || 'UTC+05:30 (Chennai)');
+            localStorage.setItem('userId', user_id);
+            localStorage.setItem('userEmail', email); // Store email on login
+            setUser({ id: user_id, token, username: username || 'User Name', timezone: timezone || 'UTC+05:30 (Chennai)', email });
+            return { success: true, message: response.data.message };
         } catch (error) {
             console.error('Login failed:', error.response?.data || error.message);
             return { success: false, message: error.response?.data?.message || 'Login failed' };
@@ -64,7 +158,7 @@ function AuthProvider({ children }) {
 
     const signup = async (email, password, username) => {
         try {
-            const response = await fetcher.post('/signup', { email, password, username });
+            const response = await api.post('/api/signup', { email, password, username });
             return { success: true, message: response.data.message };
         } catch (error) {
             console.error('Signup failed:', error.response?.data || error.message);
@@ -76,13 +170,14 @@ function AuthProvider({ children }) {
         localStorage.removeItem('token');
         localStorage.removeItem('username');
         localStorage.removeItem('timezone');
-        localStorage.removeItem('email');
+        localStorage.removeItem('userId');
+        localStorage.removeItem('userEmail');
         setUser(null);
     };
 
     const updateProfile = async (newUsername, newTimezone) => {
         try {
-            const response = await fetcher.put('/user/profile', {
+            const response = await api.put('/api/user/profile', {
                 username: newUsername,
                 timezone: newTimezone,
             });
@@ -104,381 +199,765 @@ function AuthProvider({ children }) {
     );
 }
 
-// --- App Component (Main Router) ---
-function App() {
-    const { user, loading } = useContext(AuthContext);
-    const [currentPage, setCurrentPage] = useState('login'); // 'login', 'signup', 'dashboard', 'productDetail', 'profile'
-    const [selectedProductId, setSelectedProductId] = useState(null);
+// --- Editor.js Wrapper Component ---
+const Editor = ({ initialData, onChange, holder, readOnly = false, onReadyCallback = () => {} }) => {
+    const editorInstance = useRef(null);
+    const editorHolderId = useMemo(() => holder || `editor-js-holder-${Math.random().toString(36).substring(7)}`, [holder]);
 
     useEffect(() => {
-        if (!loading) {
-            if (user) {
-                setCurrentPage('dashboard');
-            } else {
-                setCurrentPage('login');
+        // Dynamically load Editor.js scripts if not already present
+        const loadScript = (src, id) => {
+            return new Promise((resolve, reject) => {
+                if (document.getElementById(id)) {
+                    resolve();
+                    return;
+                }
+                const script = document.createElement('script');
+                script.src = src;
+                script.id = id;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        };
+
+        const loadEditorScripts = async () => {
+            try {
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/editorjs@2.28.2/dist/editor.min.js', 'editorjs-core');
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/header@2.8.1/dist/bundle.min.js', 'editorjs-header');
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/paragraph@2.11.3/dist/bundle.min.js', 'editorjs-paragraph');
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/list@1.9.0/dist/bundle.min.js', 'editorjs-list');
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/code@2.9.0/dist/bundle.min.js', 'editorjs-code');
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/table@2.3.0/dist/bundle.min.js', 'editorjs-table');
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/quote@2.6.0/dist/bundle.min.js', 'editorjs-quote');
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/raw@2.5.0/dist/bundle.min.js', 'editorjs-raw');
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/image@2.9.0/dist/bundle.min.js', 'editorjs-image');
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/marker@1.4.0/dist/bundle.min.js', 'editorjs-marker');
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/warning@1.3.0/dist/bundle.min.js', 'editorjs-warning');
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/delimiter@1.3.0/dist/bundle.min.js', 'editorjs-delimiter');
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/inline-code@1.4.0/dist/bundle.min.js', 'editorjs-inline-code');
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/link@2.6.0/dist/bundle.min.js', 'editorjs-link');
+                await loadScript('https://cdn.jsdelivr.net/npm/@editorjs/embed@2.7.0/dist/bundle.min.js', 'editorjs-embed');
+
+                if (window.EditorJS) {
+                    if (editorInstance.current) {
+                        editorInstance.current.destroy(); // Destroy existing instance if it exists
+                    }
+
+                    editorInstance.current = new window.EditorJS({
+                        holder: editorHolderId,
+                        data: initialData || { blocks: [] },
+                        readOnly: readOnly,
+                        tools: {
+                            header: window.Header,
+                            paragraph: window.Paragraph,
+                            list: window.List,
+                            code: window.CodeTool,
+                            table: window.Table,
+                            quote: window.Quote,
+                            raw: window.RawTool,
+                            image: {
+                                class: window.ImageTool,
+                                config: {
+                                    uploader: {
+                                        uploadByFile(file) {
+                                            return new Promise(resolve => {
+                                                const reader = new FileReader();
+                                                reader.onloadend = () => {
+                                                    resolve({
+                                                        success: 1,
+                                                        file: {
+                                                            url: `https://placehold.co/600x400/FF0000/FFFFFF?text=Image+Placeholder`,
+                                                        }
+                                                    });
+                                                };
+                                                reader.readAsDataURL(file);
+                                            });
+                                        },
+                                    }
+                                }
+                            },
+                            marker: window.Marker,
+                            warning: window.Warning,
+                            delimiter: window.Delimiter,
+                            inlineCode: window.InlineCode,
+                            link: window.LinkTool,
+                            embed: window.Embed,
+                        },
+                        onChange: async () => {
+                            if (onChange) {
+                                const savedData = await editorInstance.current.save();
+                                onChange(savedData);
+                            }
+                        },
+                        onReady: () => {
+                            onReadyCallback();
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error("Failed to load Editor.js scripts:", error);
+            }
+        };
+
+        loadEditorScripts();
+
+        return () => {
+            if (editorInstance.current && editorInstance.current.destroy) {
+                editorInstance.current.destroy();
+                editorInstance.current = null;
+            }
+        };
+    }, [editorHolderId, initialData, onChange, readOnly, onReadyCallback]);
+
+    return <Box id={editorHolderId} sx={{ border: '1px solid #e0e7ff', borderRadius: '0.5rem', minHeight: '200px', padding: 2, backgroundColor: '#f9fafb' }} />;
+};
+
+
+// --- AuthPage Component ---
+function AuthPage() {
+    const { login, signup, loading: authLoading } = useContext(AuthContext);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [username, setUsername] = useState('');
+    const [isLoginMode, setIsLoginMode] = useState(true);
+    const [authError, setAuthError] = useState(null);
+    const [rememberMe, setRememberMe] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [snackbarOpen, setSnackbarOpen] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+
+    const handleSnackbarClose = (event, reason) => {
+        if (reason === 'clickaway') {
+            return;
+        }
+        setSnackbarOpen(false);
+    };
+
+    const handleAuthSubmit = async (e) => {
+        e.preventDefault();
+        setAuthError(null);
+        setSnackbarOpen(false);
+
+        if (!isLoginMode) {
+            if (password !== confirmPassword) {
+                setAuthError("Passwords do not match.");
+                setSnackbarMessage("Passwords do not match.");
+                setSnackbarSeverity('error');
+                setSnackbarOpen(true);
+                return;
+            }
+            if (!username.trim()) {
+                setAuthError("Username is required for signup.");
+                setSnackbarMessage("Username is required for signup.");
+                setSnackbarSeverity('error');
+                setSnackbarOpen(true);
+                return;
             }
         }
-    }, [user, loading]);
 
-    const navigateTo = (page, productId = null) => {
-        setCurrentPage(page);
-        setSelectedProductId(productId);
-    };
-
-    if (loading) {
-        return (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
-                <div style={{ fontSize: '1.25rem', fontWeight: '600', color: '#4b5563' }}>Loading application...</div>
-            </div>
-        );
-    }
-
-    let content;
-    switch (currentPage) {
-        case 'login':
-            content = <LoginPage navigateTo={navigateTo} />;
-            break;
-        case 'signup':
-            content = <SignupPage navigateTo={navigateTo} />;
-            break;
-        case 'dashboard':
-            content = <DashboardPage navigateTo={navigateTo} />;
-            break;
-        case 'productDetail':
-            content = <ProductDetailView productId={selectedProductId} navigateTo={navigateTo} />;
-            break;
-        case 'profile':
-            content = <ProfilePage navigateTo={navigateTo} />;
-            break;
-        default:
-            content = <LoginPage navigateTo={navigateTo} />;
-    }
-
-    return (
-        <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6', fontFamily: 'Inter, sans-serif', WebkitFontSmoothing: 'antialiased', MozOsxFontSmoothing: 'grayscale' }}>
-            {user && <Navbar navigateTo={navigateTo} username={user.username} />}
-            <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '1rem' }}>
-                {content}
-            </main>
-        </div>
-    );
-}
-
-// --- Navbar Component ---
-function Navbar({ navigateTo, username }) {
-    const { logout } = useContext(AuthContext);
-    return (
-        <nav style={{ background: 'linear-gradient(to right, #8b5cf6, #6366f1)', padding: '1rem', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)' }}>
-            <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h1 style={{ color: 'white', fontSize: '1.5rem', fontWeight: 'bold', cursor: 'pointer' }} onClick={() => navigateTo('dashboard')}>
-                    Auto Product Manager
-                </h1>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <span style={{ color: 'white', fontSize: '1.125rem' }}>Hello, {username}!</span>
-                    <button
-                        onClick={() => navigateTo('profile')}
-                        style={{ backgroundColor: 'white', color: '#7c3aed', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                        onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                        Profile
-                    </button>
-                    <button
-                        onClick={logout}
-                        style={{ backgroundColor: '#ef4444', color: 'white', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                        onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                        Logout
-                    </button>
-                </div>
-            </div>
-        </nav>
-    );
-}
-
-// --- Login Page Component ---
-function LoginPage({ navigateTo }) {
-    const { login } = useContext(AuthContext);
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [message, setMessage] = useState('');
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setMessage('');
-        const result = await login(email, password);
-        if (result.success) {
-            navigateTo('dashboard');
+        let result;
+        if (isLoginMode) {
+            result = await login(email, password);
         } else {
-            setMessage(result.message);
+            result = await signup(email, password, username);
         }
-    };
 
-    return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 80px)' }}>
-            <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '0.5rem', boxShadow: '0 10px 15px rgba(0, 0, 0, 0.1)', width: '100%', maxWidth: '448px' }}>
-                <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', textAlign: 'center', color: '#1f2937', marginBottom: '1.5rem' }}>Login</h2>
-                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <div>
-                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="email">
-                            Email
-                        </label>
-                        <input
-                            type="email"
-                            id="email"
-                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                        />
-                    </div>
-                    <div>
-                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="password">
-                            Password
-                        </label>
-                        <input
-                            type="password"
-                            id="password"
-                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                        />
-                    </div>
-                    <button
-                        type="submit"
-                        style={{ width: '100%', backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.75rem 1rem', borderRadius: '0.5rem', outline: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
-                    >
-                        Login
-                    </button>
-                </form>
-                {message && <p style={{ marginTop: '1rem', textAlign: 'center', color: '#ef4444' }}>{message}</p>}
-                <p style={{ marginTop: '1.5rem', textAlign: 'center', color: '#4b5563' }}>
-                    Don't have an account?{' '}
-                    <button
-                        onClick={() => navigateTo('signup')}
-                        style={{ color: '#8b5cf6', textDecoration: 'underline', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer' }}
-                    >
-                        Sign Up
-                    </button>
-                </p>
-            </div>
-        </div>
-    );
-}
-
-// --- Signup Page Component ---
-function SignupPage({ navigateTo }) {
-    const { signup } = useContext(AuthContext);
-    const [email, setEmail] = useState('');
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
-    const [message, setMessage] = useState('');
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setMessage('');
-        const result = await signup(email, password, username);
-        setMessage(result.message);
         if (result.success) {
-            setEmail('');
-            setUsername('');
-            setPassword('');
-            setTimeout(() => navigateTo('login'), 3000); // Redirect after 3 seconds
+            setSnackbarMessage(result.message || (isLoginMode ? 'Login successful!' : 'Signup successful! Redirecting to login...'));
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+            if (!isLoginMode) {
+                setEmail('');
+                setUsername('');
+                setPassword('');
+                setConfirmPassword('');
+                setTimeout(() => setIsLoginMode(true), 2000); // Redirect to login after signup
+            }
+        } else {
+            setAuthError(result.message);
+            setSnackbarMessage(result.message);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
     return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 80px)' }}>
-            <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '0.5rem', boxShadow: '0 10px 15px rgba(0, 0, 0, 0.1)', width: '100%', maxWidth: '448px' }}>
-                <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', textAlign: 'center', color: '#1f2937', marginBottom: '1.5rem' }}>Sign Up</h2>
-                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <div>
-                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="email">
-                            Email
-                        </label>
-                        <input
-                            type="email"
+        <Box
+            sx={{
+                minHeight: '100vh',
+                display: 'flex',
+                fontFamily: 'Inter, sans-serif',
+                background: 'linear-gradient(to bottom right, #eef2ff, #fff, #f5f3ff)',
+                '@media (min-width: 1024px)': {
+                    display: 'flex',
+                },
+            }}
+        >
+            {/* Left Side - Hero Section */}
+            <Box
+                sx={{
+                    display: { xs: 'none', lg: 'flex' },
+                    width: { lg: '50%' },
+                    background: 'linear-gradient(to bottom right, #4f46e5, #9333ea, #3730a3)',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    px: 6,
+                    color: '#fff',
+                }}
+            >
+                {/* Background Pattern */}
+                <Box
+                    sx={{
+                        position: 'absolute',
+                        inset: 0,
+                        opacity: 0.1,
+                    }}
+                >
+                    <Box sx={{ position: 'absolute', top: 0, left: '-1rem', width: '18rem', height: '18rem', borderRadius: '9999px', mixBlendMode: 'multiply', filter: 'blur(3rem)', animation: 'pulse-initial 4s infinite cubic-bezier(0.4, 0, 0.6, 1)', backgroundColor: '#d8b4fe' }} />
+                    <Box sx={{ position: 'absolute', top: 0, right: '-1rem', width: '18rem', height: '18rem', borderRadius: '9999px', mixBlendMode: 'multiply', filter: 'blur(3rem)', animation: 'pulse-initial 4s infinite cubic-bezier(0.4, 0, 0.6, 1) 2s', backgroundColor: '#fde047' }} />
+                    <Box sx={{ position: 'absolute', bottom: '-2rem', left: '5rem', width: '18rem', height: '18rem', borderRadius: '9999px', mixBlendMode: 'multiply', filter: 'blur(3rem)', animation: 'pulse-initial 4s infinite cubic-bezier(0.4, 0, 0.6, 1) 4s', backgroundColor: '#fbcfe8' }} />
+                </Box>
+
+                <Box sx={{ position: 'relative', zIndex: 10 }}>
+                    <Box sx={{ marginBottom: 4 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
+                            <Sparkles size={40} color="#fde047" style={{ marginRight: '0.75rem' }} />
+                            <Typography variant="h6" component="span" sx={{ fontWeight: 'bold' }}>
+                                Auto Product Manager
+                            </Typography>
+                        </Box>
+                        <Typography variant="h3" component="h1" sx={{ fontWeight: 'bold', lineHeight: 'tight', marginBottom: 3 }}>
+                            Automate Your Entire Product Management
+                            <Box component="span" sx={{ display: 'block', color: '#fde047' }}>Lifecycle</Box>
+                        </Typography>
+                        <Typography variant="body1" sx={{ fontSize: '1.25rem', color: '#e0e7ff', marginBottom: 4, lineHeight: 'relaxed' }}>
+                            Leverage AI-powered insights to streamline every stage of your product lifecycle, from ideation to launch and beyond, with automated documentation and enhanced collaboration.
+                        </Typography>
+                    </Box>
+
+                    {/* Feature highlights */}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Zap size={24} color="#fde047" style={{ marginRight: '0.75rem', flexShrink: 0 }} />
+                            <Typography variant="body2" sx={{ color: '#e0e7ff' }}>AI-Driven Product Lifecycle Automation</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Users size={24} color="#fde047" style={{ marginRight: '0.75rem', flexShrink: 0 }} />
+                            <Typography variant="body2" sx={{ color: '#e0e7ff' }}>Seamless Team Collaboration</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <BarChart3 size={24} color="#fde047" style={{ marginRight: '0.75rem', flexShrink: 0 }} />
+                            <Typography variant="body2" sx={{ color: '#e0e7ff' }}>Actionable Analytics & Strategic Insights</Typography>
+                        </Box>
+                    </Box>
+                </Box>
+            </Box>
+
+            {/* Right Side - Auth Form */}
+            <Box
+                sx={{
+                    width: { xs: '100%', lg: '50%' },
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    p: 4,
+                }}
+            >
+                <Paper
+                    elevation={3}
+                    sx={{
+                        width: '100%',
+                        maxWidth: '28rem',
+                        borderRadius: '1rem',
+                        p: { xs: 4, sm: 5 },
+                        border: '1px solid #e5e7eb',
+                    }}
+                >
+                    {/* Mobile Logo */}
+                    <Box sx={{ display: { xs: 'flex', lg: 'none' }, justifyContent: 'center', alignItems: 'center', flexDirection: 'column', marginBottom: 4 }}>
+                        <Sparkles size={32} color="#4f46e5" style={{ marginBottom: '0.5rem' }} />
+                        <Typography variant="h6" component="span" sx={{ fontWeight: 'bold' }}>
+                            Auto Product Manager
+                        </Typography>
+                    </Box>
+
+                    {/* Header */}
+                    <Box sx={{ textAlign: 'center', marginBottom: 4 }}>
+                        <Typography variant="h5" component="h2" sx={{ fontWeight: 'bold', color: '#111827', marginBottom: 1 }}>
+                            {isLoginMode ? 'Welcome back' : 'Create your account'}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#4b5563' }}>
+                            {isLoginMode
+                                ? 'Enter your credentials to access your dashboard'
+                                : 'Get started with your free account today'
+                            }
+                        </Typography>
+                    </Box>
+
+                    {/* Form */}
+                    <Box component="form" onSubmit={handleAuthSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {/* Email Input */}
+                        <TextField
+                            label="Work Email"
                             id="email"
-                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
+                            type="email"
+                            placeholder="yourname@company.com"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
+                            fullWidth
+                            variant="outlined"
+                            sx={{
+                                '& .MuiOutlinedInput-root': {
+                                    borderRadius: '0.5rem',
+                                    '&.Mui-focused fieldset': {
+                                        borderColor: '#6366f1',
+                                        boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)',
+                                    },
+                                },
+                                '& .MuiInputLabel-root': {
+                                    fontWeight: 600,
+                                    color: '#374151',
+                                },
+                                '& .MuiInputBase-input::placeholder': {
+                                    color: '#9ca3af',
+                                    opacity: 1,
+                                },
+                            }}
                         />
-                    </div>
-                    <div>
-                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="username">
-                            Username
-                        </label>
-                        <input
-                            type="text"
-                            id="username"
-                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            required
-                        />
-                    </div>
-                    <div>
-                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="password">
-                            Password
-                        </label>
-                        <input
-                            type="password"
+
+                        {/* Username Input (only for signup mode) */}
+                        {!isLoginMode && (
+                            <TextField
+                                label="Your Name"
+                                id="username"
+                                type="text"
+                                placeholder="e.g., Sandeep"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                required
+                                fullWidth
+                                variant="outlined"
+                                sx={{
+                                    '& .MuiOutlinedInput-root': {
+                                        borderRadius: '0.5rem',
+                                        '&.Mui-focused fieldset': {
+                                            borderColor: '#6366f1',
+                                            boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)',
+                                        },
+                                    },
+                                    '& .MuiInputLabel-root': {
+                                        fontWeight: 600,
+                                        color: '#374151',
+                                    },
+                                    '& .MuiInputBase-input::placeholder': {
+                                        color: '#9ca3af',
+                                        opacity: 1,
+                                    },
+                                }}
+                            />
+                        )}
+
+                        {/* Password Input */}
+                        <TextField
+                            label="Password"
                             id="password"
-                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Enter your password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
+                            fullWidth
+                            variant="outlined"
+                            InputProps={{
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <IconButton
+                                            aria-label="toggle password visibility"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            edge="end"
+                                            sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
+                                        >
+                                            {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                        </IconButton>
+                                    </InputAdornment>
+                                ),
+                                sx: {
+                                    borderRadius: '0.5rem',
+                                    '&.Mui-focused fieldset': {
+                                        borderColor: '#6366f1',
+                                        boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)',
+                                    },
+                                },
+                            }}
+                            sx={{
+                                '& .MuiInputLabel-root': {
+                                    fontWeight: 600,
+                                    color: '#374151',
+                                },
+                                '& .MuiInputBase-input::placeholder': {
+                                    color: '#9ca3af',
+                                    opacity: 1,
+                                },
+                            }}
                         />
-                    </div>
-                    <button
-                        type="submit"
-                        style={{ width: '100%', backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.75rem 1rem', borderRadius: '0.5rem', outline: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
-                    >
-                        Sign Up
-                    </button>
-                </form>
-                {message && <p style={{ marginTop: '1rem', textAlign: 'center', color: '#10b981' }}>{message}</p>}
-                <p style={{ marginTop: '1.5rem', textAlign: 'center', color: '#4b5563' }}>
-                    Already have an account?{' '}
-                    <button
-                        onClick={() => navigateTo('login')}
-                        style={{ color: '#8b5cf6', textDecoration: 'underline', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer' }}
-                    >
-                        Login
-                    </button>
-                </p>
-            </div>
-        </div>
+
+                        {/* Confirm Password Input (only for signup mode) */}
+                        {!isLoginMode && (
+                            <TextField
+                                label="Confirm Password"
+                                id="confirm-password"
+                                type={showConfirmPassword ? "text" : "password"}
+                                placeholder="Confirm your password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                required
+                                fullWidth
+                                variant="outlined"
+                                InputProps={{
+                                    endAdornment: (
+                                        <InputAdornment position="end">
+                                            <IconButton
+                                                aria-label="toggle confirm password visibility"
+                                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                                edge="end"
+                                                sx={{ color: '#9ca3af', '&:hover': { color: '#4b5563' } }}
+                                            >
+                                                {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                            </IconButton>
+                                        </InputAdornment>
+                                    ),
+                                    sx: {
+                                        borderRadius: '0.5rem',
+                                        '&.Mui-focused fieldset': {
+                                            borderColor: '#6366f1',
+                                            boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)',
+                                        },
+                                    },
+                                }}
+                                sx={{
+                                    '& .MuiInputLabel-root': {
+                                        fontWeight: 600,
+                                        color: '#374151',
+                                    },
+                                    '& .MuiInputBase-input::placeholder': {
+                                        color: '#9ca3af',
+                                        opacity: 1,
+                                    },
+                                }}
+                            />
+                        )}
+
+                        {/* Remember Me */}
+                        {isLoginMode && (
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
+                                <FormControlLabel
+                                    control={
+                                        <Checkbox
+                                            checked={rememberMe}
+                                            onChange={(e) => setRememberMe(e.target.checked)}
+                                            id="remember-me"
+                                            sx={{
+                                                color: '#4f46e5',
+                                                '&.Mui-checked': {
+                                                    color: '#4f46e5',
+                                                },
+                                                '& .MuiSvgIcon-root': {
+                                                    fontSize: '1rem',
+                                                },
+                                            }}
+                                        />
+                                    }
+                                    label={
+                                        <Typography variant="body2" sx={{ fontSize: '0.875rem', color: '#374151' }}>
+                                            Remember me
+                                        </Typography>
+                                    }
+                                />
+                            </Box>
+                        )}
+
+                        {/* Submit Button */}
+                        <Button
+                            type="submit"
+                            variant="contained"
+                            disabled={authLoading}
+                            sx={{
+                                width: '100%',
+                                paddingY: '0.75rem',
+                                paddingX: '1.5rem',
+                                background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                                color: '#fff',
+                                fontWeight: 600,
+                                borderRadius: '0.5rem',
+                                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                                textTransform: 'none',
+                                transition: 'all 200ms ease-in-out',
+                                '&:hover': {
+                                    background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                                    transform: 'scale(1.02)',
+                                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+                                },
+                                '&:disabled': {
+                                    opacity: 0.5,
+                                    cursor: 'not-allowed',
+                                    color: '#fff',
+                                },
+                            }}
+                        >
+                            {authLoading ? (
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <CircularProgress size={20} color="inherit" sx={{ marginRight: 1 }} />
+                                    Processing...
+                                </Box>
+                            ) : (
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    {isLoginMode ? 'Sign in' : 'Create account'}
+                                    <ArrowRight size={20} style={{ marginLeft: '0.5rem' }} />
+                                </Box>
+                            )}
+                        </Button>
+                    </Box>
+
+                    {/* Error Message */}
+                    {authError && (
+                        <Alert severity="error" sx={{ marginTop: 3, borderRadius: '0.5rem', border: '1px solid #fecaca' }}>
+                            {authError}
+                        </Alert>
+                    )}
+
+                    {/* Toggle Mode */}
+                    <Box sx={{ marginTop: 4, textAlign: 'center' }}>
+                        <Typography variant="body2" sx={{ color: '#4b5563' }}>
+                            {isLoginMode ? "Don't have an account?" : "Already have an account?"}{' '}
+                            <Button
+                                variant="text"
+                                onClick={() => {
+                                    setIsLoginMode(!isLoginMode);
+                                    setAuthError(null);
+                                    setEmail('');
+                                    setPassword('');
+                                    setConfirmPassword('');
+                                    setUsername('');
+                                    setSnackbarOpen(false);
+                                }}
+                                sx={{
+                                    color: '#4f46e5',
+                                    fontWeight: 600,
+                                    textTransform: 'none',
+                                    '&:hover': {
+                                        color: '#6366f1',
+                                        backgroundColor: 'transparent',
+                                    },
+                                }}
+                            >
+                                {isLoginMode ? 'Sign up' : 'Sign in'}
+                            </Button>
+                        </Typography>
+                    </Box>
+
+                    {/* Security notice */}
+                    <Typography variant="caption" sx={{ marginTop: 3, fontSize: '0.75rem', color: '#6b7280', textAlign: 'center', display: 'block' }}>
+                        By continuing, you agree to our Terms of Service and Privacy Policy.
+                    </Typography>
+                </Paper>
+            </Box>
+            <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
+                <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+                    {snackbarMessage}
+                </Alert>
+            </Snackbar>
+        </Box>
     );
 }
 
-// --- Profile Page Component ---
-function ProfilePage({ navigateTo }) {
-    const { user, updateProfile } = useContext(AuthContext);
+// --- SettingsPage Component ---
+function SettingsPage({ setCurrentPage }) {
+    const { user, updateProfile, logout } = useContext(AuthContext);
     const [username, setUsername] = useState(user?.username || '');
     const [timezone, setTimezone] = useState(user?.timezone || 'UTC+05:30 (Chennai)');
-    const [message, setMessage] = useState('');
+    const [snackbarOpen, setSnackbarOpen] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
-    const handleUpdate = async (e) => {
+    const timezones = [
+        "UTC-12:00 (Baker Island)", "UTC-11:00 (Niue)", "UTC-10:00 (Hawaii)", "UTC-09:00 (Alaska)",
+        "UTC-08:00 (Pacific Time)", "UTC-07:00 (Mountain Time)", "UTC-06:00 (Central Time)",
+        "UTC-05:00 (Eastern Time)", "UTC-04:00 (Atlantic Time)", "UTC-03:00 (Buenos Aires)",
+        "UTC-02:00 (Fernando de Noronha)", "UTC-01:00 (Azores)", "UTC+00:00 (London)",
+        "UTC+01:00 (Berlin)", "UTC+02:00 (Athens)", "UTC+03:00 (Moscow)", "UTC+03:30 (Tehran)",
+        "UTC+04:00 (Dubai)", "UTC+04:30 (Kabul)", "UTC+05:00 (Karachi)", "UTC+05:30 (Chennai)",
+        "UTC+05:45 (Kathmandu)", "UTC+06:00 (Dhaka)", "UTC+06:30 (Yangon)", "UTC+07:00 (Bangkok)",
+        "UTC+08:00 (Beijing)", "UTC+08:45 (Eucla)", "UTC+09:00 (Tokyo)", "UTC+09:30 (Adelaide)",
+        "UTC+10:00 (Sydney)", "UTC+10:30 (Lord Howe Island)", "UTC+11:00 (Solomon Islands)",
+        "UTC+12:00 (Auckland)", "UTC+12:45 (Chatham Islands)", "UTC+13:00 (Samoa)", "UTC+14:00 (Kiritimati)"
+    ];
+
+    const handleSnackbarClose = (event, reason) => {
+        if (reason === 'clickaway') {
+            return;
+        }
+        setSnackbarOpen(false);
+    };
+
+    const handleSaveSettings = async (e) => {
         e.preventDefault();
-        setMessage('');
+        setSnackbarOpen(false);
         const result = await updateProfile(username, timezone);
-        setMessage(result.message);
         if (result.success) {
-            setTimeout(() => setMessage(''), 3000); // Clear message after 3 seconds
+            setSnackbarMessage(result.message);
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } else {
+            setSnackbarMessage(result.message);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
+    const handleLogout = () => {
+        logout();
+        setCurrentPage('auth');
+    };
+
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 80px)' }}>
-            <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '0.5rem', boxShadow: '0 10px 15px rgba(0, 0, 0, 0.1)', width: '100%', maxWidth: '448px' }}>
-                <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', textAlign: 'center', color: '#1f2937', marginBottom: '1.5rem' }}>User Profile</h2>
-                <form onSubmit={handleUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <div>
-                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="email">
-                            Email (Read-only)
-                        </label>
-                        <input
-                            type="email"
-                            id="email"
-                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', backgroundColor: '#e5e7eb', cursor: 'not-allowed' }}
+        <Box sx={{ flexGrow: 1, padding: 3, backgroundColor: '#f5f7fa', minHeight: '100vh' }}>
+            <Paper elevation={3} sx={{ padding: 4, borderRadius: '1rem', maxWidth: '800px', margin: 'auto' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold', color: '#1a202c' }}>
+                        <IconButton onClick={() => setCurrentPage('dashboard')} sx={{ mr: 1 }}>
+                            <ArrowLeft />
+                        </IconButton>
+                        Settings
+                    </Typography>
+                    <Button
+                        variant="outlined"
+                        color="error"
+                        onClick={handleLogout}
+                        startIcon={<LogOut size={20} />}
+                        sx={{ textTransform: 'none', borderRadius: '0.5rem' }}
+                    >
+                        Logout
+                    </Button>
+                </Box>
+
+                <Grid container spacing={3}>
+                    <Grid item xs={12}>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#2d3748', marginBottom: 2 }}>
+                            Profile Information
+                        </Typography>
+                        <TextField
+                            label="Email"
                             value={user?.email || ''}
-                            disabled
+                            fullWidth
+                            margin="normal"
+                            InputProps={{
+                                readOnly: true,
+                            }}
+                            sx={{
+                                '& .MuiOutlinedInput-root': { borderRadius: '0.5rem', backgroundColor: '#f0f2f5' },
+                                '& .MuiInputLabel-root': { fontWeight: 600, color: '#374151' },
+                            }}
                         />
-                    </div>
-                    <div>
-                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="username">
-                            Username
-                        </label>
-                        <input
-                            type="text"
-                            id="username"
-                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
+                        <TextField
+                            label="Username"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            required
+                            fullWidth
+                            margin="normal"
+                            sx={{
+                                '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' },
+                                '& .MuiInputLabel-root': { fontWeight: 600, color: '#374151' },
+                            }}
                         />
-                    </div>
-                    <div>
-                        <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="timezone">
-                            Timezone
-                        </label>
-                        <input
-                            type="text"
-                            id="timezone"
-                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            value={timezone}
-                            onChange={(e) => setTimezone(e.target.value)}
-                        />
-                    </div>
-                    <button
-                        type="submit"
-                        style={{ width: '100%', backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.75rem 1rem', borderRadius: '0.5rem', outline: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
-                    >
-                        Update Profile
-                    </button>
-                </form>
-                {message && (
-                    <p style={{ marginTop: '1rem', textAlign: 'center', color: message.includes('success') ? '#10b981' : '#ef4444' }}>
-                        {message}
-                    </p>
-                )}
-                <button
-                    onClick={() => navigateTo('dashboard')}
-                    style={{ marginTop: '1.5rem', width: '100%', backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.75rem 1rem', borderRadius: '0.5rem', outline: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#9ca3af'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#d1d5db'; e.currentTarget.style.transform = 'scale(1)'; }}
-                >
-                    Back to Dashboard
-                </button>
-            </div>
-        </div>
+                        <FormControl fullWidth margin="normal" sx={{
+                            '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' },
+                            '& .MuiInputLabel-root': { fontWeight: 600, color: '#374151' },
+                        }}>
+                            <InputLabel id="timezone-select-label">Timezone</InputLabel>
+                            <Select
+                                labelId="timezone-select-label"
+                                id="timezone-select"
+                                value={timezone}
+                                label="Timezone"
+                                onChange={(e) => setTimezone(e.target.value)}
+                            >
+                                {timezones.map((tz) => (
+                                    <MenuItem key={tz} value={tz}>
+                                        {tz}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                        <Button
+                            variant="contained"
+                            onClick={handleSaveSettings}
+                            sx={{
+                                mt: 3,
+                                background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                                color: '#fff',
+                                fontWeight: 600,
+                                borderRadius: '0.5rem',
+                                textTransform: 'none',
+                                '&:hover': {
+                                    background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                                },
+                            }}
+                        >
+                            Save Changes
+                        </Button>
+                    </Grid>
+                </Grid>
+            </Paper>
+            <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
+                <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+                    {snackbarMessage}
+                </Alert>
+            </Snackbar>
+        </Box>
     );
 }
 
-
-// --- Dashboard Page Component ---
-function DashboardPage({ navigateTo }) {
+// --- DashboardPage Component ---
+function DashboardPage({ setCurrentPage, setSelectedProductId }) {
     const { user } = useContext(AuthContext);
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [createModalOpen, setCreateModalOpen] = useState(false);
     const [newProductName, setNewProductName] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [productToDelete, setProductToDelete] = useState(null);
+    const [snackbarOpen, setSnackbarOpen] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+
+    const handleSnackbarClose = (event, reason) => {
+        if (reason === 'clickaway') {
+            return;
+        }
+        setSnackbarOpen(false);
+    };
 
     const fetchProducts = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetcher.get('/products');
+            const response = await api.get('/api/products');
             setProducts(response.data);
         } catch (err) {
             console.error('Error fetching products:', err);
             setError('Failed to fetch products. Please try again.');
+            setSnackbarMessage('Failed to fetch products.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         } finally {
             setLoading(false);
         }
@@ -490,28 +969,49 @@ function DashboardPage({ navigateTo }) {
         }
     }, [user, fetchProducts]);
 
-    const handleCreateProduct = async (e) => {
-        e.preventDefault();
+    const handleCreateProduct = async () => {
+        if (!newProductName.trim()) {
+            setSnackbarMessage('Product name cannot be empty.');
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
+            return;
+        }
         try {
-            await fetcher.post('/products', { name: newProductName });
+            await api.post('/api/products', { name: newProductName });
             setNewProductName('');
-            setShowCreateModal(false);
+            setCreateModalOpen(false);
+            setSnackbarMessage('Product created successfully!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
             fetchProducts(); // Refresh the list
         } catch (err) {
             console.error('Error creating product:', err);
-            setError('Failed to create product. Please try again.');
+            setSnackbarMessage('Failed to create product.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
-    const handleDeleteProduct = async (productId) => {
-        if (window.confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
-            try {
-                await fetcher.delete(`/products/${productId}`);
-                fetchProducts(); // Refresh the list
-            } catch (err) {
-                console.error('Error deleting product:', err);
-                setError('Failed to delete product. Please try again.');
-            }
+    const confirmDeleteProduct = (product) => {
+        setProductToDelete(product);
+        setDeleteConfirmOpen(true);
+    };
+
+    const handleDeleteProduct = async () => {
+        if (!productToDelete) return;
+        try {
+            await api.delete(`/api/products/${productToDelete.id}`);
+            setDeleteConfirmOpen(false);
+            setProductToDelete(null);
+            setSnackbarMessage('Product deleted successfully!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+            fetchProducts(); // Refresh the list
+        } catch (err) {
+            console.error('Error deleting product:', err);
+            setSnackbarMessage('Failed to delete product.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
@@ -519,139 +1019,266 @@ function DashboardPage({ navigateTo }) {
         product.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    if (loading) return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Loading products...</div>;
-    if (error) return <div style={{ textAlign: 'center', marginTop: '2rem', color: '#ef4444' }}>{error}</div>;
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
+                <CircularProgress />
+                <Typography variant="h6" sx={{ ml: 2 }}>Loading products...</Typography>
+            </Box>
+        );
+    }
 
     return (
-        <div style={{ marginTop: '2rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', color: '#1f2937' }}>My Products</h2>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <input
-                        type="text"
+        <Box sx={{ flexGrow: 1, padding: 3, backgroundColor: '#f5f7fa', minHeight: '100vh' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold', color: '#1a202c' }}>
+                    My Products
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <TextField
+                        variant="outlined"
                         placeholder="Search products..."
-                        style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                        onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                        onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
+                        size="small"
+                        InputProps={{
+                            startAdornment: (
+                                <InputAdornment position="start">
+                                    <Search size={20} color="#6b7280" />
+                                </InputAdornment>
+                            ),
+                            sx: { borderRadius: '0.5rem' }
+                        }}
+                        sx={{
+                            '& .MuiOutlinedInput-root': {
+                                '&.Mui-focused fieldset': {
+                                    borderColor: '#6366f1',
+                                    boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.25)',
+                                },
+                            },
+                        }}
                     />
-                    <button
-                        onClick={() => setShowCreateModal(true)}
-                        style={{ backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#16a34a'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#22c55e'; e.currentTarget.style.transform = 'scale(1)'; }}
+                    <Button
+                        variant="contained"
+                        startIcon={<Plus size={20} />}
+                        onClick={() => setCreateModalOpen(true)}
+                        sx={{
+                            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                            },
+                        }}
                     >
-                        + Create New Product
-                    </button>
-                </div>
-            </div>
+                        Create New Product
+                    </Button>
+                </Box>
+            </Box>
 
             {filteredProducts.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#4b5563', fontSize: '1.125rem' }}>No products found. Start by creating one!</p>
+                <Paper elevation={1} sx={{ p: 4, textAlign: 'center', borderRadius: '1rem', border: '1px dashed #cbd5e1' }}>
+                    <Typography variant="h6" color="textSecondary">
+                        No products found. Click "Create New Product" to get started!
+                    </Typography>
+                </Paper>
             ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                <Grid container spacing={3}>
                     {filteredProducts.map((product) => (
-                        <div key={product.id} style={{ backgroundColor: 'white', padding: '1.5rem', borderRadius: '0.5rem', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)', transition: 'box-shadow 0.3s', cursor: 'pointer' }}
-                            onMouseOver={(e) => e.currentTarget.style.boxShadow = '0 10px 15px rgba(0, 0, 0, 0.1)'}
-                            onMouseOut={(e) => e.currentTarget.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)'}
-                        >
-                            <h3 style={{ fontSize: '1.25rem', fontWeight: 'semibold', color: '#111827', marginBottom: '0.5rem' }}>{product.name}</h3>
-                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '1rem' }}>Status: <span style={{ fontWeight: 'medium', color: product.status === 'Active' ? '#10b981' : '#d97706' }}>{product.status}</span></p>
-                            <div style={{ width: '100%', backgroundColor: '#e5e7eb', borderRadius: '9999px', height: '0.625rem', marginBottom: '1rem' }}>
-                                <div style={{ backgroundColor: '#8b5cf6', height: '0.625rem', borderRadius: '9999px', width: `${product.progress}%` }}></div>
-                            </div>
-                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '1rem' }}>Progress: {product.progress}%</p>
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                                <button
-                                    onClick={() => navigateTo('productDetail', product.id)}
-                                    style={{ backgroundColor: '#3b82f6', color: 'white', fontSize: '0.875rem', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#2563eb'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#3b82f6'; e.currentTarget.style.transform = 'scale(1)'; }}
-                                >
-                                    View Details
-                                </button>
-                                <button
-                                    onClick={() => handleDeleteProduct(product.id)}
-                                    style={{ backgroundColor: '#ef4444', color: 'white', fontSize: '0.875rem', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#dc2626'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#ef4444'; e.currentTarget.style.transform = 'scale(1)'; }}
-                                >
-                                    Delete
-                                </button>
-                            </div>
-                        </div>
+                        <Grid item xs={12} sm={6} md={4} key={product.id}>
+                            <Paper
+                                elevation={2}
+                                sx={{
+                                    p: 3,
+                                    borderRadius: '1rem',
+                                    height: '100%',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between',
+                                    transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                                    '&:hover': {
+                                        transform: 'translateY(-5px)',
+                                        boxShadow: '0 10px 20px rgba(0,0,0,0.1)',
+                                    },
+                                }}
+                            >
+                                <Box>
+                                    <Typography variant="h6" component="h2" sx={{ fontWeight: 'bold', color: '#1a202c', mb: 1 }}>
+                                        {product.name}
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+                                        Status: <Box component="span" sx={{ fontWeight: 'medium', color: product.status === 'Active' ? '#10b981' : '#d97706' }}>{product.status}</Box>
+                                    </Typography>
+                                    <Box sx={{ width: '100%', mb: 2 }}>
+                                        <LinearProgress
+                                            variant="determinate"
+                                            value={product.progress}
+                                            sx={{ height: 8, borderRadius: 4, backgroundColor: '#e0e7ff', '& .MuiLinearProgress-bar': { backgroundColor: '#4f46e5' } }}
+                                        />
+                                        <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5, display: 'block' }}>
+                                            Progress: {product.progress}%
+                                        </Typography>
+                                    </Box>
+                                </Box>
+                                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        onClick={() => {
+                                            setSelectedProductId(product.id);
+                                            setCurrentPage('productDetail');
+                                        }}
+                                        sx={{
+                                            color: '#4f46e5',
+                                            borderColor: '#4f46e5',
+                                            borderRadius: '0.5rem',
+                                            textTransform: 'none',
+                                            '&:hover': {
+                                                backgroundColor: '#eef2ff',
+                                                borderColor: '#4f46e5',
+                                            },
+                                        }}
+                                    >
+                                        View Details
+                                    </Button>
+                                    <Button
+                                        variant="contained"
+                                        size="small"
+                                        color="error"
+                                        onClick={() => confirmDeleteProduct(product)}
+                                        startIcon={<Trash2 size={16} />}
+                                        sx={{
+                                            borderRadius: '0.5rem',
+                                            textTransform: 'none',
+                                            backgroundColor: '#ef4444',
+                                            '&:hover': {
+                                                backgroundColor: '#dc2626',
+                                            },
+                                        }}
+                                    >
+                                        Delete
+                                    </Button>
+                                </Box>
+                            </Paper>
+                        </Grid>
                     ))}
-                </div>
+                </Grid>
             )}
 
-            {showCreateModal && (
-                <div style={{ position: 'fixed', inset: '0', backgroundColor: 'rgba(107, 114, 128, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '50' }}>
-                    <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '0.5rem', boxShadow: '0 10px 15px rgba(0, 0, 0, 0.1)', width: '100%', maxWidth: '448px' }}>
-                        <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1f2937', marginBottom: '1rem' }}>Create New Product</h3>
-                        <form onSubmit={handleCreateProduct} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div>
-                                <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }} htmlFor="productName">
-                                    Product Name
-                                </label>
-                                <input
-                                    type="text"
-                                    id="productName"
-                                    style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.75rem 1rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                    onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                    onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                                    value={newProductName}
-                                    onChange={(e) => setNewProductName(e.target.value)}
-                                    required
-                                />
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowCreateModal(false)}
-                                    style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
-                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
-                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
-                                >
-                                    Create Product
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-        </div>
+            {/* Create Product Dialog */}
+            <Dialog open={createModalOpen} onClose={() => setCreateModalOpen(false)} PaperProps={{ sx: { borderRadius: '1rem' } }}>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#1a202c' }}>Create New Product</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        label="Product Name"
+                        type="text"
+                        fullWidth
+                        variant="outlined"
+                        value={newProductName}
+                        onChange={(e) => setNewProductName(e.target.value)}
+                        sx={{
+                            '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' },
+                            '& .MuiInputLabel-root': { fontWeight: 600, color: '#374151' },
+                        }}
+                    />
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setCreateModalOpen(false)} sx={{ color: '#4b5563', textTransform: 'none', borderRadius: '0.5rem' }}>Cancel</Button>
+                    <Button
+                        onClick={handleCreateProduct}
+                        variant="contained"
+                        sx={{
+                            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                            },
+                        }}
+                    >
+                        Create
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} PaperProps={{ sx: { borderRadius: '1rem' } }}>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#1a202c' }}>Confirm Delete</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Are you sure you want to delete the product "{productToDelete?.name}"? This action cannot be undone.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setDeleteConfirmOpen(false)} sx={{ color: '#4b5563', textTransform: 'none', borderRadius: '0.5rem' }}>Cancel</Button>
+                    <Button
+                        onClick={handleDeleteProduct}
+                        variant="contained"
+                        color="error"
+                        sx={{
+                            backgroundColor: '#ef4444',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                backgroundColor: '#dc2626',
+                            },
+                        }}
+                    >
+                        Delete
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
+                <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+                    {snackbarMessage}
+                </Alert>
+            </Snackbar>
+        </Box>
     );
 }
 
 // --- ProductDetailView Component ---
-function ProductDetailView({ productId, navigateTo }) {
+function ProductDetailView({ productId, setCurrentPage }) {
     const { user } = useContext(AuthContext);
     const [product, setProduct] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'research', 'prd', 'design', 'development', 'tech_doc', 'launch_training', 'important_notes', 'interviews', 'templates', 'tasks', 'collaboration'
+    const [activeTab, setActiveTab] = useState('Overview');
     const [editMode, setEditMode] = useState(false);
     const [editedProduct, setEditedProduct] = useState(null);
+    const [snackbarOpen, setSnackbarOpen] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+
+    const handleSnackbarClose = (event, reason) => {
+        if (reason === 'clickaway') {
+            return;
+        }
+        setSnackbarOpen(false);
+    };
 
     const fetchProduct = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetcher.get(`/products/${productId}`);
+            const response = await api.get(`/api/products/${productId}`);
             setProduct(response.data);
             setEditedProduct(response.data); // Initialize editedProduct with fetched data
         } catch (err) {
             console.error('Error fetching product details:', err);
             setError('Failed to fetch product details.');
+            setSnackbarMessage('Failed to fetch product details.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         } finally {
             setLoading(false);
         }
@@ -663,17 +1290,21 @@ function ProductDetailView({ productId, navigateTo }) {
         }
     }, [user, productId, fetchProduct]);
 
-    const handleUpdateProduct = async (e) => {
-        e.preventDefault();
+    const handleUpdateProduct = async () => {
+        setSnackbarOpen(false);
         try {
-            const response = await fetcher.put(`/products/${productId}`, editedProduct);
+            const response = await api.put(`/api/products/${productId}`, editedProduct);
             setProduct(response.data);
             setEditMode(false);
-            alert('Product updated successfully!');
+            setSnackbarMessage('Product updated successfully!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
         } catch (err) {
             console.error('Error updating product:', err);
             setError('Failed to update product.');
-            alert('Failed to update product. Check console for details.');
+            setSnackbarMessage(err.response?.data?.error || 'Failed to update product.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
@@ -682,229 +1313,279 @@ function ProductDetailView({ productId, navigateTo }) {
     };
 
     const handleTabStatusChange = (tabName, newStatus) => {
-        setEditedProduct(prev => ({ ...prev, [`${tabName}_status`]: newStatus }));
+        // Convert tab name to match backend field name (e.g., "Research" -> "research_status")
+        const fieldName = `${tabName.toLowerCase().replace(/ /g, '_')}_status`;
+        setEditedProduct(prev => ({ ...prev, [fieldName]: newStatus }));
     };
 
     const handleContentChange = (tabName, content) => {
-        setEditedProduct(prev => ({ ...prev, [`${tabName}_json`]: content }));
+        // Convert tab name to match backend field name (e.g., "Research" -> "research_document_json")
+        const fieldName = `${tabName.toLowerCase().replace(/ /g, '_')}_json`;
+        setEditedProduct(prev => ({ ...prev, [fieldName]: content }));
     };
 
     // Determine if the current user is the owner of the product
     const isProductOwner = product && user && product.user_id === user.id;
     // Determine if the current user has editor role (owner implicitly has editor)
-    const isEditor = isProductOwner || (product && product.product_accesses && product.product_accesses.some(pa => pa.user_email === user.email && (pa.role === 'editor' || pa.role === 'owner')));
+    const isEditor = isProductOwner || (product && product.product_accesses && product.product_accesses.some(pa => pa.user_id === user.id && (pa.role === 'editor' || pa.role === 'owner')));
 
 
-    if (loading) return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Loading product details...</div>;
-    if (error) return <div style={{ textAlign: 'center', marginTop: '2rem', color: '#ef4444' }}>{error}</div>;
-    if (!product) return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Product not found.</div>;
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
+                <CircularProgress />
+                <Typography variant="h6" sx={{ ml: 2 }}>Loading product details...</Typography>
+            </Box>
+        );
+    }
+    if (error) {
+        return (
+            <Box sx={{ textAlign: 'center', mt: 8 }}>
+                <Typography variant="h6" color="error">{error}</Typography>
+                <Button
+                    variant="contained"
+                    onClick={() => setCurrentPage('dashboard')}
+                    sx={{ mt: 2, textTransform: 'none', borderRadius: '0.5rem' }}
+                >
+                    Back to Dashboard
+                </Button>
+            </Box>
+        );
+    }
+    if (!product) return <Typography variant="h6" sx={{ textAlign: 'center', mt: 8 }}>Product not found.</Typography>;
 
     return (
-        <div style={{ marginTop: '2rem', backgroundColor: 'white', padding: '1.5rem', borderRadius: '0.5rem', boxShadow: '0 10px 15px rgba(0, 0, 0, 0.1)' }}>
-            <button
-                onClick={() => navigateTo('dashboard')}
-                style={{ marginBottom: '1rem', backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#9ca3af'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#d1d5db'; e.currentTarget.style.transform = 'scale(1)'; }}
-            >
-                &larr; Back to Dashboard
-            </button>
-
-            <h2 style={{ fontSize: '1.875rem', fontWeight: 'bold', color: '#1f2937', marginBottom: '1rem' }}>{product.name}</h2>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <span style={{ color: '#374151', fontSize: '1.125rem' }}>Status:</span>
-                    {editMode && isEditor ? ( // Only allow edit if user is editor
-                        <select
-                            value={editedProduct.status}
-                            onChange={(e) => handleStatusChange(e.target.value)}
-                            style={{ border: '1px solid #d1d5db', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                        >
-                            {['Active', 'Completed', 'Cancelled', 'On-Hold'].map(s => (
-                                <option key={s} value={s}>{s}</option>
-                            ))}
-                        </select>
-                    ) : (
-                        <span style={{ fontWeight: 'semibold', fontSize: '1.125rem', color: product.status === 'Active' ? '#10b981' : '#d97706' }}>
-                            {product.status}
-                        </span>
-                    )}
-                </div>
-                <div>
-                    {isEditor && ( // Only show edit button if user is editor
-                        editMode ? (
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <button
-                                    onClick={handleUpdateProduct}
-                                    style={{ backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#16a34a'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#22c55e'; e.currentTarget.style.transform = 'scale(1)'; }}
+        <Box sx={{ flexGrow: 1, padding: 3, backgroundColor: '#f5f7fa', minHeight: '100vh' }}>
+            <Paper elevation={3} sx={{ padding: 4, borderRadius: '1rem' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold', color: '#1a202c' }}>
+                        <IconButton onClick={() => setCurrentPage('dashboard')} sx={{ mr: 1 }}>
+                            <ArrowLeft />
+                        </IconButton>
+                        {product.name}
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Typography variant="body1" sx={{ color: '#4b5563' }}>Status:</Typography>
+                        {editMode && isEditor ? (
+                            <FormControl variant="outlined" size="small" sx={{ minWidth: 120 }}>
+                                <Select
+                                    value={editedProduct.status}
+                                    onChange={(e) => handleStatusChange(e.target.value)}
+                                    sx={{ borderRadius: '0.5rem' }}
                                 >
-                                    Save Changes
-                                </button>
-                                <button
-                                    onClick={() => { setEditMode(false); setEditedProduct(product); }} // Revert changes
-                                    style={{ backgroundColor: '#9ca3af', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#6b7280'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#9ca3af'; e.currentTarget.style.transform = 'scale(1)'; }}
-                                >
-                                    Cancel
-                                </button>
-                            </div>
+                                    {['Active', 'Completed', 'Cancelled', 'On-Hold'].map(s => (
+                                        <MenuItem key={s} value={s}>{s}</MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
                         ) : (
-                            <button
-                                onClick={() => setEditMode(true)}
-                                style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                                onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
-                            >
-                                Edit Product
-                            </button>
-                        )
-                    )}
-                </div>
-            </div>
+                            <Typography variant="body1" sx={{ fontWeight: 'semibold', color: product.status === 'Active' ? '#10b981' : '#d97706' }}>
+                                {product.status}
+                            </Typography>
+                        )}
+                        {isEditor && (
+                            editMode ? (
+                                <Box sx={{ display: 'flex', gap: 1 }}>
+                                    <Button
+                                        variant="contained"
+                                        startIcon={<Save size={20} />}
+                                        onClick={handleUpdateProduct}
+                                        sx={{
+                                            background: 'linear-gradient(to right, #22c55e, #16a34a)',
+                                            color: '#fff',
+                                            fontWeight: 600,
+                                            borderRadius: '0.5rem',
+                                            textTransform: 'none',
+                                            '&:hover': {
+                                                background: 'linear-gradient(to right, #16a34a, #15803d)',
+                                            },
+                                        }}
+                                    >
+                                        Save
+                                    </Button>
+                                    <Button
+                                        variant="outlined"
+                                        startIcon={<X size={20} />}
+                                        onClick={() => { setEditMode(false); setEditedProduct(product); }}
+                                        sx={{
+                                            color: '#6b7280',
+                                            borderColor: '#6b7280',
+                                            borderRadius: '0.5rem',
+                                            textTransform: 'none',
+                                            '&:hover': {
+                                                backgroundColor: '#e5e7eb',
+                                            },
+                                        }}
+                                    >
+                                        Cancel
+                                    </Button>
+                                </Box>
+                            ) : (
+                                <Button
+                                    variant="contained"
+                                    startIcon={<Edit size={20} />}
+                                    onClick={() => setEditMode(true)}
+                                    sx={{
+                                        background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                                        color: '#fff',
+                                        fontWeight: 600,
+                                        borderRadius: '0.5rem',
+                                        textTransform: 'none',
+                                        '&:hover': {
+                                            background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                                        },
+                                    }}
+                                >
+                                    Edit Product
+                                </Button>
+                            )
+                        )}
+                    </Box>
+                </Box>
 
-            {/* Tabs Navigation */}
-            <div style={{ borderBottom: '1px solid #e5e7eb', marginBottom: '1.5rem' }}>
-                <nav style={{ display: 'flex', gap: '2rem' }} aria-label="Tabs">
-                    {['overview', 'research', 'prd', 'design', 'development', 'tech_doc', 'launch_training', 'important_notes', 'interviews', 'templates', 'tasks', 'collaboration'].map((tab) => (
-                        <button
-                            key={tab}
-                            onClick={() => setActiveTab(tab)}
-                            style={{
-                                whiteSpace: 'nowrap',
-                                padding: '0.75rem 0.25rem',
-                                borderBottom: '2px solid transparent',
-                                fontWeight: 'medium',
-                                fontSize: '0.875rem',
-                                transition: 'all 0.2s',
-                                background: 'none',
-                                borderTop: 'none',
-                                borderLeft: 'none',
-                                borderRight: 'none',
-                                cursor: 'pointer',
-                                borderColor: activeTab === tab ? '#8b5cf6' : 'transparent',
-                                color: activeTab === tab ? '#7c3aed' : '#6b7280',
-                            }}
-                            onMouseOver={(e) => {
-                                if (activeTab !== tab) {
-                                    e.currentTarget.style.color = '#4b5563';
-                                    e.currentTarget.style.borderColor = '#d1d5db';
-                                }
-                            }}
-                            onMouseOut={(e) => {
-                                if (activeTab !== tab) {
-                                    e.currentTarget.style.color = '#6b7280';
-                                    e.currentTarget.style.borderColor = 'transparent';
-                                }
-                            }}
-                        >
-                            {tab.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-                        </button>
+                <Tabs
+                    value={activeTab}
+                    onChange={(event, newValue) => setActiveTab(newValue)}
+                    aria-label="product tabs"
+                    variant="scrollable"
+                    scrollButtons="auto"
+                    sx={{
+                        borderBottom: 1,
+                        borderColor: 'divider',
+                        mb: 3,
+                        '& .MuiTabs-indicator': { backgroundColor: '#4f46e5' },
+                        '& .MuiTab-root': {
+                            textTransform: 'none',
+                            fontWeight: 'bold',
+                            color: '#6b7280',
+                            '&.Mui-selected': { color: '#4f46e5' },
+                        },
+                    }}
+                >
+                    {PRODUCT_TABS_ORDER.map((tabName) => (
+                        <Tab key={tabName} label={tabName} value={tabName} />
                     ))}
-                </nav>
-            </div>
+                </Tabs>
 
-            {/* Tab Content */}
-            <div className="tab-content">
-                {activeTab === 'overview' && (
-                    <OverviewTab product={product} />
-                )}
-                {activeTab === 'research' && (
-                    <ResearchTab
-                        product={product}
-                        editMode={editMode && isEditor} // Pass editMode only if user is editor
-                        onContentChange={(content) => handleContentChange('research_document', content)}
-                        onStatusChange={(status) => handleTabStatusChange('research', status)}
-                    />
-                )}
-                {activeTab === 'prd' && (
-                    <PRDTab
-                        product={product}
-                        editMode={editMode && isEditor}
-                        onContentChange={(content) => handleContentChange('prd_document', content)}
-                        onStatusChange={(status) => handleTabStatusChange('prd', status)}
-                    />
-                )}
-                {activeTab === 'design' && (
-                    <GenericContentTab
-                        title="Design Notes"
-                        product={product}
-                        contentKey="design_notes_json"
-                        statusKey="design_status"
-                        editMode={editMode && isEditor}
-                        onContentChange={(content) => handleContentChange('design_notes', content)}
-                        onStatusChange={(status) => handleTabStatusChange('design', status)}
-                    />
-                )}
-                {activeTab === 'development' && (
-                    <GenericContentTab
-                        title="Development Specifications"
-                        product={product}
-                        contentKey="dev_specs_json"
-                        statusKey="development_status"
-                        editMode={editMode && isEditor}
-                        onContentChange={(content) => handleContentChange('dev_specs', content)}
-                        onStatusChange={(status) => handleTabStatusChange('development', status)}
-                    />
-                )}
-                {activeTab === 'tech_doc' && (
-                    <GenericContentTab
-                        title="Technical Documentation"
-                        product={product}
-                        contentKey="tech_doc_json"
-                        statusKey="tech_doc_status"
-                        editMode={editMode && isEditor}
-                        onContentChange={(content) => handleContentChange('tech_doc', content)}
-                        onStatusChange={(status) => handleTabStatusChange('tech_doc', status)}
-                    />
-                )}
-                {activeTab === 'launch_training' && (
-                    <GenericContentTab
-                        title="Launch & Training"
-                        product={product}
-                        contentKey="launch_training_json"
-                        statusKey="launch_training_status"
-                        editMode={editMode && isEditor}
-                        onContentChange={(content) => handleContentChange('launch_training', content)}
-                        onStatusChange={(status) => handleTabStatusChange('launch_training', status)}
-                    />
-                )}
-                 {activeTab === 'important_notes' && (
-                    <GenericContentTab
-                        title="Important Notes"
-                        product={product}
-                        contentKey="important_notes_json"
-                        statusKey="important_notes_status" // Note: This status key doesn't exist in backend, but keeping for consistency if added later
-                        editMode={editMode && isEditor}
-                        onContentChange={(content) => handleContentChange('important_notes', content)}
-                        onStatusChange={(status) => handleTabStatusChange('important_notes', status)}
-                    />
-                )}
-                {activeTab === 'interviews' && (
-                    <CustomerInterviewTab productId={productId} isEditor={isEditor} />
-                )}
-                {activeTab === 'templates' && (
-                    <InterviewTemplateTab />
-                )}
-                {activeTab === 'tasks' && (
-                    <TaskTab productId={productId} isEditor={isEditor} />
-                )}
-                {activeTab === 'collaboration' && (
-                    <CollaborationTab productId={productId} isOwner={isProductOwner} />
-                )}
-            </div>
-        </div>
+                <Box sx={{ p: 1 }}>
+                    {activeTab === 'Overview' && <OverviewTab product={product} />}
+                    {activeTab === 'Research' && (
+                        <ResearchTab
+                            product={editedProduct}
+                            editMode={editMode && isEditor}
+                            onContentChange={(content) => handleContentChange('Research', content)}
+                            onStatusChange={(status) => handleTabStatusChange('Research', status)}
+                            setSnackbarMessage={setSnackbarMessage}
+                            setSnackbarSeverity={setSnackbarSeverity}
+                            setSnackbarOpen={setSnackbarOpen}
+                        />
+                    )}
+                    {activeTab === 'PRD' && (
+                        <PRDTab
+                            product={editedProduct}
+                            editMode={editMode && isEditor}
+                            onContentChange={(content) => handleContentChange('PRD', content)}
+                            onStatusChange={(status) => handleTabStatusChange('PRD', status)}
+                            setSnackbarMessage={setSnackbarMessage}
+                            setSnackbarSeverity={setSnackbarSeverity}
+                            setSnackbarOpen={setSnackbarOpen}
+                        />
+                    )}
+                    {activeTab === 'Design' && (
+                        <GenericContentTab
+                            title="Design Notes"
+                            product={editedProduct}
+                            contentKey="design_notes_json"
+                            statusKey="design_status"
+                            editMode={editMode && isEditor}
+                            onContentChange={(content) => handleContentChange('Design', content)}
+                            onStatusChange={(status) => handleTabStatusChange('Design', status)}
+                        />
+                    )}
+                    {activeTab === 'Development' && (
+                        <GenericContentTab
+                            title="Development Specifications"
+                            product={editedProduct}
+                            contentKey="dev_specs_json"
+                            statusKey="development_status"
+                            editMode={editMode && isEditor}
+                            onContentChange={(content) => handleContentChange('Development', content)}
+                            onStatusChange={(status) => handleTabStatusChange('Development', status)}
+                        />
+                    )}
+                    {activeTab === 'Tech Documentation' && (
+                        <GenericContentTab
+                            title="Technical Documentation"
+                            product={editedProduct}
+                            contentKey="tech_doc_json"
+                            statusKey="tech_doc_status"
+                            editMode={editMode && isEditor}
+                            onContentChange={(content) => handleContentChange('Tech Documentation', content)}
+                            onStatusChange={(status) => handleTabStatusChange('Tech Documentation', status)}
+                        />
+                    )}
+                    {activeTab === 'Launch and Training' && (
+                        <GenericContentTab
+                            title="Launch & Training"
+                            product={editedProduct}
+                            contentKey="launch_training_json"
+                            statusKey="launch_training_status"
+                            editMode={editMode && isEditor}
+                            onContentChange={(content) => handleContentChange('Launch and Training', content)}
+                            onStatusChange={(status) => handleTabStatusChange('Launch and Training', status)}
+                        />
+                    )}
+                    {activeTab === 'Important Notes' && (
+                        <GenericContentTab
+                            title="Important Notes"
+                            product={editedProduct}
+                            contentKey="important_notes_json"
+                            statusKey="important_notes_status" // Assuming this status key exists or is handled
+                            editMode={editMode && isEditor}
+                            onContentChange={(content) => handleContentChange('Important Notes', content)}
+                            onStatusChange={(status) => handleTabStatusChange('Important Notes', status)}
+                        />
+                    )}
+                    {activeTab === 'Feedback' && (
+                        <CustomerInterviewTab
+                            productId={productId}
+                            isEditor={isEditor}
+                            setSnackbarMessage={setSnackbarMessage}
+                            setSnackbarSeverity={setSnackbarSeverity}
+                            setSnackbarOpen={setSnackbarOpen}
+                        />
+                    )}
+                    {activeTab === 'Tasks' && (
+                        <TaskTab
+                            productId={productId}
+                            isEditor={isEditor}
+                            setSnackbarMessage={setSnackbarMessage}
+                            setSnackbarSeverity={setSnackbarSeverity}
+                            setSnackbarOpen={setSnackbarOpen}
+                        />
+                    )}
+                    {activeTab === 'Collaboration' && (
+                        <CollaborationTab
+                            productId={productId}
+                            isOwner={isProductOwner}
+                            setSnackbarMessage={setSnackbarMessage}
+                            setSnackbarSeverity={setSnackbarSeverity}
+                            setSnackbarOpen={setSnackbarOpen}
+                        />
+                    )}
+                </Box>
+            </Paper>
+            <Snackbar open={snackbarOpen} autoHideDuration={6000} onClose={handleSnackbarClose}>
+                <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+                    {snackbarMessage}
+                </Alert>
+            </Snackbar>
+        </Box>
     );
 }
 
 // --- Overview Tab Component ---
 function OverviewTab({ product }) {
-    // Helper to format date
     const formatDate = (dateString) => {
         if (!dateString) return 'N/A';
         const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
@@ -912,373 +1593,450 @@ function OverviewTab({ product }) {
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '1rem' }}>Product Overview</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
-                <p style={{ color: '#374151' }}><strong>Product Name:</strong> {product.name}</p>
-                <p style={{ color: '#374151' }}><strong>Status:</strong> <span style={{ fontWeight: 'medium', color: product.status === 'Active' ? '#10b981' : '#d97706' }}>{product.status}</span></p>
-                <p style={{ color: '#374151' }}><strong>Archived:</strong> {product.is_archived ? 'Yes' : 'No'}</p>
-                <p style={{ color: '#374151' }}><strong>Overall Progress:</strong> {product.progress}%</p>
-                <p style={{ color: '#374151' }}><strong>Created At:</strong> {formatDate(product.created_at)}</p>
-                <p style={{ color: '#374151' }}><strong>Last Updated:</strong> {formatDate(product.updated_at)}</p>
-            </div>
+        <Box sx={{ p: 2 }}>
+            <Typography variant="h5" component="h3" sx={{ fontWeight: 'bold', mb: 3, color: '#1a202c' }}>
+                Product Overview
+            </Typography>
+            <Grid container spacing={2} sx={{ mb: 4 }}>
+                <Grid item xs={12} sm={6}>
+                    <Typography variant="body1" sx={{ color: '#4a5568' }}><strong>Product Name:</strong> {product.name}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                    <Typography variant="body1" sx={{ color: '#4a5568' }}>
+                        <strong>Status:</strong> <Box component="span" sx={{ fontWeight: 'medium', color: product.status === 'Active' ? '#10b981' : '#d97706' }}>{product.status}</Box>
+                    </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                    <Typography variant="body1" sx={{ color: '#4a5568' }}><strong>Archived:</strong> {product.is_archived ? 'Yes' : 'No'}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                    <Typography variant="body1" sx={{ color: '#4a5568' }}><strong>Overall Progress:</strong> {product.progress}%</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                    <Typography variant="body1" sx={{ color: '#4a5568' }}><strong>Created At:</strong> {formatDate(product.created_at)}</Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                    <Typography variant="body1" sx={{ color: '#4a5568' }}><strong>Last Updated:</strong> {formatDate(product.updated_at)}</Typography>
+                </Grid>
+            </Grid>
 
-            <h4 style={{ fontSize: '1.25rem', fontWeight: 'semibold', color: '#1f2937', marginTop: '1.5rem', marginBottom: '0.75rem' }}>Section Progress</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-                {['research', 'prd', 'design', 'development', 'tech_doc', 'launch_training'].map(section => (
-                    <div key={section} style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)' }}>
-                        <p style={{ fontWeight: 'medium', color: '#1f2937' }}>{section.replace(/_/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}:</p>
-                        <span style={{ fontSize: '0.875rem', fontWeight: 'semibold', color: product[`${section}_status`] === 'Completed' ? '#10b981' : product[`${section}_status`] === 'In Progress' ? '#3b82f6' : '#6b7280' }}>
-                            {product[`${section}_status`]}
-                        </span>
-                    </div>
-                ))}
-            </div>
-        </div>
+            <Typography variant="h5" component="h3" sx={{ fontWeight: 'bold', mb: 3, color: '#1a202c' }}>
+                Section Progress
+            </Typography>
+            <Grid container spacing={2}>
+                {PRODUCT_TABS_ORDER.filter(tab => TAB_PROGRESS_PERCENTAGES[tab] > 0).map(tabName => {
+                    const statusKey = `${tabName.toLowerCase().replace(/ /g, '_')}_status`;
+                    const status = product[statusKey] || 'Not Started';
+                    return (
+                        <Grid item xs={12} sm={6} md={4} key={tabName}>
+                            <Paper elevation={1} sx={{ p: 2, borderRadius: '0.5rem', backgroundColor: '#f0f2f5' }}>
+                                <Typography variant="body1" sx={{ fontWeight: 'medium', color: '#2d3748' }}>
+                                    {tabName}:
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontWeight: 'semibold', color: status === 'Completed' ? '#10b981' : status === 'In Progress' ? '#3b82f6' : '#6b7280' }}>
+                                    {status}
+                                </Typography>
+                            </Paper>
+                        </Grid>
+                    );
+                })}
+            </Grid>
+        </Box>
     );
 }
 
-
 // --- Generic Content Tab Component (for Design, Dev, Tech Doc, Launch, Important Notes) ---
 function GenericContentTab({ title, product, contentKey, statusKey, editMode, onContentChange, onStatusChange }) {
-    const [content, setContent] = useState(product[contentKey] || '');
+    const [content, setContent] = useState(product[contentKey] || { blocks: [] });
     const [status, setStatus] = useState(product[statusKey] || 'Not Started');
+    const editorRef = useRef(null); // Ref to hold the Editor.js instance holder div
 
     useEffect(() => {
-        setContent(product[contentKey] || '');
+        try {
+            setContent(product[contentKey] ? JSON.parse(product[contentKey]) : { blocks: [] });
+        } catch (e) {
+            console.error("Failed to parse content JSON for", contentKey, e);
+            setContent({ blocks: [{ type: "paragraph", data: { text: "Error loading content." } }] });
+        }
         setStatus(product[statusKey] || 'Not Started');
     }, [product, contentKey, statusKey]);
 
-    const handleContentUpdate = (e) => {
-        const newContent = e.target.value;
-        setContent(newContent);
-        onContentChange(newContent);
-    };
+    const handleContentUpdate = useCallback((data) => {
+        onContentChange(JSON.stringify(data));
+    }, [onContentChange]);
 
-    const handleStatusUpdate = (e) => {
-        const newStatus = e.target.value;
+    const handleStatusUpdate = (event) => {
+        const newStatus = event.target.value;
         setStatus(newStatus);
         onStatusChange(newStatus);
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '1rem' }}>{title}</h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                <span style={{ color: '#374151', fontSize: '1.125rem' }}>Status:</span>
+        <Box sx={{ p: 2 }}>
+            <Typography variant="h5" component="h3" sx={{ fontWeight: 'bold', mb: 3, color: '#1a202c' }}>
+                {title}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                <Typography variant="body1" sx={{ color: '#4a5568' }}>Status:</Typography>
                 {editMode ? (
-                    <select
-                        value={status}
-                        onChange={handleStatusUpdate}
-                        style={{ border: '1px solid #d1d5db', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s' }}
-                        onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                        onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                    >
-                        {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(s => (
-                            <option key={s} value={s}>{s}</option>
-                        ))}
-                    </select>
+                    <FormControl variant="outlined" size="small" sx={{ minWidth: 120 }}>
+                        <Select
+                            value={status}
+                            onChange={handleStatusUpdate}
+                            sx={{ borderRadius: '0.5rem' }}
+                        >
+                            {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(s => (
+                                <MenuItem key={s} value={s}>{s}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
                 ) : (
-                    <span style={{ fontWeight: 'semibold', fontSize: '1.125rem', color: status === 'Completed' ? '#10b981' : '#4b5563' }}>
+                    <Typography variant="body1" sx={{ fontWeight: 'semibold', color: status === 'Completed' ? '#10b981' : '#6b7280' }}>
                         {status}
-                    </span>
+                    </Typography>
                 )}
-            </div>
-            {editMode ? (
-                <textarea
-                    style={{ width: '100%', padding: '1rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '300px' }}
-                    onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                    onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                    value={content}
+            </Box>
+            <Paper elevation={1} sx={{ p: 2, borderRadius: '0.5rem', border: '1px solid #e0e7ff', minHeight: '300px' }}>
+                <Editor
+                    initialData={content}
                     onChange={handleContentUpdate}
-                    placeholder={`Enter ${title} here...`}
+                    readOnly={!editMode}
+                    holder={editorRef.current ? editorRef.current.id : undefined}
                 />
-            ) : (
-                <div style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.05)', lineHeight: '1.6', color: '#374151' }} dangerouslySetInnerHTML={{ __html: content ? content.replace(/\n/g, '<br/>') : '<p style="color: #6b7280;">No content available.</p>' }} />
-            )}
-        </div>
+            </Paper>
+        </Box>
     );
 }
 
 // --- Research Tab Component ---
-function ResearchTab({ product, editMode, onContentChange, onStatusChange }) {
+function ResearchTab({ product, editMode, onContentChange, onStatusChange, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen }) {
     const [prompt, setPrompt] = useState('');
     const [loadingAI, setLoadingAI] = useState(false);
-    const [aiError, setAiError] = useState(null);
+    const editorRef = useRef(null);
 
     const handleGenerateResearch = async () => {
         if (!prompt) {
-            setAiError('Please enter a prompt for research generation.');
+            setSnackbarMessage('Please enter a prompt for research generation.');
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
             return;
         }
         setLoadingAI(true);
-        setAiError(null);
+        setSnackbarOpen(false); // Close previous snackbar
         try {
-            const response = await fetcher.post('/generate-research-document', {
+            const response = await api.post('/api/generate-research-document', {
                 product_id: product.id,
                 prompt_text: prompt,
-                // scraped_data: "Example scraped data from Octoparse/ScrapingBee..." // Integrate this in future
             });
-            onContentChange(response.data.research_document);
+            onContentChange(JSON.stringify(response.data.research_document));
             onStatusChange('Completed');
-            alert('Research document generated and saved!');
+            setSnackbarMessage('Research document generated and saved!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
         } catch (err) {
             console.error('Error generating research document:', err.response?.data || err.message);
-            setAiError(err.response?.data?.error || 'Failed to generate research document.');
+            setSnackbarMessage(err.response?.data?.error || 'Failed to generate research document.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         } finally {
             setLoadingAI(false);
         }
     };
 
+    const parsedResearchContent = useMemo(() => {
+        try {
+            return product.research_document_json ? JSON.parse(product.research_document_json) : { blocks: [] };
+        } catch (e) {
+            console.error("Failed to parse research document JSON:", e);
+            return { blocks: [{ type: "paragraph", data: { text: "Error loading research content." } }] };
+        }
+    }, [product.research_document_json]);
+
+    const handleContentUpdate = useCallback((data) => {
+        onContentChange(JSON.stringify(data));
+    }, [onContentChange]);
+
+    const handleStatusUpdate = (event) => {
+        const newStatus = event.target.value;
+        onStatusChange(newStatus);
+    };
+
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '1rem' }}>Market Research</h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                <span style={{ color: '#374151', fontSize: '1.125rem' }}>Status:</span>
+        <Box sx={{ p: 2 }}>
+            <Typography variant="h5" component="h3" sx={{ fontWeight: 'bold', mb: 3, color: '#1a202c' }}>
+                Market Research
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                <Typography variant="body1" sx={{ color: '#4a5568' }}>Status:</Typography>
                 {editMode ? (
-                    <select
-                        value={product.research_status}
-                        onChange={(e) => onStatusChange(e.target.value)}
-                        style={{ border: '1px solid #d1d5db', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s' }}
-                        onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                        onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                    >
-                        {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(s => (
-                            <option key={s} value={s}>{s}</option>
-                        ))}
-                    </select>
+                    <FormControl variant="outlined" size="small" sx={{ minWidth: 120 }}>
+                        <Select
+                            value={product.research_status || 'Not Started'}
+                            onChange={handleStatusUpdate}
+                            sx={{ borderRadius: '0.5rem' }}
+                        >
+                            {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(s => (
+                                <MenuItem key={s} value={s}>{s}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
                 ) : (
-                    <span style={{ fontWeight: 'semibold', fontSize: '1.125rem', color: product.research_status === 'Completed' ? '#10b981' : '#4b5563' }}>
-                        {product.research_status}
-                    </span>
+                    <Typography variant="body1" sx={{ fontWeight: 'semibold', color: product.research_status === 'Completed' ? '#10b981' : '#6b7280' }}>
+                        {product.research_status || 'Not Started'}
+                    </Typography>
                 )}
-            </div>
+            </Box>
 
-            <div style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)', marginBottom: '1.5rem' }}>
-                <h4 style={{ fontSize: '1.25rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '0.75rem' }}>AI Research Assistant</h4>
-                <textarea
-                    style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '100px', marginBottom: '1rem' }}
-                    onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                    onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                    placeholder="Enter product idea or research prompt for AI (e.g., 'A mobile app for tracking personal finance with budgeting features')."
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    disabled={loadingAI || !editMode}
-                />
-                <button
-                    onClick={handleGenerateResearch}
-                    disabled={loadingAI || !editMode}
-                    style={{
-                        padding: '0.5rem 1.5rem',
-                        borderRadius: '0.5rem',
-                        fontWeight: 'bold',
-                        color: 'white',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                        transition: 'all 0.3s ease-in-out',
-                        transform: 'scale(1)',
-                        border: 'none',
-                        cursor: loadingAI || !editMode ? 'not-allowed' : 'pointer',
-                        backgroundColor: loadingAI || !editMode ? '#9ca3af' : '#8b5cf6',
-                    }}
-                    onMouseOver={(e) => {
-                        if (!loadingAI && editMode) {
-                            e.currentTarget.style.backgroundColor = '#7c3aed';
-                            e.currentTarget.style.transform = 'scale(1.05)';
-                        }
-                    }}
-                    onMouseOut={(e) => {
-                        if (!loadingAI && editMode) {
-                            e.currentTarget.style.backgroundColor = '#8b5cf6';
-                            e.currentTarget.style.transform = 'scale(1)';
-                        }
-                    }}
-                >
-                    {loadingAI ? 'Generating...' : 'Generate Research Document'}
-                </button>
-                {aiError && <p style={{ color: '#ef4444', fontSize: '0.875rem', marginTop: '0.5rem' }}>{aiError}</p>}
-            </div>
-
-            <h4 style={{ fontSize: '1.25rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '0.75rem' }}>Research Document Content</h4>
-            {editMode ? (
-                <textarea
-                    style={{ width: '100%', padding: '1rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '400px' }}
-                    onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                    onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                    value={product.research_document_json || ''}
-                    onChange={(e) => onContentChange(e.target.value)}
-                    placeholder="AI-generated or manually entered research content will appear here."
-                />
-            ) : (
-                <div style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.05)', lineHeight: '1.6', color: '#374151' }} dangerouslySetInnerHTML={{ __html: product.research_document_json ? product.research_document_json.replace(/\n/g, '<br/>') : '<p style="color: #6b7280;">No research document available.</p>' }} />
+            {editMode && (
+                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.5rem', border: '1px solid #e0e7ff', mb: 3, backgroundColor: '#f0f2f5' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: '#2d3748' }}>AI Research Assistant</Typography>
+                    <TextField
+                        fullWidth
+                        multiline
+                        rows={3}
+                        placeholder="Enter product idea or research prompt for AI (e.g., 'A mobile app for tracking personal finance with budgeting features')."
+                        value={prompt}
+                        onChange={(e) => setPrompt(e.target.value)}
+                        disabled={loadingAI}
+                        sx={{
+                            mb: 2,
+                            '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' },
+                            '& .MuiInputBase-input::placeholder': { color: '#9ca3af', opacity: 1 },
+                        }}
+                    />
+                    <Button
+                        variant="contained"
+                        startIcon={loadingAI ? <CircularProgress size={20} color="inherit" /> : <Sparkles size={20} />}
+                        onClick={handleGenerateResearch}
+                        disabled={loadingAI}
+                        sx={{
+                            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                            },
+                            '&:disabled': {
+                                opacity: 0.5,
+                                cursor: 'not-allowed',
+                                color: '#fff',
+                            },
+                        }}
+                    >
+                        {loadingAI ? 'Generating...' : 'Generate Research Document'}
+                    </Button>
+                </Paper>
             )}
-        </div>
+
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: '#2d3748' }}>Research Document Content</Typography>
+            <Paper elevation={1} sx={{ p: 2, borderRadius: '0.5rem', border: '1px solid #e0e7ff', minHeight: '400px' }}>
+                <Editor
+                    initialData={parsedResearchContent}
+                    onChange={handleContentUpdate}
+                    readOnly={!editMode}
+                    holder={editorRef.current ? editorRef.current.id : undefined}
+                />
+            </Paper>
+        </Box>
     );
 }
 
 // --- PRD Tab Component ---
-function PRDTab({ product, editMode, onContentChange, onStatusChange }) {
+function PRDTab({ product, editMode, onContentChange, onStatusChange, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen }) {
     const [userRequirements, setUserRequirements] = useState('');
     const [prdStructureConfirmation, setPrdStructureConfirmation] = useState('Standard PRD structure (Problem, Goals, Audience, Features, NFRs, Metrics, Future)');
     const [loadingAI, setLoadingAI] = useState(false);
-    const [aiError, setAiError] = useState(null);
+    const editorRef = useRef(null);
 
     const handleGeneratePRD = async () => {
         if (!product.research_document_json) {
-            setAiError('Please generate or provide a Research Document first.');
+            setSnackbarMessage('Please generate or provide a Research Document first.');
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
             return;
         }
         if (!userRequirements) {
-            setAiError('Please provide user-specific requirements for the PRD.');
+            setSnackbarMessage('Please provide user-specific requirements for the PRD.');
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
             return;
         }
         setLoadingAI(true);
-        setAiError(null);
+        setSnackbarOpen(false);
         try {
-            const response = await fetcher.post('/generate-prd-document', {
+            const response = await api.post('/api/generate-prd-document', {
                 product_id: product.id,
                 research_data: product.research_document_json,
                 user_requirements: userRequirements,
                 prd_structure_confirmation: prdStructureConfirmation,
             });
-            onContentChange(response.data.prd_document);
+            onContentChange(JSON.stringify(response.data.prd_document));
             onStatusChange('Completed');
-            alert('PRD generated and saved!');
+            setSnackbarMessage('PRD generated and saved!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
         } catch (err) {
             console.error('Error generating PRD:', err.response?.data || err.message);
-            setAiError(err.response?.data?.error || 'Failed to generate PRD.');
+            setSnackbarMessage(err.response?.data?.error || 'Failed to generate PRD.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         } finally {
             setLoadingAI(false);
         }
     };
 
+    const parsedPrdContent = useMemo(() => {
+        try {
+            return product.prd_document_json ? JSON.parse(product.prd_document_json) : { blocks: [] };
+        } catch (e) {
+            console.error("Failed to parse PRD document JSON:", e);
+            return { blocks: [{ type: "paragraph", data: { text: "Error loading PRD content." } }] };
+        }
+    }, [product.prd_document_json]);
+
+    const handleContentUpdate = useCallback((data) => {
+        onContentChange(JSON.stringify(data));
+    }, [onContentChange]);
+
+    const handleStatusUpdate = (event) => {
+        const newStatus = event.target.value;
+        onStatusChange(newStatus);
+    };
+
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '1rem' }}>Product Requirements Document (PRD)</h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                <span style={{ color: '#374151', fontSize: '1.125rem' }}>Status:</span>
+        <Box sx={{ p: 2 }}>
+            <Typography variant="h5" component="h3" sx={{ fontWeight: 'bold', mb: 3, color: '#1a202c' }}>
+                Product Requirements Document (PRD)
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                <Typography variant="body1" sx={{ color: '#4a5568' }}>Status:</Typography>
                 {editMode ? (
-                    <select
-                        value={product.prd_status}
-                        onChange={(e) => onStatusChange(e.target.value)}
-                        style={{ border: '1px solid #d1d5db', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s' }}
-                        onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                        onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                    >
-                        {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(s => (
-                            <option key={s} value={s}>{s}</option>
-                        ))}
-                    </select>
+                    <FormControl variant="outlined" size="small" sx={{ minWidth: 120 }}>
+                        <Select
+                            value={product.prd_status || 'Not Started'}
+                            onChange={handleStatusUpdate}
+                            sx={{ borderRadius: '0.5rem' }}
+                        >
+                            {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(s => (
+                                <MenuItem key={s} value={s}>{s}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
                 ) : (
-                    <span style={{ fontWeight: 'semibold', fontSize: '1.125rem', color: product.prd_status === 'Completed' ? '#10b981' : '#4b5563' }}>
-                        {product.prd_status}
-                    </span>
+                    <Typography variant="body1" sx={{ fontWeight: 'semibold', color: product.prd_status === 'Completed' ? '#10b981' : '#6b7280' }}>
+                        {product.prd_status || 'Not Started'}
+                    </Typography>
                 )}
-            </div>
+            </Box>
 
-            <div style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)', marginBottom: '1.5rem' }}>
-                <h4 style={{ fontSize: '1.25rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '0.75rem' }}>AI PRD Generator</h4>
-                <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
-                    *Note: A Research Document is highly recommended before generating a PRD for best results.
-                </p>
-                <textarea
-                    style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '100px', marginBottom: '1rem' }}
-                    onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                    onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                    placeholder="Enter user-specific requirements or additional details for the PRD (e.g., 'Focus on mobile-first design, integrate with Stripe for payments')."
-                    value={userRequirements}
-                    onChange={(e) => setUserRequirements(e.target.value)}
-                    disabled={loadingAI || !editMode}
-                />
-                <textarea
-                    style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '80px', marginBottom: '1rem' }}
-                    onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                    onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                    placeholder="Confirm or suggest a PRD structure (e.g., 'Standard PRD structure' or 'Include detailed user stories')."
-                    value={prdStructureConfirmation}
-                    onChange={(e) => setPrdStructureConfirmation(e.target.value)}
-                    disabled={loadingAI || !editMode}
-                />
-                <button
-                    onClick={handleGeneratePRD}
-                    disabled={loadingAI || !editMode}
-                    style={{
-                        padding: '0.5rem 1.5rem',
-                        borderRadius: '0.5rem',
-                        fontWeight: 'bold',
-                        color: 'white',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                        transition: 'all 0.3s ease-in-out',
-                        transform: 'scale(1)',
-                        border: 'none',
-                        cursor: loadingAI || !editMode ? 'not-allowed' : 'pointer',
-                        backgroundColor: loadingAI || !editMode ? '#9ca3af' : '#8b5cf6',
-                    }}
-                    onMouseOver={(e) => {
-                        if (!loadingAI && editMode) {
-                            e.currentTarget.style.backgroundColor = '#7c3aed';
-                            e.currentTarget.style.transform = 'scale(1.05)';
-                        }
-                    }}
-                    onMouseOut={(e) => {
-                        if (!loadingAI && editMode) {
-                            e.currentTarget.style.backgroundColor = '#8b5cf6';
-                            e.currentTarget.style.transform = 'scale(1)';
-                        }
-                    }}
-                >
-                    {loadingAI ? 'Generating...' : 'Generate PRD'}
-                </button>
-                {aiError && <p style={{ color: '#ef4444', fontSize: '0.875rem', marginTop: '0.5rem' }}>{aiError}</p>}
-            </div>
-
-            <h4 style={{ fontSize: '1.25rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '0.75rem' }}>PRD Content</h4>
-            {editMode ? (
-                <textarea
-                    style={{ width: '100%', padding: '1rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '400px' }}
-                    onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                    onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                    value={product.prd_document_json || ''}
-                    onChange={(e) => onContentChange(e.target.value)}
-                    placeholder="AI-generated or manually entered PRD content will appear here."
-                />
-            ) : (
-                <div style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.05)', lineHeight: '1.6', color: '#374151' }} dangerouslySetInnerHTML={{ __html: product.prd_document_json ? product.prd_document_json.replace(/\n/g, '<br/>') : '<p style="color: #6b7280;">No PRD available.</p>' }} />
+            {editMode && (
+                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.5rem', border: '1px solid #e0e7ff', mb: 3, backgroundColor: '#f0f2f5' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: '#2d3748' }}>AI PRD Generator</Typography>
+                    <Typography variant="body2" sx={{ color: '#4b5563', mb: 2 }}>
+                        *Note: A Research Document is highly recommended before generating a PRD for best results.
+                    </Typography>
+                    <TextField
+                        fullWidth
+                        multiline
+                        rows={3}
+                        placeholder="Enter user-specific requirements or additional details for the PRD (e.g., 'Focus on mobile-first design, integrate with Stripe for payments')."
+                        value={userRequirements}
+                        onChange={(e) => setUserRequirements(e.target.value)}
+                        disabled={loadingAI}
+                        sx={{
+                            mb: 2,
+                            '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' },
+                            '& .MuiInputBase-input::placeholder': { color: '#9ca3af', opacity: 1 },
+                        }}
+                    />
+                    <TextField
+                        fullWidth
+                        multiline
+                        rows={2}
+                        placeholder="Confirm or suggest a PRD structure (e.g., 'Standard PRD structure' or 'Include detailed user stories')."
+                        value={prdStructureConfirmation}
+                        onChange={(e) => setPrdStructureConfirmation(e.target.value)}
+                        disabled={loadingAI}
+                        sx={{
+                            mb: 2,
+                            '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' },
+                            '& .MuiInputBase-input::placeholder': { color: '#9ca3af', opacity: 1 },
+                        }}
+                    />
+                    <Button
+                        variant="contained"
+                        startIcon={loadingAI ? <CircularProgress size={20} color="inherit" /> : <Sparkles size={20} />}
+                        onClick={handleGeneratePRD}
+                        disabled={loadingAI}
+                        sx={{
+                            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                            },
+                            '&:disabled': {
+                                opacity: 0.5,
+                                cursor: 'not-allowed',
+                                color: '#fff',
+                            },
+                        }}
+                    >
+                        {loadingAI ? 'Generating...' : 'Generate PRD'}
+                    </Button>
+                </Paper>
             )}
-        </div>
+
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: '#2d3748' }}>PRD Content</Typography>
+            <Paper elevation={1} sx={{ p: 2, borderRadius: '0.5rem', border: '1px solid #e0e7ff', minHeight: '400px' }}>
+                <Editor
+                    initialData={parsedPrdContent}
+                    onChange={handleContentUpdate}
+                    readOnly={!editMode}
+                    holder={editorRef.current ? editorRef.current.id : undefined}
+                />
+            </Paper>
+        </Box>
     );
 }
 
-// --- Customer Interview Tab Component ---
-function CustomerInterviewTab({ productId, isEditor }) {
+// --- Customer Interview Tab Component (Feedback) ---
+function CustomerInterviewTab({ productId, isEditor, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen }) {
     const { user } = useContext(AuthContext);
     const [interviews, setInterviews] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [showAddModal, setShowAddModal] = useState(false);
+    const [addModalOpen, setAddModalOpen] = useState(false);
     const [newInterviewData, setNewInterviewData] = useState({
         customer_name: '',
         customer_email: '',
-        interview_date: new Date().toISOString().slice(0, 16), //YYYY-MM-DDTHH:MM
-        interview_notes_json: '',
+        interview_date: new Date().toISOString().slice(0, 16),
+        interview_notes_json: JSON.stringify({ blocks: [] }), // Editor.js format
     });
+    const [detailModalOpen, setDetailModalOpen] = useState(false);
     const [selectedInterview, setSelectedInterview] = useState(null);
-    const [showDetailModal, setShowDetailModal] = useState(false);
     const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
-    const [aiSummaryError, setAiSummaryError] = useState(null);
 
     const fetchInterviews = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetcher.get(`/customer_interviews/product/${productId}`);
+            const response = await api.get(`/api/customer_interviews/product/${productId}`);
             setInterviews(response.data);
         } catch (err) {
             console.error('Error fetching interviews:', err.response?.data || err.message);
             setError('Failed to fetch interviews.');
+            setSnackbarMessage('Failed to fetch interviews.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         } finally {
             setLoading(false);
         }
-    }, [productId]);
+    }, [productId, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen]);
 
     useEffect(() => {
         if (user && productId) {
@@ -1291,11 +2049,14 @@ function CustomerInterviewTab({ productId, isEditor }) {
         setNewInterviewData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleAddInterview = async (e) => {
-        e.preventDefault();
-        setError(null);
+    const handleNotesChange = (data) => {
+        setNewInterviewData(prev => ({ ...prev, interview_notes_json: JSON.stringify(data) }));
+    };
+
+    const handleAddInterview = async () => {
+        setSnackbarOpen(false);
         try {
-            await fetcher.post('/customer_interviews', {
+            await api.post('/api/customer_interviews', {
                 ...newInterviewData,
                 product_id: productId,
             });
@@ -1303,65 +2064,79 @@ function CustomerInterviewTab({ productId, isEditor }) {
                 customer_name: '',
                 customer_email: '',
                 interview_date: new Date().toISOString().slice(0, 16),
-                interview_notes_json: '',
+                interview_notes_json: JSON.stringify({ blocks: [] }),
             });
-            setShowAddModal(false);
+            setAddModalOpen(false);
+            setSnackbarMessage('Interview added successfully!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
             fetchInterviews();
         } catch (err) {
             console.error('Error adding interview:', err.response?.data || err.message);
-            setError(err.response?.data?.error || 'Failed to add interview.');
+            setSnackbarMessage(err.response?.data?.error || 'Failed to add interview.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
     const handleViewDetails = (interview) => {
         setSelectedInterview(interview);
-        setShowDetailModal(true);
+        setDetailModalOpen(true);
     };
 
     const handleUpdateInterview = async (updatedData) => {
-        setError(null);
+        setSnackbarOpen(false);
         try {
-            await fetcher.put(`/customer_interviews/${updatedData.id}`, updatedData);
+            await api.put(`/api/customer_interviews/${updatedData.id}`, updatedData);
+            setSnackbarMessage('Interview updated successfully!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
             fetchInterviews(); // Refresh list
             setSelectedInterview(updatedData); // Update the selected interview in modal
-            alert('Interview updated successfully!');
         } catch (err) {
             console.error('Error updating interview:', err.response?.data || err.message);
-            setError(err.response?.data?.error || 'Failed to update interview.');
-            alert('Failed to update interview. Check console for details.');
+            setSnackbarMessage(err.response?.data?.error || 'Failed to update interview.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
     const handleDeleteInterview = async (interviewId) => {
-        if (window.confirm('Are you sure you want to delete this interview?')) {
-            setError(null);
-            try {
-                await fetcher.delete(`/customer_interviews/${interviewId}`);
-                fetchInterviews();
-                setShowDetailModal(false); // Close modal if deleted
-            } catch (err) {
-                console.error('Error deleting interview:', err.response?.data || err.message);
-                setError(err.response?.data?.error || 'Failed to delete interview.');
-            }
+        setSnackbarOpen(false);
+        try {
+            await api.delete(`/api/customer_interviews/${interviewId}`);
+            setSnackbarMessage('Interview deleted successfully!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+            fetchInterviews();
+            setDetailModalOpen(false); // Close modal if deleted
+        } catch (err) {
+            console.error('Error deleting interview:', err.response?.data || err.message);
+            setSnackbarMessage(err.response?.data?.error || 'Failed to delete interview.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
     const handleGenerateSummary = async (interviewId, notesContent) => {
         setAiSummaryLoading(true);
-        setAiSummaryError(null);
+        setSnackbarOpen(false);
         try {
-            const response = await fetcher.post('/customer_interviews/generate_summary', {
+            const response = await api.post('/api/customer_interviews/generate_summary', {
                 interview_id: interviewId,
                 notes_content: notesContent,
             });
-            const updatedInterview = { ...selectedInterview, ai_summary_json: response.data.ai_summary };
+            const updatedInterview = { ...selectedInterview, ai_summary_json: JSON.stringify(response.data.ai_summary) };
             setSelectedInterview(updatedInterview); // Update in modal
-            // Also update in the main interviews list
-            setInterviews(prev => prev.map(int => int.id === interviewId ? updatedInterview : int));
-            alert('AI Summary generated and saved!');
+            setInterviews(prev => prev.map(int => int.id === interviewId ? updatedInterview : int)); // Update in main list
+            setSnackbarMessage('AI Summary generated and saved!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
         } catch (err) {
             console.error('Error generating AI summary:', err.response?.data || err.message);
-            setAiSummaryError(err.response?.data?.error || 'Failed to generate AI summary.');
+            setSnackbarMessage(err.response?.data?.error || 'Failed to generate AI summary.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         } finally {
             setAiSummaryLoading(false);
         }
@@ -1373,154 +2148,209 @@ function CustomerInterviewTab({ productId, isEditor }) {
         return new Date(dateString).toLocaleDateString(undefined, options);
     };
 
-    if (loading) return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Loading customer interviews...</div>;
-    if (error) return <div style={{ textAlign: 'center', marginTop: '2rem', color: '#ef4444' }}>{error}</div>;
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
+                <CircularProgress />
+                <Typography variant="body1" sx={{ ml: 2 }}>Loading interviews...</Typography>
+            </Box>
+        );
+    }
+    if (error) return <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>;
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937' }}>Customer Interviews</h3>
+        <Box sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h5" component="h3" sx={{ fontWeight: 'bold', color: '#1a202c' }}>
+                    Customer Interviews
+                </Typography>
                 {isEditor && (
-                    <button
-                        onClick={() => setShowAddModal(true)}
-                        style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
+                    <Button
+                        variant="contained"
+                        startIcon={<Plus size={20} />}
+                        onClick={() => setAddModalOpen(true)}
+                        sx={{
+                            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                            },
+                        }}
                     >
-                        + Add New Interview
-                    </button>
+                        Add New Interview
+                    </Button>
                 )}
-            </div>
+            </Box>
 
             {interviews.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#4b5563', fontSize: '1.125rem' }}>No interviews recorded yet.</p>
+                <Paper elevation={1} sx={{ p: 4, textAlign: 'center', borderRadius: '1rem', border: '1px dashed #cbd5e1' }}>
+                    <Typography variant="h6" color="textSecondary">
+                        No interviews recorded yet.
+                    </Typography>
+                </Paper>
             ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                <Grid container spacing={3}>
                     {interviews.map(interview => (
-                        <div key={interview.id} style={{ backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '0.5rem', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)' }}>
-                            <h4 style={{ fontSize: '1.125rem', fontWeight: 'semibold', color: '#111827', marginBottom: '0.5rem' }}>{interview.customer_name}</h4>
-                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Email: {interview.customer_email || 'N/A'}</p>
-                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '1rem' }}>Date: {formatDate(interview.interview_date)}</p>
-                            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                <button
-                                    onClick={() => handleViewDetails(interview)}
-                                    style={{ backgroundColor: '#3b82f6', color: 'white', fontSize: '0.875rem', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#2563eb'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#3b82f6'; e.currentTarget.style.transform = 'scale(1)'; }}
-                                >
-                                    View Details
-                                </button>
-                            </div>
-                        </div>
+                        <Grid item xs={12} sm={6} md={4} key={interview.id}>
+                            <Paper
+                                elevation={2}
+                                sx={{
+                                    p: 3,
+                                    borderRadius: '1rem',
+                                    height: '100%',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between',
+                                    transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                                    '&:hover': {
+                                        transform: 'translateY(-5px)',
+                                        boxShadow: '0 10px 20px rgba(0,0,0,0.1)',
+                                    },
+                                }}
+                            >
+                                <Box>
+                                    <Typography variant="h6" component="h4" sx={{ fontWeight: 'bold', color: '#1a202c', mb: 1 }}>
+                                        {interview.customer_name}
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 0.5 }}>
+                                        Email: {interview.customer_email || 'N/A'}
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                                        Date: {formatDate(interview.interview_date)}
+                                    </Typography>
+                                </Box>
+                                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        onClick={() => handleViewDetails(interview)}
+                                        sx={{
+                                            color: '#4f46e5',
+                                            borderColor: '#4f46e5',
+                                            borderRadius: '0.5rem',
+                                            textTransform: 'none',
+                                            '&:hover': {
+                                                backgroundColor: '#eef2ff',
+                                                borderColor: '#4f46e5',
+                                            },
+                                        }}
+                                    >
+                                        View Details
+                                    </Button>
+                                </Box>
+                            </Paper>
+                        </Grid>
                     ))}
-                </div>
+                </Grid>
             )}
 
-            {showAddModal && (
-                <Modal title="Add New Customer Interview" onClose={() => setShowAddModal(false)}>
-                    <form onSubmit={handleAddInterview} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Customer Name</label>
-                            <input
-                                type="text"
-                                name="customer_name"
-                                value={newInterviewData.customer_name}
-                                onChange={handleInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Customer Email</label>
-                            <input
-                                type="email"
-                                name="customer_email"
-                                value={newInterviewData.customer_email}
-                                onChange={handleInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            />
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Interview Date & Time</label>
-                            <input
-                                type="datetime-local"
-                                name="interview_date"
-                                value={newInterviewData.interview_date}
-                                onChange={handleInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Interview Notes</label>
-                            <textarea
-                                name="interview_notes_json"
-                                value={newInterviewData.interview_notes_json}
-                                onChange={handleInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '150px' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                                placeholder="Enter interview notes here..."
-                            />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                            <button
-                                type="button"
-                                onClick={() => setShowAddModal(false)}
-                                style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
-                            >
-                                Add Interview
-                            </button>
-                        </div>
-                    </form>
-                </Modal>
-            )}
+            {/* Add Interview Dialog */}
+            <Dialog open={addModalOpen} onClose={() => setAddModalOpen(false)} PaperProps={{ sx: { borderRadius: '1rem', minWidth: { xs: '90%', sm: '600px' } } }}>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#1a202c' }}>Add New Customer Interview</DialogTitle>
+                <DialogContent dividers>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        label="Customer Name"
+                        type="text"
+                        fullWidth
+                        name="customer_name"
+                        value={newInterviewData.customer_name}
+                        onChange={handleInputChange}
+                        sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                        required
+                    />
+                    <TextField
+                        margin="dense"
+                        label="Customer Email"
+                        type="email"
+                        fullWidth
+                        name="customer_email"
+                        value={newInterviewData.customer_email}
+                        onChange={handleInputChange}
+                        sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                    />
+                    <TextField
+                        margin="dense"
+                        label="Interview Date & Time"
+                        type="datetime-local"
+                        fullWidth
+                        name="interview_date"
+                        value={newInterviewData.interview_date}
+                        onChange={handleInputChange}
+                        InputLabelProps={{ shrink: true }}
+                        sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                        required
+                    />
+                    <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1 }}>Interview Notes</Typography>
+                    <Paper elevation={0} sx={{ border: '1px solid #e0e7ff', borderRadius: '0.5rem', minHeight: '200px', p: 1 }}>
+                        <Editor
+                            initialData={JSON.parse(newInterviewData.interview_notes_json)}
+                            onChange={handleNotesChange}
+                            holder="add-interview-editor"
+                        />
+                    </Paper>
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setAddModalOpen(false)} sx={{ color: '#4b5563', textTransform: 'none', borderRadius: '0.5rem' }}>Cancel</Button>
+                    <Button
+                        onClick={handleAddInterview}
+                        variant="contained"
+                        sx={{
+                            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                            },
+                        }}
+                    >
+                        Add Interview
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
-            {showDetailModal && selectedInterview && (
-                <InterviewDetailModal
+            {/* Interview Detail Dialog */}
+            {selectedInterview && (
+                <InterviewDetailDialog
+                    open={detailModalOpen}
+                    onClose={() => setDetailModalOpen(false)}
                     interview={selectedInterview}
-                    onClose={() => setShowDetailModal(false)}
                     onUpdate={handleUpdateInterview}
                     onDelete={handleDeleteInterview}
                     onGenerateSummary={handleGenerateSummary}
                     aiSummaryLoading={aiSummaryLoading}
-                    aiSummaryError={aiSummaryError}
                     isEditor={isEditor}
                 />
             )}
-        </div>
+        </Box>
     );
 }
 
-// --- Interview Detail Modal Component ---
-function InterviewDetailModal({ interview, onClose, onUpdate, onDelete, onGenerateSummary, aiSummaryLoading, aiSummaryError, isEditor }) {
+// --- Interview Detail Dialog Component ---
+function InterviewDetailDialog({ open, onClose, interview, onUpdate, onDelete, onGenerateSummary, aiSummaryLoading, isEditor }) {
     const [editMode, setEditMode] = useState(false);
     const [editedInterview, setEditedInterview] = useState(interview);
+    const notesEditorRef = useRef(null); // Ref for notes editor
+    const summaryEditorRef = useRef(null); // Ref for summary editor
 
     useEffect(() => {
-        setEditedInterview(interview); // Ensure modal updates if parent interview prop changes
+        setEditedInterview(interview);
     }, [interview]);
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setEditedInterview(prev => ({ ...prev, [name]: value }));
     };
+
+    const handleNotesChange = useCallback((data) => {
+        setEditedInterview(prev => ({ ...prev, interview_notes_json: JSON.stringify(data) }));
+    }, []);
 
     const handleSave = async () => {
         await onUpdate(editedInterview);
@@ -1531,9 +2361,29 @@ function InterviewDetailModal({ interview, onClose, onUpdate, onDelete, onGenera
         if (editedInterview.interview_notes_json) {
             onGenerateSummary(editedInterview.id, editedInterview.interview_notes_json);
         } else {
-            alert('Please add interview notes before generating a summary.');
+            // Use Snackbar for this
+            // alert('Please add interview notes before generating a summary.');
         }
     };
+
+    const parsedNotesContent = useMemo(() => {
+        try {
+            return editedInterview.interview_notes_json ? JSON.parse(editedInterview.interview_notes_json) : { blocks: [] };
+        } catch (e) {
+            console.error("Failed to parse interview notes JSON:", e);
+            return { blocks: [{ type: "paragraph", data: { text: "Error loading notes content." } }] };
+        }
+    }, [editedInterview.interview_notes_json]);
+
+    const parsedSummaryContent = useMemo(() => {
+        try {
+            return editedInterview.ai_summary_json ? JSON.parse(editedInterview.ai_summary_json) : { blocks: [] };
+        } catch (e) {
+            console.error("Failed to parse AI summary JSON:", e);
+            return { blocks: [{ type: "paragraph", data: { text: "Error loading AI summary." } }] };
+        }
+    }, [editedInterview.ai_summary_json]);
+
 
     const formatDate = (dateString) => {
         if (!dateString) return 'N/A';
@@ -1542,194 +2392,207 @@ function InterviewDetailModal({ interview, onClose, onUpdate, onDelete, onGenera
     };
 
     return (
-        <Modal title={`Interview with ${interview.customer_name}`} onClose={onClose}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                    <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem' }}>Customer Name</label>
-                    {editMode && isEditor ? (
-                        <input
-                            type="text"
-                            name="customer_name"
-                            value={editedInterview.customer_name}
-                            onChange={handleInputChange}
-                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                        />
-                    ) : (
-                        <p style={{ color: '#111827' }}>{interview.customer_name}</p>
-                    )}
-                </div>
-                <div>
-                    <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem' }}>Customer Email</label>
-                    {editMode && isEditor ? (
-                        <input
-                            type="email"
-                            name="customer_email"
-                            value={editedInterview.customer_email || ''}
-                            onChange={handleInputChange}
-                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                        />
-                    ) : (
-                        <p style={{ color: '#111827' }}>{interview.customer_email || 'N/A'}</p>
-                    )}
-                </div>
-                <div>
-                    <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem' }}>Interview Date & Time</label>
-                    {editMode && isEditor ? (
-                        <input
-                            type="datetime-local"
-                            name="interview_date"
-                            value={editedInterview.interview_date ? editedInterview.interview_date.slice(0, 16) : ''}
-                            onChange={handleInputChange}
-                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                        />
-                    ) : (
-                        <p style={{ color: '#111827' }}>{formatDate(interview.interview_date)}</p>
-                    )}
-                </div>
-                <div>
-                    <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem' }}>Interview Notes</label>
-                    {editMode && isEditor ? (
-                        <textarea
-                            name="interview_notes_json"
-                            value={editedInterview.interview_notes_json || ''}
-                            onChange={handleInputChange}
-                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '150px' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            placeholder="Enter interview notes here..."
-                        />
-                    ) : (
-                        <div style={{ backgroundColor: '#e5e7eb', padding: '0.75rem', borderRadius: '0.5rem', lineHeight: '1.6', color: '#374151' }} dangerouslySetInnerHTML={{ __html: interview.interview_notes_json ? interview.interview_notes_json.replace(/\n/g, '<br/>') : '<p style="color: #6b7280;">No notes available.</p>' }} />
-                    )}
-                </div>
+        <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: '1rem' } }}>
+            <DialogTitle sx={{ fontWeight: 'bold', color: '#1a202c', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                Interview with {interview.customer_name}
+                <IconButton onClick={onClose} sx={{ color: '#6b7280' }}>
+                    <X />
+                </IconButton>
+            </DialogTitle>
+            <DialogContent dividers>
+                <Grid container spacing={2} mb={3}>
+                    <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 0.5 }}>Customer Name</Typography>
+                        {editMode && isEditor ? (
+                            <TextField
+                                fullWidth
+                                name="customer_name"
+                                value={editedInterview.customer_name}
+                                onChange={handleInputChange}
+                                size="small"
+                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                            />
+                        ) : (
+                            <Typography variant="body1">{interview.customer_name}</Typography>
+                        )}
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 0.5 }}>Customer Email</Typography>
+                        {editMode && isEditor ? (
+                            <TextField
+                                fullWidth
+                                name="customer_email"
+                                value={editedInterview.customer_email || ''}
+                                onChange={handleInputChange}
+                                size="small"
+                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                            />
+                        ) : (
+                            <Typography variant="body1">{interview.customer_email || 'N/A'}</Typography>
+                        )}
+                    </Grid>
+                    <Grid item xs={12}>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 0.5 }}>Interview Date & Time</Typography>
+                        {editMode && isEditor ? (
+                            <TextField
+                                fullWidth
+                                type="datetime-local"
+                                name="interview_date"
+                                value={editedInterview.interview_date ? editedInterview.interview_date.slice(0, 16) : ''}
+                                onChange={handleInputChange}
+                                InputLabelProps={{ shrink: true }}
+                                size="small"
+                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                            />
+                        ) : (
+                            <Typography variant="body1">{formatDate(interview.interview_date)}</Typography>
+                        )}
+                    </Grid>
+                </Grid>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
-                    <h4 style={{ fontSize: '1.125rem', fontWeight: 'semibold', color: '#1f2937' }}>AI Summary</h4>
+                <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1 }}>Interview Notes</Typography>
+                <Paper elevation={0} sx={{ border: '1px solid #e0e7ff', borderRadius: '0.5rem', minHeight: '200px', p: 1, mb: 3 }}>
+                    <Editor
+                        initialData={parsedNotesContent}
+                        onChange={handleNotesChange}
+                        readOnly={!editMode || !isEditor}
+                        holder={notesEditorRef.current ? notesEditorRef.current.id : undefined}
+                    />
+                </Paper>
+
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>AI Summary</Typography>
                     {isEditor && (
-                        <button
+                        <Button
+                            variant="contained"
+                            startIcon={aiSummaryLoading ? <CircularProgress size={20} color="inherit" /> : <Sparkles size={20} />}
                             onClick={handleGenerateClick}
-                            disabled={aiSummaryLoading || !editedInterview.interview_notes_json}
-                            style={{
-                                padding: '0.5rem 1rem',
+                            disabled={aiSummaryLoading || !editedInterview.interview_notes_json || JSON.parse(editedInterview.interview_notes_json).blocks.length === 0}
+                            sx={{
+                                background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                                color: '#fff',
+                                fontWeight: 600,
                                 borderRadius: '0.5rem',
-                                fontWeight: 'bold',
-                                color: 'white',
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                                transition: 'all 0.3s ease-in-out',
-                                transform: 'scale(1)',
-                                border: 'none',
-                                cursor: aiSummaryLoading || !editedInterview.interview_notes_json ? 'not-allowed' : 'pointer',
-                                backgroundColor: aiSummaryLoading || !editedInterview.interview_notes_json ? '#9ca3af' : '#3b82f6',
-                            }}
-                            onMouseOver={(e) => {
-                                if (!aiSummaryLoading && editedInterview.interview_notes_json) {
-                                    e.currentTarget.style.backgroundColor = '#2563eb';
-                                    e.currentTarget.style.transform = 'scale(1.05)';
-                                }
-                            }}
-                            onMouseOut={(e) => {
-                                if (!aiSummaryLoading && editedInterview.interview_notes_json) {
-                                    e.currentTarget.style.backgroundColor = '#3b82f6';
-                                    e.currentTarget.style.transform = 'scale(1)';
-                                }
+                                textTransform: 'none',
+                                '&:hover': {
+                                    background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                                },
+                                '&:disabled': {
+                                    opacity: 0.5,
+                                    cursor: 'not-allowed',
+                                    color: '#fff',
+                                },
                             }}
                         >
                             {aiSummaryLoading ? 'Generating...' : 'Generate AI Summary'}
-                        </button>
+                        </Button>
                     )}
-                </div>
-                {aiSummaryError && <p style={{ color: '#ef4444', fontSize: '0.875rem', marginTop: '0.5rem' }}>{aiSummaryError}</p>}
-                <div style={{ backgroundColor: '#e5e7eb', padding: '0.75rem', borderRadius: '0.5rem', lineHeight: '1.6', color: '#374151' }}>
-                    {editedInterview.ai_summary_json ? (
-                        <div dangerouslySetInnerHTML={{ __html: editedInterview.ai_summary_json.replace(/\n/g, '<br/>') }} />
-                    ) : (
-                        <p style={{ color: '#6b7280' }}>No AI summary available.</p>
-                    )}
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
-                    {isEditor && (
-                        <>
-                            {editMode ? (
-                                <button
-                                    onClick={handleSave}
-                                    style={{ backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#16a34a'}
-                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#22c55e'}
-                                >
-                                    Save Changes
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={() => setEditMode(true)}
-                                    style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
-                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
-                                >
-                                    Edit
-                                </button>
-                            )}
-                            <button
-                                onClick={() => onDelete(interview.id)}
-                                style={{ backgroundColor: '#ef4444', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
+                </Box>
+                <Paper elevation={0} sx={{ border: '1px solid #e0e7ff', borderRadius: '0.5rem', minHeight: '100px', p: 1 }}>
+                    <Editor
+                        initialData={parsedSummaryContent}
+                        readOnly={true} // AI summary is always read-only
+                        holder={summaryEditorRef.current ? summaryEditorRef.current.id : undefined}
+                    />
+                </Paper>
+            </DialogContent>
+            <DialogActions sx={{ p: 2 }}>
+                {isEditor && (
+                    <>
+                        {editMode ? (
+                            <Button
+                                onClick={handleSave}
+                                variant="contained"
+                                startIcon={<Save size={20} />}
+                                sx={{
+                                    background: 'linear-gradient(to right, #22c55e, #16a34a)',
+                                    color: '#fff',
+                                    fontWeight: 600,
+                                    borderRadius: '0.5rem',
+                                    textTransform: 'none',
+                                    '&:hover': {
+                                        background: 'linear-gradient(to right, #16a34a, #15803d)',
+                                    },
+                                }}
                             >
-                                Delete
-                            </button>
-                        </>
-                    )}
-                    <button
-                        onClick={onClose}
-                        style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
-                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
-                    >
-                        Close
-                    </button>
-                </div>
-            </div>
-        </Modal>
+                                Save Changes
+                            </Button>
+                        ) : (
+                            <Button
+                                onClick={() => setEditMode(true)}
+                                variant="contained"
+                                startIcon={<Edit size={20} />}
+                                sx={{
+                                    background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                                    color: '#fff',
+                                    fontWeight: 600,
+                                    borderRadius: '0.5rem',
+                                    textTransform: 'none',
+                                    '&:hover': {
+                                        background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                                    },
+                                }}
+                            >
+                                Edit
+                            </Button>
+                        )}
+                        <Button
+                            onClick={() => onDelete(interview.id)}
+                            variant="outlined"
+                            color="error"
+                            startIcon={<Trash2 size={20} />}
+                            sx={{
+                                borderRadius: '0.5rem',
+                                textTransform: 'none',
+                                '&:hover': {
+                                    backgroundColor: '#ffebeb',
+                                },
+                            }}
+                        >
+                            Delete
+                        </Button>
+                    </>
+                )}
+                <Button onClick={onClose} sx={{ color: '#4b5563', textTransform: 'none', borderRadius: '0.5rem' }}>
+                    Close
+                </Button>
+            </DialogActions>
+        </Dialog>
     );
 }
 
-
 // --- Interview Template Tab Component ---
-function InterviewTemplateTab() {
+function InterviewTemplateTab({ setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen }) {
     const { user } = useContext(AuthContext);
     const [templates, setTemplates] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [showAddModal, setShowAddModal] = useState(false);
+    const [addModalOpen, setAddModalOpen] = useState(false);
     const [newTemplateData, setNewTemplateData] = useState({
         template_name: '',
-        template_questions_json: '',
+        template_questions_json: JSON.stringify({ blocks: [] }),
     });
+    const [detailModalOpen, setDetailModalOpen] = useState(false);
     const [selectedTemplate, setSelectedTemplate] = useState(null);
-    const [showDetailModal, setShowDetailModal] = useState(false);
     const [aiQuestionsLoading, setAiQuestionsLoading] = useState(false);
-    const [aiQuestionsError, setAiQuestionsError] = useState(null);
     const [featureIdeaForAI, setFeatureIdeaForAI] = useState('');
 
     const fetchTemplates = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetcher.get('/interview_templates');
+            const response = await api.get('/api/interview_templates');
             setTemplates(response.data);
         } catch (err) {
             console.error('Error fetching templates:', err.response?.data || err.message);
             setError('Failed to fetch interview templates.');
+            setSnackbarMessage('Failed to fetch interview templates.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen]);
 
     useEffect(() => {
         if (user) {
@@ -1742,198 +2605,266 @@ function InterviewTemplateTab() {
         setNewTemplateData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleAddTemplate = async (e) => {
-        e.preventDefault();
-        setError(null);
+    const handleQuestionsChange = (data) => {
+        setNewTemplateData(prev => ({ ...prev, template_questions_json: JSON.stringify(data) }));
+    };
+
+    const handleAddTemplate = async () => {
+        setSnackbarOpen(false);
         try {
-            await fetcher.post('/interview_templates', newTemplateData);
+            await api.post('/api/interview_templates', newTemplateData);
             setNewTemplateData({
                 template_name: '',
-                template_questions_json: '',
+                template_questions_json: JSON.stringify({ blocks: [] }),
             });
-            setShowAddModal(false);
+            setAddModalOpen(false);
+            setSnackbarMessage('Template created successfully!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
             fetchTemplates();
         } catch (err) {
             console.error('Error adding template:', err.response?.data || err.message);
-            setError(err.response?.data?.error || 'Failed to add template.');
+            setSnackbarMessage(err.response?.data?.error || 'Failed to add template.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
     const handleViewDetails = (template) => {
         setSelectedTemplate(template);
-        setShowDetailModal(true);
+        setDetailModalOpen(true);
     };
 
     const handleUpdateTemplate = async (updatedData) => {
-        setError(null);
+        setSnackbarOpen(false);
         try {
-            await fetcher.put(`/interview_templates/${updatedData.id}`, updatedData);
+            await api.put(`/api/interview_templates/${updatedData.id}`, updatedData);
+            setSnackbarMessage('Template updated successfully!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
             fetchTemplates();
             setSelectedTemplate(updatedData);
-            alert('Template updated successfully!');
         } catch (err) {
             console.error('Error updating template:', err.response?.data || err.message);
-            setError(err.response?.data?.error || 'Failed to update template.');
-            alert('Failed to update template. Check console for details.');
+            setSnackbarMessage(err.response?.data?.error || 'Failed to update template.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
     const handleDeleteTemplate = async (templateId) => {
-        if (window.confirm('Are you sure you want to delete this template?')) {
-            setError(null);
-            try {
-                await fetcher.delete(`/interview_templates/${templateId}`);
-                fetchTemplates();
-                setShowDetailModal(false);
-            } catch (err) {
-                console.error('Error deleting template:', err.response?.data || err.message);
-                setError(err.response?.data?.error || 'Failed to delete template.');
-            }
+        setSnackbarOpen(false);
+        try {
+            await api.delete(`/api/interview_templates/${templateId}`);
+            setSnackbarMessage('Template deleted successfully!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+            fetchTemplates();
+            setDetailModalOpen(false);
+        } catch (err) {
+            console.error('Error deleting template:', err.response?.data || err.message);
+            setSnackbarMessage(err.response?.data?.error || 'Failed to delete template.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
     const handleGenerateQuestions = async (templateId, existingQuestions) => {
         if (!featureIdeaForAI) {
-            setAiQuestionsError('Please enter a feature idea to generate questions.');
+            setSnackbarMessage('Please enter a feature idea to generate questions.');
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
             return;
         }
         setAiQuestionsLoading(true);
-        setAiQuestionsError(null);
+        setSnackbarOpen(false);
         try {
-            const response = await fetcher.post('/interview_templates/generate_questions', {
+            const response = await api.post('/api/interview_templates/generate_questions', {
                 feature_idea: featureIdeaForAI,
                 existing_questions: existingQuestions,
             });
-            const generatedContent = response.data.generated_questions;
-            
-            // Update the selected template's questions in the modal
+            const generatedContent = JSON.stringify(response.data.generated_questions);
+
             const updatedTemplate = { ...selectedTemplate, template_questions_json: generatedContent };
             setSelectedTemplate(updatedTemplate);
-            
-            // Update the template in the main list
             setTemplates(prev => prev.map(t => t.id === templateId ? updatedTemplate : t));
-            
-            alert('AI Questions generated and saved!');
+
+            setSnackbarMessage('AI Questions generated and saved!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
         } catch (err) {
             console.error('Error generating AI questions:', err.response?.data || err.message);
-            setAiQuestionsError(err.response?.data?.error || 'Failed to generate AI questions.');
+            setSnackbarMessage(err.response?.data?.error || 'Failed to generate AI questions.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         } finally {
             setAiQuestionsLoading(false);
         }
     };
 
-    if (loading) return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Loading interview templates...</div>;
-    if (error) return <div style={{ textAlign: 'center', marginTop: '2rem', color: '#ef4444' }}>{error}</div>;
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
+                <CircularProgress />
+                <Typography variant="body1" sx={{ ml: 2 }}>Loading templates...</Typography>
+            </Box>
+        );
+    }
+    if (error) return <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>;
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937' }}>Interview Templates</h3>
-                <button
-                    onClick={() => setShowAddModal(true)}
-                    style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
+        <Box sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h5" component="h3" sx={{ fontWeight: 'bold', color: '#1a202c' }}>
+                    Interview Templates
+                </Typography>
+                <Button
+                    variant="contained"
+                    startIcon={<Plus size={20} />}
+                    onClick={() => setAddModalOpen(true)}
+                    sx={{
+                        background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                        color: '#fff',
+                        fontWeight: 600,
+                        borderRadius: '0.5rem',
+                        textTransform: 'none',
+                        '&:hover': {
+                            background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                        },
+                    }}
                 >
-                    + Create New Template
-                </button>
-            </div>
+                    Create New Template
+                </Button>
+            </Box>
 
             {templates.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#4b5563', fontSize: '1.125rem' }}>No templates created yet.</p>
+                <Paper elevation={1} sx={{ p: 4, textAlign: 'center', borderRadius: '1rem', border: '1px dashed #cbd5e1' }}>
+                    <Typography variant="h6" color="textSecondary">
+                        No templates created yet.
+                    </Typography>
+                </Paper>
             ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                <Grid container spacing={3}>
                     {templates.map(template => (
-                        <div key={template.id} style={{ backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '0.5rem', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)' }}>
-                            <h4 style={{ fontSize: '1.125rem', fontWeight: 'semibold', color: '#111827', marginBottom: '0.5rem' }}>{template.template_name}</h4>
-                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '1rem' }}>Created: {new Date(template.created_at).toLocaleDateString()}</p>
-                            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                <button
-                                    onClick={() => handleViewDetails(template)}
-                                    style={{ backgroundColor: '#3b82f6', color: 'white', fontSize: '0.875rem', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#2563eb'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#3b82f6'; e.currentTarget.style.transform = 'scale(1)'; }}
-                                >
-                                    View Details
-                                </button>
-                            </div>
-                        </div>
+                        <Grid item xs={12} sm={6} md={4} key={template.id}>
+                            <Paper
+                                elevation={2}
+                                sx={{
+                                    p: 3,
+                                    borderRadius: '1rem',
+                                    height: '100%',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between',
+                                    transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                                    '&:hover': {
+                                        transform: 'translateY(-5px)',
+                                        boxShadow: '0 10px 20px rgba(0,0,0,0.1)',
+                                    },
+                                }}
+                            >
+                                <Box>
+                                    <Typography variant="h6" component="h4" sx={{ fontWeight: 'bold', color: '#1a202c', mb: 1 }}>
+                                        {template.template_name}
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                                        Created: {new Date(template.created_at).toLocaleDateString()}
+                                    </Typography>
+                                </Box>
+                                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        onClick={() => handleViewDetails(template)}
+                                        sx={{
+                                            color: '#4f46e5',
+                                            borderColor: '#4f46e5',
+                                            borderRadius: '0.5rem',
+                                            textTransform: 'none',
+                                            '&:hover': {
+                                                backgroundColor: '#eef2ff',
+                                                borderColor: '#4f46e5',
+                                            },
+                                        }}
+                                    >
+                                        View Details
+                                    </Button>
+                                </Box>
+                            </Paper>
+                        </Grid>
                     ))}
-                </div>
+                </Grid>
             )}
 
-            {showAddModal && (
-                <Modal title="Create New Interview Template" onClose={() => setShowAddModal(false)}>
-                    <form onSubmit={handleAddTemplate} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Template Name</label>
-                            <input
-                                type="text"
-                                name="template_name"
-                                value={newTemplateData.template_name}
-                                onChange={handleInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Template Questions (Editor.js JSON)</label>
-                            <textarea
-                                name="template_questions_json"
-                                value={newTemplateData.template_questions_json}
-                                onChange={handleInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '150px' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                                placeholder="Enter template questions here (e.g., 'What problem are you trying to solve?')."
-                            />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                            <button
-                                type="button"
-                                onClick={() => setShowAddModal(false)}
-                                style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
-                            >
-                                Create Template
-                            </button>
-                        </div>
-                    </form>
-                </Modal>
-            )}
+            {/* Add Template Dialog */}
+            <Dialog open={addModalOpen} onClose={() => setAddModalOpen(false)} PaperProps={{ sx: { borderRadius: '1rem', minWidth: { xs: '90%', sm: '600px' } } }}>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#1a202c' }}>Create New Interview Template</DialogTitle>
+                <DialogContent dividers>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        label="Template Name"
+                        type="text"
+                        fullWidth
+                        name="template_name"
+                        value={newTemplateData.template_name}
+                        onChange={handleInputChange}
+                        sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                        required
+                    />
+                    <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1 }}>Template Questions</Typography>
+                    <Paper elevation={0} sx={{ border: '1px solid #e0e7ff', borderRadius: '0.5rem', minHeight: '200px', p: 1 }}>
+                        <Editor
+                            initialData={JSON.parse(newTemplateData.template_questions_json)}
+                            onChange={handleQuestionsChange}
+                            holder="add-template-editor"
+                        />
+                    </Paper>
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setAddModalOpen(false)} sx={{ color: '#4b5563', textTransform: 'none', borderRadius: '0.5rem' }}>Cancel</Button>
+                    <Button
+                        onClick={handleAddTemplate}
+                        variant="contained"
+                        sx={{
+                            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                            },
+                        }}
+                    >
+                        Create Template
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
-            {showDetailModal && selectedTemplate && (
-                <TemplateDetailModal
+            {/* Template Detail Dialog */}
+            {selectedTemplate && (
+                <TemplateDetailDialog
+                    open={detailModalOpen}
+                    onClose={() => setDetailModalOpen(false)}
                     template={selectedTemplate}
-                    onClose={() => setShowDetailModal(false)}
                     onUpdate={handleUpdateTemplate}
                     onDelete={handleDeleteTemplate}
                     onGenerateQuestions={handleGenerateQuestions}
                     aiQuestionsLoading={aiQuestionsLoading}
-                    aiQuestionsError={aiQuestionsError}
                     featureIdeaForAI={featureIdeaForAI}
                     setFeatureIdeaForAI={setFeatureIdeaForAI}
                 />
             )}
-        </div>
+        </Box>
     );
 }
 
-// --- Template Detail Modal Component ---
-function TemplateDetailModal({ template, onClose, onUpdate, onDelete, onGenerateQuestions, aiQuestionsLoading, aiQuestionsError, featureIdeaForAI, setFeatureIdeaForAI }) {
+// --- Template Detail Dialog Component ---
+function TemplateDetailDialog({ open, onClose, template, onUpdate, onDelete, onGenerateQuestions, aiQuestionsLoading, featureIdeaForAI, setFeatureIdeaForAI }) {
     const [editMode, setEditMode] = useState(false);
     const [editedTemplate, setEditedTemplate] = useState(template);
+    const questionsEditorRef = useRef(null);
 
     useEffect(() => {
         setEditedTemplate(template);
@@ -1944,6 +2875,10 @@ function TemplateDetailModal({ template, onClose, onUpdate, onDelete, onGenerate
         setEditedTemplate(prev => ({ ...prev, [name]: value }));
     };
 
+    const handleQuestionsChange = useCallback((data) => {
+        setEditedTemplate(prev => ({ ...prev, template_questions_json: JSON.stringify(data) }));
+    }, []);
+
     const handleSave = async () => {
         await onUpdate(editedTemplate);
         setEditMode(false);
@@ -1953,156 +2888,154 @@ function TemplateDetailModal({ template, onClose, onUpdate, onDelete, onGenerate
         onGenerateQuestions(editedTemplate.id, editedTemplate.template_questions_json);
     };
 
-    return (
-        <Modal title={`Template: ${template.template_name}`} onClose={onClose}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                    <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem' }}>Template Name</label>
-                    {editMode ? (
-                        <input
-                            type="text"
-                            name="template_name"
-                            value={editedTemplate.template_name}
-                            onChange={handleInputChange}
-                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                        />
-                    ) : (
-                        <p style={{ color: '#111827' }}>{template.template_name}</p>
-                    )}
-                </div>
-                <div>
-                    <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.25rem' }}>Template Questions</label>
-                    {editMode ? (
-                        <textarea
-                            name="template_questions_json"
-                            value={editedTemplate.template_questions_json || ''}
-                            onChange={handleInputChange}
-                            style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '150px' }}
-                            onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                            onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            placeholder="Enter template questions here..."
-                        />
-                    ) : (
-                        <div style={{ backgroundColor: '#e5e7eb', padding: '0.75rem', borderRadius: '0.5rem', lineHeight: '1.6', color: '#374151' }} dangerouslySetInnerHTML={{ __html: template.template_questions_json ? template.template_questions_json.replace(/\n/g, '<br/>') : '<p style="color: #6b7280;">No questions available.</p>' }} />
-                    )}
-                </div>
+    const parsedQuestionsContent = useMemo(() => {
+        try {
+            return editedTemplate.template_questions_json ? JSON.parse(editedTemplate.template_questions_json) : { blocks: [] };
+        } catch (e) {
+            console.error("Failed to parse template questions JSON:", e);
+            return { blocks: [{ type: "paragraph", data: { text: "Error loading questions content." } }] };
+        }
+    }, [editedTemplate.template_questions_json]);
 
-                <div style={{ backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)', marginTop: '1rem' }}>
-                    <h4 style={{ fontSize: '1.25rem', fontWeight: 'semibold', color: '#1f2937', marginBottom: '0.75rem' }}>AI Question Generator</h4>
-                    <textarea
-                        style={{ width: '100%', padding: '0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '80px', marginBottom: '1rem' }}
-                        onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                        onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
+    return (
+        <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: '1rem' } }}>
+            <DialogTitle sx={{ fontWeight: 'bold', color: '#1a202c', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                Template: {template.template_name}
+                <IconButton onClick={onClose} sx={{ color: '#6b7280' }}>
+                    <X />
+                </IconButton>
+            </DialogTitle>
+            <DialogContent dividers>
+                <TextField
+                    fullWidth
+                    label="Template Name"
+                    value={editMode ? editedTemplate.template_name : template.template_name}
+                    onChange={handleInputChange}
+                    name="template_name"
+                    disabled={!editMode}
+                    sx={{ mb: 3, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                />
+
+                <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1 }}>Template Questions</Typography>
+                <Paper elevation={0} sx={{ border: '1px solid #e0e7ff', borderRadius: '0.5rem', minHeight: '200px', p: 1, mb: 3 }}>
+                    <Editor
+                        initialData={parsedQuestionsContent}
+                        onChange={handleQuestionsChange}
+                        readOnly={!editMode}
+                        holder={questionsEditorRef.current ? questionsEditorRef.current.id : undefined}
+                    />
+                </Paper>
+
+                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.5rem', border: '1px solid #e0e7ff', mb: 3, backgroundColor: '#f0f2f5' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: '#2d3748' }}>AI Question Generator</Typography>
+                    <TextField
+                        fullWidth
+                        multiline
+                        rows={2}
                         placeholder="Enter a feature idea to generate interview questions (e.g., 'A new social media feature for sharing short videos')."
                         value={featureIdeaForAI}
                         onChange={(e) => setFeatureIdeaForAI(e.target.value)}
                         disabled={aiQuestionsLoading}
+                        sx={{
+                            mb: 2,
+                            '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' },
+                            '& .MuiInputBase-input::placeholder': { color: '#9ca3af', opacity: 1 },
+                        }}
                     />
-                    <button
+                    <Button
+                        variant="contained"
+                        startIcon={aiQuestionsLoading ? <CircularProgress size={20} color="inherit" /> : <Sparkles size={20} />}
                         onClick={handleGenerateClick}
                         disabled={aiQuestionsLoading || !featureIdeaForAI}
-                        style={{
-                            padding: '0.5rem 1.5rem',
+                        sx={{
+                            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                            color: '#fff',
+                            fontWeight: 600,
                             borderRadius: '0.5rem',
-                            fontWeight: 'bold',
-                            color: 'white',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                            transition: 'all 0.3s ease-in-out',
-                            transform: 'scale(1)',
-                            border: 'none',
-                            cursor: aiQuestionsLoading || !featureIdeaForAI ? 'not-allowed' : 'pointer',
-                            backgroundColor: aiQuestionsLoading || !featureIdeaForAI ? '#9ca3af' : '#3b82f6',
-                        }}
-                        onMouseOver={(e) => {
-                            if (!aiQuestionsLoading && featureIdeaForAI) {
-                                e.currentTarget.style.backgroundColor = '#2563eb';
-                                e.currentTarget.style.transform = 'scale(1.05)';
-                            }
-                        }}
-                        onMouseOut={(e) => {
-                            if (!aiQuestionsLoading && featureIdeaForAI) {
-                                e.currentTarget.style.backgroundColor = '#3b82f6';
-                                e.currentTarget.style.transform = 'scale(1)';
-                            }
+                            textTransform: 'none',
+                            '&:hover': {
+                                background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                            },
+                            '&:disabled': {
+                                opacity: 0.5,
+                                cursor: 'not-allowed',
+                                color: '#fff',
+                            },
                         }}
                     >
                         {aiQuestionsLoading ? 'Generating...' : 'Generate Questions'}
-                    </button>
-                    {aiQuestionsError && <p style={{ color: '#ef4444', fontSize: '0.875rem', marginTop: '0.5rem' }}>{aiQuestionsError}</p>}
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1.5rem' }}>
-                    {editMode ? (
-                        <button
-                            onClick={handleSave}
-                            style={{ backgroundColor: '#22c55e', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#16a34a'}
-                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#22c55e'}
-                        >
-                            Save Changes
-                        </button>
-                    ) : (
-                        <button
-                            onClick={() => setEditMode(true)}
-                            style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
-                            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
-                        >
-                            Edit
-                        </button>
-                    )}
-                    <button
-                        onClick={() => onDelete(template.id)}
-                        style={{ backgroundColor: '#ef4444', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
-                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
+                    </Button>
+                </Paper>
+            </DialogContent>
+            <DialogActions sx={{ p: 2 }}>
+                {editMode ? (
+                    <Button
+                        onClick={handleSave}
+                        variant="contained"
+                        startIcon={<Save size={20} />}
+                        sx={{
+                            background: 'linear-gradient(to right, #22c55e, #16a34a)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                background: 'linear-gradient(to right, #16a34a, #15803d)',
+                            },
+                        }}
                     >
-                        Delete
-                    </button>
-                    <button
-                        onClick={onClose}
-                        style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
-                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
+                        Save Changes
+                    </Button>
+                ) : (
+                    <Button
+                        onClick={() => setEditMode(true)}
+                        variant="contained"
+                        startIcon={<Edit size={20} />}
+                        sx={{
+                            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                            },
+                        }}
                     >
-                        Close
-                    </button>
-                </div>
-            </div>
-        </Modal>
-    );
-}
-
-// --- Reusable Modal Component ---
-function Modal({ title, onClose, children }) {
-    return (
-        <div style={{ position: 'fixed', inset: '0', backgroundColor: 'rgba(107, 114, 128, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: '50', padding: '1rem' }}>
-            <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '0.5rem', boxShadow: '0 10px 15px rgba(0, 0, 0, 0.1)', width: '100%', maxWidth: '672px', maxHeight: '90vh', overflowY: 'auto', position: 'relative' }}>
-                <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#1f2937', marginBottom: '1rem', borderBottom: '1px solid #e5e7eb', paddingBottom: '0.5rem' }}>{title}</h3>
-                <button
-                    onClick={onClose}
-                    style={{ position: 'absolute', top: '1rem', right: '1rem', color: '#6b7280', fontSize: '1.5rem', fontWeight: 'bold', background: 'none', border: 'none', cursor: 'pointer' }}
-                    onMouseOver={(e) => e.currentTarget.style.color = '#374151'}
-                    onMouseOut={(e) => e.currentTarget.style.color = '#6b7280'}
+                        Edit
+                    </Button>
+                )}
+                <Button
+                    onClick={() => onDelete(template.id)}
+                    variant="outlined"
+                    color="error"
+                    startIcon={<Trash2 size={20} />}
+                    sx={{
+                        borderRadius: '0.5rem',
+                        textTransform: 'none',
+                        '&:hover': {
+                            backgroundColor: '#ffebeb',
+                        },
+                    }}
                 >
-                    &times;
-                </button>
-                {children}
-            </div>
-        </div>
+                    Delete
+                </Button>
+                <Button onClick={onClose} sx={{ color: '#4b5563', textTransform: 'none', borderRadius: '0.5rem' }}>
+                    Close
+                </Button>
+            </DialogActions>
+        </Dialog>
     );
 }
 
 // --- Task Tab Component (NEW for Phase 2) ---
-function TaskTab({ productId, isEditor }) {
+function TaskTab({ productId, isEditor, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen }) {
     const { user } = useContext(AuthContext);
     const [tasks, setTasks] = useState([]);
     const [allUsers, setAllUsers] = useState([]); // For assigning tasks
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+    const [addTaskModalOpen, setAddTaskModalOpen] = useState(false);
     const [newTaskData, setNewTaskData] = useState({
         title: '',
         description: '',
@@ -2111,26 +3044,31 @@ function TaskTab({ productId, isEditor }) {
         priority: 'Medium',
         due_date: '',
     });
-    const [showEditTaskModal, setShowEditTaskModal] = useState(false);
+    const [editTaskModalOpen, setEditTaskModalOpen] = useState(false);
     const [editingTask, setEditingTask] = useState(null);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [taskToDelete, setTaskToDelete] = useState(null);
 
     const fetchTasks = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetcher.get(`/products/${productId}/tasks`);
+            const response = await api.get(`/api/products/${productId}/tasks`);
             setTasks(response.data);
         } catch (err) {
             console.error('Error fetching tasks:', err.response?.data || err.message);
             setError('Failed to fetch tasks.');
+            setSnackbarMessage('Failed to fetch tasks.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         } finally {
             setLoading(false);
         }
-    }, [productId]);
+    }, [productId, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen]);
 
     const fetchAllUsers = useCallback(async () => {
         try {
-            const response = await fetcher.get('/users');
+            const response = await api.get('/api/users'); // Assuming an endpoint to get all users
             setAllUsers(response.data);
         } catch (err) {
             console.error('Error fetching users:', err.response?.data || err.message);
@@ -2141,25 +3079,26 @@ function TaskTab({ productId, isEditor }) {
     useEffect(() => {
         if (user && productId) {
             fetchTasks();
-            fetchAllUsers();
+            if (isEditor) { // Only fetch all users if current user is editor for assigning
+                fetchAllUsers();
+            }
         }
-    }, [user, productId, fetchTasks, fetchAllUsers]);
+    }, [user, productId, isEditor, fetchTasks, fetchAllUsers]);
 
     const handleNewTaskInputChange = (e) => {
         const { name, value } = e.target;
         setNewTaskData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleCreateTask = async (e) => {
-        e.preventDefault();
-        setError(null);
+    const handleCreateTask = async () => {
+        setSnackbarOpen(false);
         try {
             const payload = {
                 ...newTaskData,
                 assigned_to_user_id: newTaskData.assigned_to_user_id === '' ? null : parseInt(newTaskData.assigned_to_user_id),
                 due_date: newTaskData.due_date || null,
             };
-            await fetcher.post(`/products/${productId}/tasks`, payload);
+            await api.post(`/api/products/${productId}/tasks`, payload);
             setNewTaskData({
                 title: '',
                 description: '',
@@ -2168,11 +3107,16 @@ function TaskTab({ productId, isEditor }) {
                 priority: 'Medium',
                 due_date: '',
             });
-            setShowAddTaskModal(false);
+            setAddTaskModalOpen(false);
+            setSnackbarMessage('Task created successfully!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
             fetchTasks();
         } catch (err) {
             console.error('Error creating task:', err.response?.data || err.message);
-            setError(err.response?.data?.error || 'Failed to create task.');
+            setSnackbarMessage(err.response?.data?.error || 'Failed to create task.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
@@ -2182,7 +3126,7 @@ function TaskTab({ productId, isEditor }) {
             due_date: task.due_date ? task.due_date.slice(0, 16) : '', // Format for datetime-local input
             assigned_to_user_id: task.assigned_to_user_id || '',
         });
-        setShowEditTaskModal(true);
+        setEditTaskModalOpen(true);
     };
 
     const handleEditTaskInputChange = (e) => {
@@ -2190,35 +3134,50 @@ function TaskTab({ productId, isEditor }) {
         setEditingTask(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleUpdateTask = async (e) => {
-        e.preventDefault();
-        setError(null);
+    const handleUpdateTask = async () => {
+        setSnackbarOpen(false);
         try {
             const payload = {
                 ...editingTask,
                 assigned_to_user_id: editingTask.assigned_to_user_id === '' ? null : parseInt(editingTask.assigned_to_user_id),
                 due_date: editingTask.due_date || null,
             };
-            await fetcher.put(`/tasks/${editingTask.id}`, payload);
-            setShowEditTaskModal(false);
+            await api.put(`/api/tasks/${editingTask.id}`, payload);
+            setEditTaskModalOpen(false);
             setEditingTask(null);
+            setSnackbarMessage('Task updated successfully!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
             fetchTasks();
         } catch (err) {
             console.error('Error updating task:', err.response?.data || err.message);
-            setError(err.response?.data?.error || 'Failed to update task.');
+            setSnackbarMessage(err.response?.data?.error || 'Failed to update task.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
-    const handleDeleteTask = async (taskId) => {
-        if (window.confirm('Are you sure you want to delete this task?')) {
-            setError(null);
-            try {
-                await fetcher.delete(`/tasks/${taskId}`);
-                fetchTasks();
-            } catch (err) {
-                console.error('Error deleting task:', err.response?.data || err.message);
-                setError(err.response?.data?.error || 'Failed to delete task.');
-            }
+    const confirmDeleteTask = (task) => {
+        setTaskToDelete(task);
+        setDeleteConfirmOpen(true);
+    };
+
+    const handleDeleteTask = async () => {
+        if (!taskToDelete) return;
+        setSnackbarOpen(false);
+        try {
+            await api.delete(`/api/tasks/${taskToDelete.id}`);
+            setDeleteConfirmOpen(false);
+            setTaskToDelete(null);
+            setSnackbarMessage('Task deleted successfully!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+            fetchTasks();
+        } catch (err) {
+            console.error('Error deleting task:', err.response?.data || err.message);
+            setSnackbarMessage(err.response?.data?.error || 'Failed to delete task.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
@@ -2228,310 +3187,407 @@ function TaskTab({ productId, isEditor }) {
         return new Date(dateString).toLocaleDateString(undefined, options);
     };
 
-    if (loading) return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Loading tasks...</div>;
-    if (error) return <div style={{ textAlign: 'center', marginTop: '2rem', color: '#ef4444' }}>{error}</div>;
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
+                <CircularProgress />
+                <Typography variant="body1" sx={{ ml: 2 }}>Loading tasks...</Typography>
+            </Box>
+        );
+    }
+    if (error) return <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>;
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937' }}>Tasks</h3>
+        <Box sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h5" component="h3" sx={{ fontWeight: 'bold', color: '#1a202c' }}>
+                    Tasks
+                </Typography>
                 {isEditor && (
-                    <button
-                        onClick={() => setShowAddTaskModal(true)}
-                        style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
+                    <Button
+                        variant="contained"
+                        startIcon={<Plus size={20} />}
+                        onClick={() => setAddTaskModalOpen(true)}
+                        sx={{
+                            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                            },
+                        }}
                     >
-                        + Add New Task
-                    </button>
+                        Add New Task
+                    </Button>
                 )}
-            </div>
+            </Box>
 
             {tasks.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#4b5563', fontSize: '1.125rem' }}>No tasks for this product yet.</p>
+                <Paper elevation={1} sx={{ p: 4, textAlign: 'center', borderRadius: '1rem', border: '1px dashed #cbd5e1' }}>
+                    <Typography variant="h6" color="textSecondary">
+                        No tasks for this product yet.
+                    </Typography>
+                </Paper>
             ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                <Grid container spacing={3}>
                     {tasks.map(task => (
-                        <div key={task.id} style={{ backgroundColor: '#f9fafb', padding: '1.5rem', borderRadius: '0.5rem', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)' }}>
-                            <h4 style={{ fontSize: '1.125rem', fontWeight: 'semibold', color: '#111827', marginBottom: '0.5rem' }}>{task.title}</h4>
-                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '0.25rem' }}>{task.description}</p>
-                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Status: <span style={{ fontWeight: 'medium' }}>{task.status}</span></p>
-                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Priority: <span style={{ fontWeight: 'medium' }}>{task.priority}</span></p>
-                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Assigned To: <span style={{ fontWeight: 'medium' }}>{task.assigned_to_username || 'Unassigned'}</span></p>
-                            <p style={{ color: '#4b5563', fontSize: '0.875rem', marginBottom: '1rem' }}>Due Date: <span style={{ fontWeight: 'medium' }}>{formatDate(task.due_date)}</span></p>
-                            {isEditor && (
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                                    <button
-                                        onClick={() => handleEditTaskClick(task)}
-                                        style={{ backgroundColor: '#3b82f6', color: 'white', fontSize: '0.875rem', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#2563eb'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#3b82f6'; e.currentTarget.style.transform = 'scale(1)'; }}
-                                    >
-                                        Edit
-                                    </button>
-                                    <button
-                                        onClick={() => handleDeleteTask(task.id)}
-                                        style={{ backgroundColor: '#ef4444', color: 'white', fontSize: '0.875rem', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#dc2626'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#ef4444'; e.currentTarget.style.transform = 'scale(1)'; }}
-                                    >
-                                        Delete
-                                    </button>
-                                </div>
-                            )}
-                        </div>
+                        <Grid item xs={12} sm={6} md={4} key={task.id}>
+                            <Paper
+                                elevation={2}
+                                sx={{
+                                    p: 3,
+                                    borderRadius: '1rem',
+                                    height: '100%',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between',
+                                    transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                                    '&:hover': {
+                                        transform: 'translateY(-5px)',
+                                        boxShadow: '0 10px 20px rgba(0,0,0,0.1)',
+                                    },
+                                }}
+                            >
+                                <Box>
+                                    <Typography variant="h6" component="h4" sx={{ fontWeight: 'bold', color: '#1a202c', mb: 1 }}>
+                                        {task.title}
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 0.5 }}>
+                                        {task.description}
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 0.5 }}>
+                                        Status: <Box component="span" sx={{ fontWeight: 'medium' }}>{task.status}</Box>
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 0.5 }}>
+                                        Priority: <Box component="span" sx={{ fontWeight: 'medium' }}>{task.priority}</Box>
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 0.5 }}>
+                                        Assigned To: <Box component="span" sx={{ fontWeight: 'medium' }}>{task.assigned_to_username || 'Unassigned'}</Box>
+                                    </Typography>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mb: 1.5 }}>
+                                        Due Date: <Box component="span" sx={{ fontWeight: 'medium' }}>{formatDate(task.due_date)}</Box>
+                                    </Typography>
+                                </Box>
+                                {isEditor && (
+                                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}>
+                                        <Button
+                                            variant="outlined"
+                                            size="small"
+                                            onClick={() => handleEditTaskClick(task)}
+                                            sx={{
+                                                color: '#4f46e5',
+                                                borderColor: '#4f46e5',
+                                                borderRadius: '0.5rem',
+                                                textTransform: 'none',
+                                                '&:hover': {
+                                                    backgroundColor: '#eef2ff',
+                                                    borderColor: '#4f46e5',
+                                                },
+                                            }}
+                                        >
+                                            Edit
+                                        </Button>
+                                        <Button
+                                            variant="contained"
+                                            size="small"
+                                            color="error"
+                                            onClick={() => confirmDeleteTask(task)}
+                                            startIcon={<Trash2 size={16} />}
+                                            sx={{
+                                                borderRadius: '0.5rem',
+                                                textTransform: 'none',
+                                                backgroundColor: '#ef4444',
+                                                '&:hover': {
+                                                    backgroundColor: '#dc2626',
+                                                },
+                                            }}
+                                        >
+                                            Delete
+                                        </Button>
+                                    </Box>
+                                )}
+                            </Paper>
+                        </Grid>
                     ))}
-                </div>
+                </Grid>
             )}
 
-            {showAddTaskModal && (
-                <Modal title="Add New Task" onClose={() => setShowAddTaskModal(false)}>
-                    <form onSubmit={handleCreateTask} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Title</label>
-                            <input
-                                type="text"
-                                name="title"
-                                value={newTaskData.title}
-                                onChange={handleNewTaskInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Description</label>
-                            <textarea
-                                name="description"
-                                value={newTaskData.description}
-                                onChange={handleNewTaskInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '100px' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            />
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Assigned To</label>
-                            <select
-                                name="assigned_to_user_id"
-                                value={newTaskData.assigned_to_user_id}
-                                onChange={handleNewTaskInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            >
-                                <option value="">Unassigned</option>
-                                {allUsers.map(u => (
-                                    <option key={u.id} value={u.id}>{u.username} ({u.email})</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Status</label>
-                            <select
-                                name="status"
-                                value={newTaskData.status}
-                                onChange={handleNewTaskInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            >
-                                {['To Do', 'In Progress', 'Done', 'Blocked', 'Archived'].map(s => (
-                                    <option key={s} value={s}>{s}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Priority</label>
-                            <select
-                                name="priority"
-                                value={newTaskData.priority}
-                                onChange={handleNewTaskInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            >
-                                {['Low', 'Medium', 'High', 'Critical'].map(p => (
-                                    <option key={p} value={p}>{p}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Due Date</label>
-                            <input
-                                type="datetime-local"
-                                name="due_date"
-                                value={newTaskData.due_date}
-                                onChange={handleNewTaskInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                            <button
-                                type="button"
-                                onClick={() => setShowAddTaskModal(false)}
-                                style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
-                            >
-                                Add Task
-                            </button>
-                        </div>
-                    </form>
-                </Modal>
-            )}
+            {/* Add Task Dialog */}
+            <Dialog open={addTaskModalOpen} onClose={() => setAddTaskModalOpen(false)} PaperProps={{ sx: { borderRadius: '1rem', minWidth: { xs: '90%', sm: '500px' } } }}>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#1a202c' }}>Add New Task</DialogTitle>
+                <DialogContent dividers>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        label="Title"
+                        type="text"
+                        fullWidth
+                        name="title"
+                        value={newTaskData.title}
+                        onChange={handleNewTaskInputChange}
+                        sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                        required
+                    />
+                    <TextField
+                        margin="dense"
+                        label="Description"
+                        type="text"
+                        fullWidth
+                        multiline
+                        rows={3}
+                        name="description"
+                        value={newTaskData.description}
+                        onChange={handleNewTaskInputChange}
+                        sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                    />
+                    <FormControl fullWidth margin="dense" sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}>
+                        <InputLabel>Assigned To</InputLabel>
+                        <Select
+                            name="assigned_to_user_id"
+                            value={newTaskData.assigned_to_user_id}
+                            onChange={handleNewTaskInputChange}
+                            label="Assigned To"
+                        >
+                            <MenuItem value="">Unassigned</MenuItem>
+                            {allUsers.map(userOption => (
+                                <MenuItem key={userOption.id} value={userOption.id}>
+                                    {userOption.username} ({userOption.email})
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                    <FormControl fullWidth margin="dense" sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}>
+                        <InputLabel>Status</InputLabel>
+                        <Select
+                            name="status"
+                            value={newTaskData.status}
+                            onChange={handleNewTaskInputChange}
+                            label="Status"
+                        >
+                            {['To Do', 'In Progress', 'Done', 'Blocked', 'Archived'].map(s => (
+                                <MenuItem key={s} value={s}>{s}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                    <FormControl fullWidth margin="dense" sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}>
+                        <InputLabel>Priority</InputLabel>
+                        <Select
+                            name="priority"
+                            value={newTaskData.priority}
+                            onChange={handleNewTaskInputChange}
+                            label="Priority"
+                        >
+                            {['Low', 'Medium', 'High', 'Critical'].map(p => (
+                                <MenuItem key={p} value={p}>{p}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                    <TextField
+                        margin="dense"
+                        label="Due Date"
+                        type="datetime-local"
+                        fullWidth
+                        name="due_date"
+                        value={newTaskData.due_date}
+                        onChange={handleNewTaskInputChange}
+                        InputLabelProps={{ shrink: true }}
+                        sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                    />
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setAddTaskModalOpen(false)} sx={{ color: '#4b5563', textTransform: 'none', borderRadius: '0.5rem' }}>Cancel</Button>
+                    <Button
+                        onClick={handleCreateTask}
+                        variant="contained"
+                        sx={{
+                            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                            },
+                        }}
+                    >
+                        Add Task
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
-            {showEditTaskModal && editingTask && (
-                <Modal title="Edit Task" onClose={() => setShowEditTaskModal(false)}>
-                    <form onSubmit={handleUpdateTask} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Title</label>
-                            <input
-                                type="text"
-                                name="title"
-                                value={editingTask.title}
-                                onChange={handleEditTaskInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Description</label>
-                            <textarea
-                                name="description"
-                                value={editingTask.description || ''}
-                                onChange={handleEditTaskInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', minHeight: '100px' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            />
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Assigned To</label>
-                            <select
+            {/* Edit Task Dialog */}
+            {editingTask && (
+                <Dialog open={editTaskModalOpen} onClose={() => setEditTaskModalOpen(false)} PaperProps={{ sx: { borderRadius: '1rem', minWidth: { xs: '90%', sm: '500px' } } }}>
+                    <DialogTitle sx={{ fontWeight: 'bold', color: '#1a202c' }}>Edit Task</DialogTitle>
+                    <DialogContent dividers>
+                        <TextField
+                            autoFocus
+                            margin="dense"
+                            label="Title"
+                            type="text"
+                            fullWidth
+                            name="title"
+                            value={editingTask.title}
+                            onChange={handleEditTaskInputChange}
+                            sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                            required
+                        />
+                        <TextField
+                            margin="dense"
+                            label="Description"
+                            type="text"
+                            fullWidth
+                            multiline
+                            rows={3}
+                            name="description"
+                            value={editingTask.description || ''}
+                            onChange={handleEditTaskInputChange}
+                            sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                        />
+                        <FormControl fullWidth margin="dense" sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}>
+                            <InputLabel>Assigned To</InputLabel>
+                            <Select
                                 name="assigned_to_user_id"
                                 value={editingTask.assigned_to_user_id}
                                 onChange={handleEditTaskInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
+                                label="Assigned To"
                             >
-                                <option value="">Unassigned</option>
-                                {allUsers.map(u => (
-                                    <option key={u.id} value={u.id}>{u.username} ({u.email})</option>
+                                <MenuItem value="">Unassigned</MenuItem>
+                                {allUsers.map(userOption => (
+                                    <MenuItem key={userOption.id} value={userOption.id}>
+                                        {userOption.username} ({userOption.email})
+                                    </MenuItem>
                                 ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Status</label>
-                            <select
+                            </Select>
+                        </FormControl>
+                        <FormControl fullWidth margin="dense" sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}>
+                            <InputLabel>Status</InputLabel>
+                            <Select
                                 name="status"
                                 value={editingTask.status}
                                 onChange={handleEditTaskInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
+                                label="Status"
                             >
                                 {['To Do', 'In Progress', 'Done', 'Blocked', 'Archived'].map(s => (
-                                    <option key={s} value={s}>{s}</option>
+                                    <MenuItem key={s} value={s}>{s}</MenuItem>
                                 ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Priority</label>
-                            <select
+                            </Select>
+                        </FormControl>
+                        <FormControl fullWidth margin="dense" sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}>
+                            <InputLabel>Priority</InputLabel>
+                            <Select
                                 name="priority"
                                 value={editingTask.priority}
                                 onChange={handleEditTaskInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
+                                label="Priority"
                             >
                                 {['Low', 'Medium', 'High', 'Critical'].map(p => (
-                                    <option key={p} value={p}>{p}</option>
+                                    <MenuItem key={p} value={p}>{p}</MenuItem>
                                 ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Due Date</label>
-                            <input
-                                type="datetime-local"
-                                name="due_date"
-                                value={editingTask.due_date}
-                                onChange={handleEditTaskInputChange}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                            <button
-                                type="button"
-                                onClick={() => setShowEditTaskModal(false)}
-                                style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
-                            >
-                                Update Task
-                            </button>
-                        </div>
-                    </form>
-                </Modal>
+                            </Select>
+                        </FormControl>
+                        <TextField
+                            margin="dense"
+                            label="Due Date"
+                            type="datetime-local"
+                            fullWidth
+                            name="due_date"
+                            value={editingTask.due_date}
+                            onChange={handleEditTaskInputChange}
+                            InputLabelProps={{ shrink: true }}
+                            sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                        />
+                    </DialogContent>
+                    <DialogActions sx={{ p: 2 }}>
+                        <Button onClick={() => setEditTaskModalOpen(false)} sx={{ color: '#4b5563', textTransform: 'none', borderRadius: '0.5rem' }}>Cancel</Button>
+                        <Button
+                            onClick={handleUpdateTask}
+                            variant="contained"
+                            sx={{
+                                background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                                color: '#fff',
+                                fontWeight: 600,
+                                borderRadius: '0.5rem',
+                                textTransform: 'none',
+                                '&:hover': {
+                                    background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                                },
+                            }}
+                        >
+                            Update Task
+                        </Button>
+                    </DialogActions>
+                </Dialog>
             )}
-        </div>
+
+            {/* Delete Task Confirmation Dialog */}
+            <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} PaperProps={{ sx: { borderRadius: '1rem' } }}>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#1a202c' }}>Confirm Delete</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Are you sure you want to delete the task "{taskToDelete?.title}"? This action cannot be undone.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setDeleteConfirmOpen(false)} sx={{ color: '#4b5563', textTransform: 'none', borderRadius: '0.5rem' }}>Cancel</Button>
+                    <Button
+                        onClick={handleDeleteTask}
+                        variant="contained"
+                        color="error"
+                        sx={{
+                            backgroundColor: '#ef4444',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                backgroundColor: '#dc2626',
+                            },
+                        }}
+                    >
+                        Delete
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </Box>
     );
 }
 
 // --- Collaboration Tab Component (NEW for Phase 2) ---
-function CollaborationTab({ productId, isOwner }) {
+function CollaborationTab({ productId, isOwner, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen }) {
     const { user } = useContext(AuthContext);
     const [accesses, setAccesses] = useState([]);
     const [allUsers, setAllUsers] = useState([]); // For inviting users
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [showInviteModal, setShowInviteModal] = useState(false);
+    const [inviteModalOpen, setInviteModalOpen] = useState(false);
     const [inviteEmail, setInviteEmail] = useState('');
     const [inviteRole, setInviteRole] = useState('viewer');
-    const [inviteMessage, setInviteMessage] = useState('');
+    const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
+    const [userToRemove, setUserToRemove] = useState(null);
 
     const fetchAccesses = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetcher.get(`/products/${productId}/access`);
+            const response = await api.get(`/api/products/${productId}/access`);
             setAccesses(response.data);
         } catch (err) {
             console.error('Error fetching product accesses:', err.response?.data || err.message);
             setError('Failed to fetch collaboration details.');
+            setSnackbarMessage('Failed to fetch collaboration details.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         } finally {
             setLoading(false);
         }
-    }, [productId]);
+    }, [productId, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen]);
 
     const fetchAllUsers = useCallback(async () => {
         try {
-            const response = await fetcher.get('/users');
+            const response = await api.get('/api/users');
             setAllUsers(response.data);
         } catch (err) {
             console.error('Error fetching all users:', err.response?.data || err.message);
@@ -2548,190 +3604,413 @@ function CollaborationTab({ productId, isOwner }) {
         }
     }, [user, productId, isOwner, fetchAccesses, fetchAllUsers]);
 
-    const handleInviteUser = async (e) => {
-        e.preventDefault();
-        setInviteMessage('');
-        setError(null);
+    const handleInviteUser = async () => {
+        setSnackbarOpen(false);
         try {
-            await fetcher.post(`/products/${productId}/access`, {
+            await api.post(`/api/products/${productId}/access`, {
                 user_email: inviteEmail,
                 role: inviteRole,
             });
             setInviteEmail('');
             setInviteRole('viewer');
-            setShowInviteModal(false);
-            setInviteMessage('User invited successfully!');
+            setInviteModalOpen(false);
+            setSnackbarMessage('User invited successfully!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
             fetchAccesses(); // Refresh the access list
         } catch (err) {
             console.error('Error inviting user:', err.response?.data || err.message);
-            setInviteMessage(err.response?.data?.error || 'Failed to invite user.');
-            setError(err.response?.data?.error || 'Failed to invite user.');
+            setSnackbarMessage(err.response?.data?.error || 'Failed to invite user.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
     const handleUpdateRole = async (accessId, userId, newRole) => {
-        setError(null);
+        setSnackbarOpen(false);
         try {
-            await fetcher.put(`/products/${productId}/access/${userId}`, { role: newRole });
+            await api.put(`/api/products/${productId}/access/${userId}`, { role: newRole });
+            setSnackbarMessage('User role updated!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
             fetchAccesses(); // Refresh the access list
         } catch (err) {
             console.error('Error updating user role:', err.response?.data || err.message);
-            setError(err.response?.data?.error || 'Failed to update user role.');
+            setSnackbarMessage(err.response?.data?.error || 'Failed to update user role.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
-    const handleRemoveAccess = async (userIdToRemove) => {
-        if (window.confirm('Are you sure you want to remove this user\'s access?')) {
-            setError(null);
-            try {
-                await fetcher.delete(`/products/${productId}/access/${userIdToRemove}`);
-                fetchAccesses(); // Refresh the access list
-            } catch (err) {
-                console.error('Error removing user access:', err.response?.data || err.message);
-                setError(err.response?.data?.error || 'Failed to remove user access.');
-            }
+    const confirmRemoveAccess = (access) => {
+        setUserToRemove(access);
+        setRemoveConfirmOpen(true);
+    };
+
+    const handleRemoveAccess = async () => {
+        if (!userToRemove) return;
+        setSnackbarOpen(false);
+        try {
+            await api.delete(`/api/products/${productId}/access/${userToRemove.user_id}`);
+            setRemoveConfirmOpen(false);
+            setUserToRemove(null);
+            setSnackbarMessage('User access removed!');
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+            fetchAccesses(); // Refresh the access list
+        } catch (err) {
+            console.error('Error removing user access:', err.response?.data || err.message);
+            setSnackbarMessage(err.response?.data?.error || 'Failed to remove user access.');
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
         }
     };
 
-    if (loading) return <div style={{ textAlign: 'center', marginTop: '2rem' }}>Loading collaboration details...</div>;
-    if (error) return <div style={{ textAlign: 'center', marginTop: '2rem', color: '#ef4444' }}>{error}</div>;
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
+                <CircularProgress />
+                <Typography variant="body1" sx={{ ml: 2 }}>Loading collaboration details...</Typography>
+            </Box>
+        );
+    }
+    if (error) return <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>;
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ fontSize: '1.5rem', fontWeight: 'semibold', color: '#1f2937' }}>Product Collaboration</h3>
+        <Box sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h5" component="h3" sx={{ fontWeight: 'bold', color: '#1a202c' }}>
+                    Product Collaboration
+                </Typography>
                 {isOwner && (
-                    <button
-                        onClick={() => setShowInviteModal(true)}
-                        style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#7c3aed'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#8b5cf6'; e.currentTarget.style.transform = 'scale(1)'; }}
+                    <Button
+                        variant="contained"
+                        startIcon={<Users size={20} />}
+                        onClick={() => setInviteModalOpen(true)}
+                        sx={{
+                            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                            },
+                        }}
                     >
-                        + Invite User
-                    </button>
+                        Invite User
+                    </Button>
                 )}
-            </div>
+            </Box>
 
             {accesses.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#4b5563', fontSize: '1.125rem' }}>No collaborators for this product yet.</p>
+                <Paper elevation={1} sx={{ p: 4, textAlign: 'center', borderRadius: '1rem', border: '1px dashed #cbd5e1' }}>
+                    <Typography variant="h6" color="textSecondary">
+                        No collaborators for this product yet.
+                    </Typography>
+                </Paper>
             ) : (
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ minWidth: '100%', backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '0.5rem', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)', borderCollapse: 'collapse' }}>
-                        <thead style={{ backgroundColor: '#f3f4f6' }}>
-                            <tr>
-                                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 'semibold', color: '#4b5563', borderBottom: '1px solid #e5e7eb' }}>User</th>
-                                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 'semibold', color: '#4b5563', borderBottom: '1px solid #e5e7eb' }}>Email</th>
-                                <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 'semibold', color: '#4b5563', borderBottom: '1px solid #e5e7eb' }}>Role</th>
-                                {isOwner && <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontSize: '0.875rem', fontWeight: 'semibold', color: '#4b5563', borderBottom: '1px solid #e5e7eb' }}>Actions</th>}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {accesses.map(access => (
-                                <tr key={access.id} style={{ borderTop: '1px solid #e5e7eb', transition: 'background-color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'white'}>
-                                    <td style={{ padding: '0.75rem 1rem', color: '#1f2937' }}>{access.user_username || 'N/A'}</td>
-                                    <td style={{ padding: '0.75rem 1rem', color: '#1f2937' }}>{access.user_email}</td>
-                                    <td style={{ padding: '0.75rem 1rem', color: '#1f2937' }}>
+                <TableContainer component={Paper} elevation={2} sx={{ borderRadius: '1rem', border: '1px solid #e0e7ff' }}>
+                    <Table sx={{ minWidth: 650 }} aria-label="collaboration table">
+                        <TableHead sx={{ backgroundColor: '#f0f2f5' }}>
+                            <TableRow>
+                                <TableCell sx={{ fontWeight: 'bold', color: '#2d3748' }}>User</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold', color: '#2d3748' }}>Email</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold', color: '#2d3748' }}>Role</TableCell>
+                                {isOwner && <TableCell sx={{ fontWeight: 'bold', color: '#2d3748' }}>Actions</TableCell>}
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {accesses.map((access) => (
+                                <TableRow
+                                    key={access.id}
+                                    sx={{ '&:last-child td, &:last-child th': { border: 0 }, '&:hover': { backgroundColor: '#f9fafb' } }}
+                                >
+                                    <TableCell component="th" scope="row">
+                                        {access.user_username || 'N/A'}
+                                    </TableCell>
+                                    <TableCell>{access.user_email}</TableCell>
+                                    <TableCell>
                                         {isOwner && access.user_id !== user.id ? ( // Owner can change others' roles
-                                            <select
-                                                value={access.role}
-                                                onChange={(e) => handleUpdateRole(access.id, access.user_id, e.target.value)}
-                                                style={{ border: '1px solid #d1d5db', borderRadius: '0.5rem', padding: '0.25rem 0.5rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                                            >
-                                                <option value="owner">Owner</option>
-                                                <option value="editor">Editor</option>
-                                                <option value="viewer">Viewer</option>
-                                            </select>
+                                            <FormControl variant="outlined" size="small" sx={{ minWidth: 100 }}>
+                                                <Select
+                                                    value={access.role}
+                                                    onChange={(e) => handleUpdateRole(access.id, access.user_id, e.target.value)}
+                                                    sx={{ borderRadius: '0.5rem' }}
+                                                >
+                                                    <MenuItem value="owner">Owner</MenuItem>
+                                                    <MenuItem value="editor">Editor</MenuItem>
+                                                    <MenuItem value="viewer">Viewer</MenuItem>
+                                                </Select>
+                                            </FormControl>
                                         ) : (
-                                            <span style={{ fontWeight: 'medium', textTransform: 'capitalize' }}>{access.role}</span>
+                                            <Typography sx={{ textTransform: 'capitalize' }}>{access.role}</Typography>
                                         )}
-                                    </td>
+                                    </TableCell>
                                     {isOwner && (
-                                        <td style={{ padding: '0.75rem 1rem' }}>
+                                        <TableCell>
                                             {access.user_id !== user.id && ( // Cannot remove self as owner
-                                                <button
-                                                    onClick={() => handleRemoveAccess(access.user_id)}
-                                                    style={{ backgroundColor: '#ef4444', color: 'white', fontSize: '0.875rem', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', transform: 'scale(1)', border: 'none', cursor: 'pointer' }}
-                                                    onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#dc2626'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                                                    onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#ef4444'; e.currentTarget.style.transform = 'scale(1)'; }}
+                                                <Button
+                                                    variant="outlined"
+                                                    color="error"
+                                                    size="small"
+                                                    onClick={() => confirmRemoveAccess(access)}
+                                                    startIcon={<Trash2 size={16} />}
+                                                    sx={{
+                                                        borderRadius: '0.5rem',
+                                                        textTransform: 'none',
+                                                        '&:hover': {
+                                                            backgroundColor: '#ffebeb',
+                                                        },
+                                                    }}
                                                 >
                                                     Remove
-                                                </button>
+                                                </Button>
                                             )}
-                                        </td>
+                                        </TableCell>
                                     )}
-                                </tr>
+                                </TableRow>
                             ))}
-                        </tbody>
-                    </table>
-                </div>
+                        </TableBody>
+                    </Table>
+                </TableContainer>
             )}
 
-            {showInviteModal && (
-                <Modal title="Invite User to Product" onClose={() => setShowInviteModal(false)}>
-                    <form onSubmit={handleInviteUser} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>User Email</label>
-                            <input
-                                type="email"
-                                name="user_email"
-                                value={inviteEmail}
-                                onChange={(e) => setInviteEmail(e.target.value)}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                                required
-                            />
-                            <p style={{ color: '#6b7280', fontSize: '0.75rem', marginTop: '0.25rem' }}>
-                                User must be registered in the system.
-                            </p>
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', color: '#374151', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Role</label>
-                            <select
-                                name="role"
-                                value={inviteRole}
-                                onChange={(e) => setInviteRole(e.target.value)}
-                                style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', padding: '0.5rem 0.75rem', color: '#374151', outline: 'none', transition: 'box-shadow 0.2s, border-color 0.2s', WebkitAppearance: 'none' }}
-                                onFocus={(e) => { e.target.style.borderColor = '#8b5cf6'; e.target.style.boxShadow = '0 0 0 2px rgba(139, 92, 246, 0.5)'; }}
-                                onBlur={(e) => { e.target.style.borderColor = '#d1d5db'; e.target.style.boxShadow = '0 1px 2px rgba(0,0,0,0.05)'; }}
-                            >
-                                <option value="viewer">Viewer</option>
-                                <option value="editor">Editor</option>
-                            </select>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                            <button
-                                type="button"
-                                onClick={() => setShowInviteModal(false)}
-                                style={{ backgroundColor: '#d1d5db', color: '#374151', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#9ca3af'}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#d1d5db'}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                style={{ backgroundColor: '#8b5cf6', color: 'white', fontWeight: 'bold', padding: '0.5rem 1rem', borderRadius: '0.5rem', transition: 'all 0.3s ease-in-out', border: 'none', cursor: 'pointer' }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#7c3aed'}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#8b5cf6'}
-                            >
-                                Send Invite
-                            </button>
-                        </div>
-                    </form>
-                    {inviteMessage && (
-                        <p style={{ marginTop: '1rem', textAlign: 'center', color: inviteMessage.includes('success') ? '#10b981' : '#ef4444' }}>
-                            {inviteMessage}
-                        </p>
-                    )}
-                </Modal>
-            )}
-        </div>
+            {/* Invite User Dialog */}
+            <Dialog open={inviteModalOpen} onClose={() => setInviteModalOpen(false)} PaperProps={{ sx: { borderRadius: '1rem', minWidth: { xs: '90%', sm: '400px' } } }}>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#1a202c' }}>Invite User to Product</DialogTitle>
+                <DialogContent dividers>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        label="User Email"
+                        type="email"
+                        fullWidth
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
+                        required
+                    />
+                    <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                        User must be registered in the system.
+                    </Typography>
+                    <FormControl fullWidth margin="dense" sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}>
+                        <InputLabel>Role</InputLabel>
+                        <Select
+                            value={inviteRole}
+                            onChange={(e) => setInviteRole(e.target.value)}
+                            label="Role"
+                        >
+                            <MenuItem value="viewer">Viewer</MenuItem>
+                            <MenuItem value="editor">Editor</MenuItem>
+                        </Select>
+                    </FormControl>
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setInviteModalOpen(false)} sx={{ color: '#4b5563', textTransform: 'none', borderRadius: '0.5rem' }}>Cancel</Button>
+                    <Button
+                        onClick={handleInviteUser}
+                        variant="contained"
+                        sx={{
+                            background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                            },
+                        }}
+                    >
+                        Send Invite
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Remove Access Confirmation Dialog */}
+            <Dialog open={removeConfirmOpen} onClose={() => setRemoveConfirmOpen(false)} PaperProps={{ sx: { borderRadius: '1rem' } }}>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#1a202c' }}>Confirm Remove Access</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Are you sure you want to remove access for "{userToRemove?.user_username || userToRemove?.user_email}"?
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setRemoveConfirmOpen(false)} sx={{ color: '#4b5563', textTransform: 'none', borderRadius: '0.5rem' }}>Cancel</Button>
+                    <Button
+                        onClick={handleRemoveAccess}
+                        variant="contained"
+                        color="error"
+                        sx={{
+                            backgroundColor: '#ef4444',
+                            color: '#fff',
+                            fontWeight: 600,
+                            borderRadius: '0.5rem',
+                            textTransform: 'none',
+                            '&:hover': {
+                                backgroundColor: '#dc2626',
+                            },
+                        }}
+                    >
+                        Remove
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </Box>
     );
 }
 
+
+// --- Main App Component ---
+function App() {
+    const { user, loading: authLoading } = useContext(AuthContext);
+    const [currentPage, setCurrentPage] = useState('auth'); // 'auth', 'dashboard', 'productDetail', 'settings'
+    const [selectedProductId, setSelectedProductId] = useState(null);
+
+    useEffect(() => {
+        if (!authLoading) {
+            if (user) {
+                setCurrentPage('dashboard');
+            } else {
+                setCurrentPage('auth');
+            }
+        }
+    }, [user, authLoading]);
+
+    if (authLoading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f3f4f6' }}>
+                <CircularProgress />
+                <Typography variant="h6" sx={{ ml: 2 }}>Loading application...</Typography>
+            </Box>
+        );
+    }
+
+    return (
+        <Box sx={{ fontFamily: 'Inter, sans-serif', minHeight: '100vh', backgroundColor: '#f5f7fa' }}>
+            {currentPage !== 'auth' && (
+                <AppBarComponent setCurrentPage={setCurrentPage} />
+            )}
+            <Box component="main" sx={{ pt: currentPage !== 'auth' ? 8 : 0 }}> {/* Adjust padding for AppBar */}
+                {currentPage === 'auth' && <AuthPage />}
+                {currentPage === 'dashboard' && (
+                    <DashboardPage
+                        setCurrentPage={setCurrentPage}
+                        setSelectedProductId={setSelectedProductId}
+                    />
+                )}
+                {currentPage === 'productDetail' && (
+                    <ProductDetailView
+                        productId={selectedProductId}
+                        setCurrentPage={setCurrentPage}
+                    />
+                )}
+                {currentPage === 'settings' && (
+                    <SettingsPage
+                        setCurrentPage={setCurrentPage}
+                    />
+                )}
+            </Box>
+        </Box>
+    );
+}
+
+// --- AppBar Component (Header) ---
+function AppBarComponent({ setCurrentPage }) {
+    const { user, logout } = useContext(AuthContext);
+    const [anchorEl, setAnchorEl] = useState(null);
+    const open = Boolean(anchorEl);
+
+    const handleMenu = (event) => {
+        setAnchorEl(event.currentTarget);
+    };
+
+    const handleClose = () => {
+        setAnchorEl(null);
+    };
+
+    const handleSettingsClick = () => {
+        setCurrentPage('settings');
+        handleClose();
+    };
+
+    const handleLogoutClick = () => {
+        logout();
+        setCurrentPage('auth');
+        handleClose();
+    };
+
+    return (
+        <Paper elevation={4} sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1100,
+            backgroundColor: '#ffffff',
+            borderBottom: '1px solid #e0e7ff',
+            py: 1.5,
+            px: 3,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+        }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => setCurrentPage('dashboard')}>
+                <Sparkles size={32} color="#4f46e5" style={{ marginRight: '0.5rem' }} />
+                <Typography variant="h6" component="div" sx={{ fontWeight: 'bold', color: '#1a202c' }}>
+                    Auto Product Manager
+                </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Button
+                    onClick={handleMenu}
+                    sx={{
+                        textTransform: 'none',
+                        color: '#4f46e5',
+                        fontWeight: 600,
+                        borderRadius: '0.5rem',
+                        '&:hover': {
+                            backgroundColor: '#eef2ff',
+                        },
+                    }}
+                    startIcon={<User size={20} />}
+                    endIcon={open ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                >
+                    {user?.username || 'Guest'}
+                </Button>
+                <Menu
+                    id="menu-appbar"
+                    anchorEl={anchorEl}
+                    anchorOrigin={{
+                        vertical: 'bottom',
+                        horizontal: 'right',
+                    }}
+                    keepMounted
+                    transformOrigin={{
+                        vertical: 'top',
+                        horizontal: 'right',
+                    }}
+                    open={open}
+                    onClose={handleClose}
+                    PaperProps={{
+                        sx: {
+                            borderRadius: '0.5rem',
+                            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                            mt: 1,
+                        }
+                    }}
+                >
+                    <MenuItem onClick={handleSettingsClick} sx={{ py: 1.5, px: 2, '&:hover': { backgroundColor: '#f0f2f5' } }}>
+                        <Settings size={20} style={{ marginRight: '0.75rem' }} /> Profile Settings
+                    </MenuItem>
+                    <MenuItem onClick={handleLogoutClick} sx={{ py: 1.5, px: 2, '&:hover': { backgroundColor: '#ffebeb' }, color: '#ef4444' }}>
+                        <LogOut size={20} style={{ marginRight: '0.75rem' }} /> Logout
+                    </MenuItem>
+                </Menu>
+            </Box>
+        </Paper>
+    );
+}
 
 // --- Main App Wrapper ---
 export default function MainApp() {
