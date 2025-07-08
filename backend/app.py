@@ -88,10 +88,10 @@ class User(db.Model):
     # Relationships
     products = relationship("Product", back_populates="owner")
     interview_templates = relationship("InterviewTemplate", back_populates="user")
-    # New: Tasks assigned to this user
     assigned_tasks = relationship("Task", back_populates="assigned_user", foreign_keys='Task.assigned_to_user_id')
-    # New: Product access roles for this user across different products
     product_accesses = relationship("ProductAccess", back_populates="user")
+    # NEW: Reminders created by this user
+    reminders = relationship("Reminder", back_populates="user")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -121,8 +121,9 @@ class Product(db.Model):
     is_archived = Column(Boolean, default=False, nullable=False)
     progress = Column(Integer, default=0, nullable=False) # Overall product progress
     
-    # Iteration Relationship
+    # Iteration Relationship - ENHANCED
     parent_id = Column(Integer, ForeignKey('products.id'), nullable=True)
+    iteration_number = Column(Integer, default=1, nullable=False) # Track iteration sequence
     children = relationship("Product", backref=db.backref('parent', remote_side=[id]), cascade="all, delete-orphan")
 
     # Tab/Section Statuses (for progress calculation)
@@ -142,16 +143,46 @@ class Product(db.Model):
     launch_training_json = Column(Text, nullable=True)
     important_notes_json = Column(Text, nullable=True)
     
+    # NEW: Additional content fields for missing tabs
+    feedback_json = Column(Text, nullable=True)
+    repo_links_json = Column(Text, nullable=True) # JSON array of links
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     owner = relationship("User", back_populates="products")
     customer_interviews = relationship("CustomerInterview", back_populates="product", cascade="all, delete-orphan")
-    # New: Tasks associated with this product
     tasks = relationship("Task", back_populates="product", cascade="all, delete-orphan")
-    # New: Users who have access to this product
     product_accesses = relationship("ProductAccess", back_populates="product", cascade="all, delete-orphan")
+    # NEW: Reminders for this product
+    reminders = relationship("Reminder", back_populates="product", cascade="all, delete-orphan")
+
+    def get_iteration_context(self):
+        """Get context from parent and sibling iterations for AI prompts"""
+        context = {}
+        if self.parent_id:
+            parent = Product.query.get(self.parent_id)
+            if parent:
+                context['parent'] = {
+                    'name': parent.name,
+                    'research_document': parent.research_document_json,
+                    'prd_document': parent.prd_document_json,
+                    'design_notes': parent.design_notes_json,
+                    'important_notes': parent.important_notes_json
+                }
+                # Get sibling iterations
+                siblings = Product.query.filter_by(parent_id=self.parent_id).filter(Product.id != self.id).all()
+                context['siblings'] = []
+                for sibling in siblings:
+                    context['siblings'].append({
+                        'name': sibling.name,
+                        'iteration_number': sibling.iteration_number,
+                        'research_document': sibling.research_document_json,
+                        'prd_document': sibling.prd_document_json,
+                        'important_notes': sibling.important_notes_json
+                    })
+        return context
 
     def to_dict(self):
         return {
@@ -162,6 +193,7 @@ class Product(db.Model):
             'is_archived': self.is_archived,
             'progress': self.progress,
             'parent_id': self.parent_id,
+            'iteration_number': self.iteration_number,
             'research_status': self.research_status,
             'prd_status': self.prd_status,
             'design_status': self.design_status,
@@ -175,10 +207,14 @@ class Product(db.Model):
             'tech_doc_json': self.tech_doc_json,
             'launch_training_json': self.launch_training_json,
             'important_notes_json': self.important_notes_json,
+            'feedback_json': self.feedback_json,
+            'repo_links_json': self.repo_links_json,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            # NEW: Include product_accesses in the dictionary representation
-            'product_accesses': [pa.to_dict() for pa in self.product_accesses]
+            'product_accesses': [pa.to_dict() for pa in self.product_accesses],
+            # NEW: Include children iterations
+            'children': [child.to_dict() for child in self.children] if self.children else [],
+            'parent_name': self.parent.name if self.parent else None
         }
 
 class CustomerInterview(db.Model):
@@ -244,6 +280,11 @@ class Task(db.Model):
     status = Column(String(50), default='To Do', nullable=False) # 'To Do', 'In Progress', 'Done', 'Blocked', 'Archived'
     priority = Column(String(50), default='Medium', nullable=False) # 'Low', 'Medium', 'High', 'Critical'
     due_date = Column(DateTime, nullable=True)
+    # NEW: Enhanced task fields
+    is_adhoc = Column(Boolean, default=True, nullable=False) # True for adhoc tasks, False for structured tasks
+    task_type = Column(String(50), default='General', nullable=False) # 'General', 'Bug', 'Feature', 'Research', etc.
+    estimated_hours = Column(Integer, nullable=True)
+    actual_hours = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -255,13 +296,18 @@ class Task(db.Model):
         return {
             'id': self.id,
             'product_id': self.product_id,
+            'product_name': self.product.name if self.product else None,
             'title': self.title,
             'description': self.description,
             'assigned_to_user_id': self.assigned_to_user_id,
-            'assigned_to_username': self.assigned_user.username if self.assigned_user else None, # Include username for frontend display
+            'assigned_to_username': self.assigned_user.username if self.assigned_user else None,
             'status': self.status,
             'priority': self.priority,
             'due_date': self.due_date.isoformat() if self.due_date else None,
+            'is_adhoc': self.is_adhoc,
+            'task_type': self.task_type,
+            'estimated_hours': self.estimated_hours,
+            'actual_hours': self.actual_hours,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -288,15 +334,56 @@ class ProductAccess(db.Model):
             'id': self.id,
             'product_id': self.product_id,
             'user_id': self.user_id,
-            'user_email': self.user.email, # Include user email for frontend display
-            'user_username': self.user.username, # Include username for frontend display
+            'user_email': self.user.email,
+            'user_username': self.user.username,
             'role': self.role,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
+# NEW: Reminder Model
+class Reminder(db.Model):
+    __tablename__ = 'reminders'
 
-# --- Pydantic Schemas (Adjusted for new models and columns) ---
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    product_id = Column(Integer, ForeignKey('products.id'), nullable=True) # Can be null for general reminders
+    task_id = Column(Integer, ForeignKey('tasks.id'), nullable=True) # Can be null for product-level reminders
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    reminder_type = Column(String(50), default='General', nullable=False) # 'General', 'Task', 'Product', 'Meeting'
+    reminder_date = Column(DateTime, nullable=False)
+    is_acknowledged = Column(Boolean, default=False, nullable=False)
+    is_snoozed = Column(Boolean, default=False, nullable=False)
+    snooze_until = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="reminders")
+    product = relationship("Product", back_populates="reminders")
+    task = relationship("Task")
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'product_id': self.product_id,
+            'product_name': self.product.name if self.product else None,
+            'task_id': self.task_id,
+            'task_title': self.task.title if self.task else None,
+            'title': self.title,
+            'description': self.description,
+            'reminder_type': self.reminder_type,
+            'reminder_date': self.reminder_date.isoformat() if self.reminder_date else None,
+            'is_acknowledged': self.is_acknowledged,
+            'is_snoozed': self.is_snoozed,
+            'snooze_until': self.snooze_until.isoformat() if self.snooze_until else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+# --- Pydantic Schemas (Enhanced) ---
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
@@ -326,6 +413,7 @@ class ProductBase(BaseModel):
     is_archived: Optional[bool] = False
     progress: Optional[int] = 0
     parent_id: Optional[int] = None
+    iteration_number: Optional[int] = 1
     research_status: Optional[str] = 'Not Started'
     prd_status: Optional[str] = 'Not Started'
     design_status: Optional[str] = 'Not Started'
@@ -339,6 +427,8 @@ class ProductBase(BaseModel):
     tech_doc_json: Optional[str] = None
     launch_training_json: Optional[str] = None
     important_notes_json: Optional[str] = None
+    feedback_json: Optional[str] = None
+    repo_links_json: Optional[str] = None
 
 class ProductCreate(ProductBase):
     pass
@@ -361,6 +451,8 @@ class ProductUpdate(ProductBase):
     tech_doc_json: Optional[str] = None
     launch_training_json: Optional[str] = None
     important_notes_json: Optional[str] = None
+    feedback_json: Optional[str] = None
+    repo_links_json: Optional[str] = None
 
 class ProductResponse(ProductBase):
     id: int
@@ -371,6 +463,45 @@ class ProductResponse(ProductBase):
     class Config:
         from_attributes = True
 
+# NEW: Iteration Creation Schema
+class IterationCreate(BaseModel):
+    parent_id: int
+    name: str
+    description: Optional[str] = None
+
+class ReminderBase(BaseModel):
+    product_id: Optional[int] = None
+    task_id: Optional[int] = None
+    title: str
+    description: Optional[str] = None
+    reminder_type: Optional[str] = 'General'
+    reminder_date: datetime
+
+class ReminderCreate(ReminderBase):
+    pass
+
+class ReminderUpdate(ReminderBase):
+    title: Optional[str] = None
+    reminder_date: Optional[datetime] = None
+    is_acknowledged: Optional[bool] = None
+    is_snoozed: Optional[bool] = None
+    snooze_until: Optional[datetime] = None
+
+class ReminderResponse(ReminderBase):
+    id: int
+    user_id: int
+    product_name: Optional[str] = None
+    task_title: Optional[str] = None
+    is_acknowledged: bool
+    is_snoozed: bool
+    snooze_until: Optional[datetime] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+# Keep existing schemas for other models...
 class CustomerInterviewBase(BaseModel):
     product_id: int
     customer_name: str
@@ -426,21 +557,30 @@ class TaskBase(BaseModel):
     status: Optional[str] = 'To Do'
     priority: Optional[str] = 'Medium'
     due_date: Optional[datetime] = None
+    is_adhoc: Optional[bool] = True
+    task_type: Optional[str] = 'General'
+    estimated_hours: Optional[int] = None
+    actual_hours: Optional[int] = None
 
 class TaskCreate(TaskBase):
     pass
 
 class TaskUpdate(TaskBase):
-    product_id: Optional[int] = None # Product ID should not be updated for an existing task
+    product_id: Optional[int] = None
     title: Optional[str] = None
     description: Optional[str] = None
     assigned_to_user_id: Optional[int] = None
     status: Optional[str] = None
     priority: Optional[str] = None
     due_date: Optional[datetime] = None
+    is_adhoc: Optional[bool] = None
+    task_type: Optional[str] = None
+    estimated_hours: Optional[int] = None
+    actual_hours: Optional[int] = None
 
 class TaskResponse(TaskBase):
     id: int
+    product_name: Optional[str] = None
     assigned_to_username: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -710,11 +850,18 @@ def create_product(current_user):
 
     # Handle parent_id for iteration items
     parent_id = data.get('parent_id')
+    iteration_number = 1
+    
     if parent_id:
         # Check if parent product exists and current user has access to it (e.g., owner or editor)
         can_access_parent, msg = check_product_access(current_user.id, parent_id, required_role='editor')
         if not can_access_parent:
             return jsonify({"error": f"Parent product not found or {msg}"}), 404
+        
+        # Calculate next iteration number
+        existing_iterations = Product.query.filter_by(parent_id=parent_id).all()
+        if existing_iterations:
+            iteration_number = max([p.iteration_number for p in existing_iterations]) + 1
 
     new_product = Product(
         user_id=current_user.id, # Owner is the creator
@@ -723,6 +870,7 @@ def create_product(current_user):
         is_archived=data.get('is_archived', False),
         progress=data.get('progress', 0),
         parent_id=parent_id,
+        iteration_number=iteration_number,
         research_status=data.get('research_status', 'Not Started'),
         prd_status=data.get('prd_status', 'Not Started'),
         design_status=data.get('design_status', 'Not Started'),
@@ -735,7 +883,9 @@ def create_product(current_user):
         dev_specs_json=data.get('dev_specs_json'),
         tech_doc_json=data.get('tech_doc_json'),
         launch_training_json=data.get('launch_training_json'),
-        important_notes_json=data.get('important_notes_json')
+        important_notes_json=data.get('important_notes_json'),
+        feedback_json=data.get('feedback_json'),
+        repo_links_json=data.get('repo_links_json')
     )
     db.session.add(new_product)
     db.session.commit()
@@ -746,6 +896,50 @@ def create_product(current_user):
     db.session.commit()
 
     return jsonify(new_product.to_dict()), 201
+
+# NEW: Create Iteration Endpoint
+@app.route('/api/products/<int:product_id>/iterations', methods=['POST'])
+@token_required
+def create_iteration(current_user, product_id):
+    """Creates a new iteration for a product."""
+    can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='editor')
+    if not can_access:
+        return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+    
+    parent_product = product_or_msg
+    data = request.json
+    
+    if not data or 'name' not in data:
+        return jsonify({"error": "Iteration name is required"}), 400
+
+    # Calculate next iteration number
+    existing_iterations = Product.query.filter_by(parent_id=product_id).all()
+    iteration_number = max([p.iteration_number for p in existing_iterations]) + 1 if existing_iterations else 1
+
+    # Create iteration with context from parent
+    iteration_name = data['name']
+    if not iteration_name.startswith(f"{parent_product.name} - Iteration"):
+        iteration_name = f"{parent_product.name} - Iteration {iteration_number}: {iteration_name}"
+
+    new_iteration = Product(
+        user_id=current_user.id,
+        name=iteration_name,
+        status='Active',
+        parent_id=product_id,
+        iteration_number=iteration_number,
+        # Copy some context from parent if needed
+        important_notes_json=data.get('description', f"Iteration {iteration_number} of {parent_product.name}")
+    )
+    
+    db.session.add(new_iteration)
+    db.session.commit()
+
+    # Grant owner access to the creator
+    owner_access = ProductAccess(product_id=new_iteration.id, user_id=current_user.id, role='owner')
+    db.session.add(owner_access)
+    db.session.commit()
+
+    return jsonify(new_iteration.to_dict()), 201
 
 @app.route('/api/products/<int:product_id>', methods=['GET'])
 @token_required
@@ -774,7 +968,8 @@ def update_product(current_user, product_id):
         'research_status', 'prd_status', 'design_status', 'development_status',
         'tech_doc_status', 'launch_training_status',
         'research_document_json', 'prd_document_json', 'design_notes_json',
-        'dev_specs_json', 'tech_doc_json', 'launch_training_json', 'important_notes_json'
+        'dev_specs_json', 'tech_doc_json', 'launch_training_json', 'important_notes_json',
+        'feedback_json', 'repo_links_json'
     ]:
         if field in data:
             setattr(product, field, data[field])
@@ -816,14 +1011,14 @@ def delete_product(current_user, product_id):
     db.session.commit()
     return jsonify({"message": "Product deleted successfully"}), 204
 
-# --- AI Specific Endpoints ---
+# --- AI Specific Endpoints (Enhanced with iteration context) ---
 
 @app.route('/api/generate-research-document', methods=['POST'])
 @token_required
 def generate_research_document(current_user):
     """
     Generates a research document using Google Gemini Flash based on user input and updates the product.
-    Expects JSON with 'product_id', 'prompt_text', and potentially 'scraped_data'.
+    Enhanced with iteration context.
     """
     data = request.json
     product_id = data.get('product_id')
@@ -839,11 +1034,28 @@ def generate_research_document(current_user):
     
     product = product_or_msg
 
-    # Construct the prompt for Gemini
+    # Get iteration context if this is an iteration
+    context = product.get_iteration_context()
+    
+    # Construct the prompt for Gemini with iteration context
     full_prompt = f"Based on the following idea: '{prompt_text}'"
+    
+    if context.get('parent'):
+        full_prompt += f"\n\nThis is an iteration of the parent product '{context['parent']['name']}'. "
+        full_prompt += f"Parent research: {context['parent']['research_document'] or 'No parent research available'}"
+        
+        if context.get('siblings'):
+            full_prompt += f"\n\nPrevious iterations:"
+            for sibling in context['siblings']:
+                full_prompt += f"\n- {sibling['name']} (Iteration {sibling['iteration_number']}): {sibling['research_document'] or 'No research'}"
+    
     if scraped_data:
         full_prompt += f"\n\nAlso consider this scraped market data: {scraped_data}"
+    
     full_prompt += "\n\nGenerate a comprehensive market research document including analysis of similar features/functionalities in other software, competitor analysis (how they solve it, pricing, limitations), an ideal plan for the user, and how it differentiates from others. Structure it clearly."
+    
+    if context.get('parent'):
+        full_prompt += " Consider the parent product context and previous iterations to build upon existing research."
 
     try:
         response = model.generate_content([full_prompt])
@@ -868,7 +1080,7 @@ def generate_research_document(current_user):
 def generate_prd_document(current_user):
     """
     Generates a PRD document using Google Gemini Flash based on research data and user input.
-    Expects JSON with 'product_id', 'user_requirements', 'prd_structure_confirmation'.
+    Enhanced with iteration context.
     """
     data = request.json
     product_id = data.get('product_id')
@@ -886,16 +1098,36 @@ def generate_prd_document(current_user):
 
     # Use existing research document if available
     research_data = product.research_document_json if product.research_document_json else "No research document available."
+    
+    # Get iteration context
+    context = product.get_iteration_context()
 
-    # Construct the prompt for Gemini
+    # Construct the prompt for Gemini with iteration context
     full_prompt = (
         f"Generate a Product Requirements Document (PRD) based on the following research data:\n"
         f"{research_data}\n\n"
         f"User-specific requirements and additional details:\n"
         f"{user_requirements}\n\n"
         f"The user has confirmed the following PRD structure: {prd_structure_confirmation}\n\n"
-        f"Include sections like Problem Statement, Goals, Target Audience, Features (with text descriptions of sample wireframes if relevant), Non-Functional Requirements, Success Metrics, and Future Considerations. Ensure the tone is professional and comprehensive."
     )
+    
+    if context.get('parent'):
+        full_prompt += f"This is an iteration of the parent product '{context['parent']['name']}'. "
+        full_prompt += f"Parent PRD: {context['parent']['prd_document'] or 'No parent PRD available'}\n\n"
+        
+        if context.get('siblings'):
+            full_prompt += f"Previous iterations:\n"
+            for sibling in context['siblings']:
+                full_prompt += f"- {sibling['name']} (Iteration {sibling['iteration_number']}): {sibling['prd_document'] or 'No PRD'}\n"
+            full_prompt += "\n"
+    
+    full_prompt += (
+        f"Include sections like Problem Statement, Goals, Target Audience, Features (with text descriptions of sample wireframes if relevant), "
+        f"Non-Functional Requirements, Success Metrics, and Future Considerations. Ensure the tone is professional and comprehensive."
+    )
+    
+    if context.get('parent'):
+        full_prompt += " Consider the parent product context and previous iterations to build upon existing PRDs and avoid duplication."
 
     try:
         response = model.generate_content([full_prompt])
@@ -915,7 +1147,7 @@ def generate_prd_document(current_user):
             return jsonify({"error": f"Failed to generate PRD document: {e.response.text}"}), 500
         return jsonify({"error": "Failed to generate PRD document. Please try again later."}), 500
 
-# --- API Routes for Customer Interviews ---
+# --- API Routes for Customer Interviews (Keep existing) ---
 @app.route('/api/customer_interviews', methods=['POST'])
 @token_required
 def create_customer_interview(current_user):
@@ -1052,7 +1284,7 @@ def generate_interview_summary(current_user):
             return jsonify({"error": f"Failed to generate summary: {e.response.text}"}), 500
         return jsonify({"error": "Failed to generate summary. Please try again later."}), 500
 
-# --- API Routes for Interview Templates ---
+# --- API Routes for Interview Templates (Keep existing) ---
 @app.route('/api/interview_templates', methods=['POST'])
 @token_required
 def create_interview_template(current_user):
@@ -1140,13 +1372,69 @@ def generate_interview_questions(current_user):
         return jsonify({"error": "Failed to generate questions. Please try again later."}), 500
 
 
-# --- API Routes for Tasks ---
+# --- API Routes for Tasks (Enhanced) ---
+
+@app.route('/api/tasks', methods=['GET'])
+@token_required
+def get_all_tasks(current_user):
+    """Get all tasks across all products the user has access to."""
+    # Get all products the user has access to
+    owned_products = Product.query.filter_by(user_id=current_user.id).all()
+    accessed_products_ids = [pa.product_id for pa in current_user.product_accesses]
+    accessed_products = Product.query.filter(Product.id.in_(accessed_products_ids)).all()
+    
+    all_products = {p.id: p for p in owned_products}
+    for p in accessed_products:
+        all_products[p.id] = p
+    
+    product_ids = list(all_products.keys())
+    
+    # Get all tasks from these products
+    tasks = Task.query.filter(Task.product_id.in_(product_ids)).order_by(Task.due_date.asc().nullslast(), Task.priority.desc()).all()
+    
+    return jsonify([task.to_dict() for task in tasks])
+
+@app.route('/api/tasks/my-day', methods=['GET'])
+@token_required
+def get_my_day_tasks(current_user):
+    """Get tasks and reminders for today - My Day view."""
+    today = datetime.utcnow().date()
+    tomorrow = today + timedelta(days=1)
+    
+    # Get all products the user has access to
+    owned_products = Product.query.filter_by(user_id=current_user.id).all()
+    accessed_products_ids = [pa.product_id for pa in current_user.product_accesses]
+    accessed_products = Product.query.filter(Product.id.in_(accessed_products_ids)).all()
+    
+    all_products = {p.id: p for p in owned_products}
+    for p in accessed_products:
+        all_products[p.id] = p
+    
+    product_ids = list(all_products.keys())
+    
+    # Get tasks due today or overdue
+    tasks_today = Task.query.filter(
+        Task.product_id.in_(product_ids),
+        Task.due_date <= tomorrow,
+        Task.status.in_(['To Do', 'In Progress', 'Blocked'])
+    ).order_by(Task.priority.desc(), Task.due_date.asc()).all()
+    
+    # Get reminders for today
+    reminders_today = Reminder.query.filter(
+        Reminder.user_id == current_user.id,
+        Reminder.reminder_date <= tomorrow,
+        Reminder.is_acknowledged == False
+    ).order_by(Reminder.reminder_date.asc()).all()
+    
+    return jsonify({
+        'tasks': [task.to_dict() for task in tasks_today],
+        'reminders': [reminder.to_dict() for reminder in reminders_today]
+    })
 
 @app.route('/api/products/<int:product_id>/tasks', methods=['POST'])
 @token_required
-def create_task(current_user):
+def create_task(current_user, product_id):
     """Creates a new task for a specific product, checking editor access."""
-    product_id = request.json.get('product_id') # Get product_id from request body for check_product_access
     can_access, product_or_msg = check_product_access(current_user.id, product_id, required_role='editor')
     if not can_access:
         return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
@@ -1162,7 +1450,11 @@ def create_task(current_user):
         assigned_to_user_id=data.get('assigned_to_user_id'),
         status=data.get('status', 'To Do'),
         priority=data.get('priority', 'Medium'),
-        due_date=datetime.fromisoformat(data['due_date']) if data.get('due_date') else None
+        due_date=datetime.fromisoformat(data['due_date']) if data.get('due_date') else None,
+        is_adhoc=data.get('is_adhoc', True),
+        task_type=data.get('task_type', 'General'),
+        estimated_hours=data.get('estimated_hours'),
+        actual_hours=data.get('actual_hours')
     )
     db.session.add(new_task)
     db.session.commit()
@@ -1208,7 +1500,7 @@ def update_task(current_user, task_id):
         return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
 
     data = request.json
-    for field in ['title', 'description', 'assigned_to_user_id', 'status', 'priority']:
+    for field in ['title', 'description', 'assigned_to_user_id', 'status', 'priority', 'is_adhoc', 'task_type', 'estimated_hours', 'actual_hours']:
         if field in data:
             setattr(task, field, data[field])
     
@@ -1241,7 +1533,124 @@ def delete_task(current_user, task_id):
     db.session.commit()
     return jsonify({"message": "Task deleted"}), 204
 
-# --- API Routes for Product Collaboration / Access Control ---
+# --- NEW: API Routes for Reminders ---
+
+@app.route('/api/reminders', methods=['GET'])
+@token_required
+def get_reminders(current_user):
+    """Get all reminders for the current user."""
+    reminders = Reminder.query.filter_by(user_id=current_user.id).order_by(Reminder.reminder_date.asc()).all()
+    return jsonify([reminder.to_dict() for reminder in reminders])
+
+@app.route('/api/reminders', methods=['POST'])
+@token_required
+def create_reminder(current_user):
+    """Create a new reminder."""
+    data = request.json
+    if not data or 'title' not in data or 'reminder_date' not in data:
+        return jsonify({"error": "Title and reminder date are required"}), 400
+
+    # Validate product access if product_id is provided
+    if data.get('product_id'):
+        can_access, product_or_msg = check_product_access(current_user.id, data['product_id'], required_role='viewer')
+        if not can_access:
+            return jsonify({"error": product_or_msg}), 403 if "Access denied" in product_or_msg else 404
+
+    try:
+        reminder_date = datetime.fromisoformat(data['reminder_date'])
+    except ValueError:
+        return jsonify({"error": "Invalid date format for reminder_date. Use ISO format (YYYY-MM-DDTHH:MM:SS)."}), 400
+
+    new_reminder = Reminder(
+        user_id=current_user.id,
+        product_id=data.get('product_id'),
+        task_id=data.get('task_id'),
+        title=data['title'],
+        description=data.get('description'),
+        reminder_type=data.get('reminder_type', 'General'),
+        reminder_date=reminder_date
+    )
+    db.session.add(new_reminder)
+    db.session.commit()
+    return jsonify(new_reminder.to_dict()), 201
+
+@app.route('/api/reminders/<int:reminder_id>', methods=['PUT'])
+@token_required
+def update_reminder(current_user, reminder_id):
+    """Update a reminder."""
+    reminder = Reminder.query.filter_by(id=reminder_id, user_id=current_user.id).first()
+    if not reminder:
+        return jsonify({"error": "Reminder not found or unauthorized"}), 404
+
+    data = request.json
+    for field in ['title', 'description', 'reminder_type', 'is_acknowledged', 'is_snoozed']:
+        if field in data:
+            setattr(reminder, field, data[field])
+    
+    if 'reminder_date' in data and data['reminder_date'] is not None:
+        try:
+            reminder.reminder_date = datetime.fromisoformat(data['reminder_date'])
+        except ValueError:
+            return jsonify({"error": "Invalid date format for reminder_date. Use ISO format (YYYY-MM-DDTHH:MM:SS)."}), 400
+    
+    if 'snooze_until' in data and data['snooze_until'] is not None:
+        try:
+            reminder.snooze_until = datetime.fromisoformat(data['snooze_until'])
+        except ValueError:
+            return jsonify({"error": "Invalid date format for snooze_until. Use ISO format (YYYY-MM-DDTHH:MM:SS)."}), 400
+
+    db.session.commit()
+    return jsonify(reminder.to_dict())
+
+@app.route('/api/reminders/<int:reminder_id>', methods=['DELETE'])
+@token_required
+def delete_reminder(current_user, reminder_id):
+    """Delete a reminder."""
+    reminder = Reminder.query.filter_by(id=reminder_id, user_id=current_user.id).first()
+    if not reminder:
+        return jsonify({"error": "Reminder not found or unauthorized"}), 404
+    
+    db.session.delete(reminder)
+    db.session.commit()
+    return jsonify({"message": "Reminder deleted"}), 204
+
+@app.route('/api/reminders/<int:reminder_id>/acknowledge', methods=['POST'])
+@token_required
+def acknowledge_reminder(current_user, reminder_id):
+    """Acknowledge a reminder."""
+    reminder = Reminder.query.filter_by(id=reminder_id, user_id=current_user.id).first()
+    if not reminder:
+        return jsonify({"error": "Reminder not found or unauthorized"}), 404
+    
+    reminder.is_acknowledged = True
+    reminder.is_snoozed = False
+    reminder.snooze_until = None
+    db.session.commit()
+    return jsonify(reminder.to_dict())
+
+@app.route('/api/reminders/<int:reminder_id>/snooze', methods=['POST'])
+@token_required
+def snooze_reminder(current_user, reminder_id):
+    """Snooze a reminder."""
+    reminder = Reminder.query.filter_by(id=reminder_id, user_id=current_user.id).first()
+    if not reminder:
+        return jsonify({"error": "Reminder not found or unauthorized"}), 404
+    
+    data = request.json
+    if not data or 'snooze_until' not in data:
+        return jsonify({"error": "snooze_until date is required"}), 400
+    
+    try:
+        snooze_until = datetime.fromisoformat(data['snooze_until'])
+    except ValueError:
+        return jsonify({"error": "Invalid date format for snooze_until. Use ISO format (YYYY-MM-DDTHH:MM:SS)."}), 400
+    
+    reminder.is_snoozed = True
+    reminder.snooze_until = snooze_until
+    db.session.commit()
+    return jsonify(reminder.to_dict())
+
+# --- API Routes for Product Collaboration / Access Control (Keep existing) ---
 
 @app.route('/api/products/<int:product_id>/access', methods=['GET'])
 @token_required
