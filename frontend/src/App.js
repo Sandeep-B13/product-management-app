@@ -33,14 +33,22 @@ import {
     Tabs, 
     Tab, 
     Menu, 
-    Collapse 
+    Collapse,
+    Divider, // Added for ProductDetail Component
+    Chip, // Added for ProductDetail Component
+    Avatar, // Added for ProductDetail Component
+    ListItemAvatar, // Added for ProductDetail Component
+    FormHelperText // Added for ProductDetail Component
 } from '@mui/material';
 
 // Importing Lucide icons
 import { 
     Eye, EyeOff, ArrowRight, Sparkles, Zap, Users, BarChart3, Trash2, Plus, 
     Archive, ArchiveRestore, MessageSquare, CheckCircle, Search, User, Settings, 
-    LogOut, ChevronDown, ChevronUp, ArrowLeft, Mic, Send, Edit, Save, X, PlusCircle
+    LogOut, ChevronDown, ChevronUp, ArrowLeft, Mic, Send, Edit, Save, X, PlusCircle,
+    Copy, ExternalLink, RefreshCw, Loader, TrendingUp, TrendingDown, Clock, Calendar,
+    UserPlus, Mail, CalendarDays, BookOpen, ClipboardList, Package, MessageCircle,
+    Info, Kanban, GitFork, FileText
 } from 'lucide-react'; 
 
 // Define the API URL for your backend.
@@ -221,7 +229,7 @@ function AuthPage({ setIsLoggedIn, setAuthMessage, setUserName: setAppUserName, 
                 setSnackbarOpen(true);
                 setLoading(false);
                 return;
-            }
+                }
         }
 
         try {
@@ -783,46 +791,38 @@ function SettingsPage({
     );
 }
 
-// --- Main App Component ---
-function App() {
-    const [products, setProducts] = useState([]); 
-    const [selectedProduct, setSelectedProduct] = useState(null);
-    const [newProductName, setNewProductName] = useState('');
-    const [loading, setLoading] = useState(false);
+// Helper function for TabPanel content
+const TabPanel = (props) => {
+    const { children, value, index, ...other } = props;
+    return (
+        <div
+            role="tabpanel"
+            hidden={value !== index}
+            id={`product-tabpanel-${index}`}
+            aria-labelledby={`product-tab-${index}`}
+            {...other}
+            style={{ flexGrow: 1, display: value === index ? 'flex' : 'none', flexDirection: 'column', overflowY: 'auto' }}
+        >
+            {value === index && (
+                <Box sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+                    {children}
+                </Box>
+            )}
+        </div>
+    );
+};
+
+// --- ProductDetail Component ---
+function ProductDetail({ productId, onBackButtonClick, setSnackbarOpen, setSnackbarMessage, setSnackbarSeverity, userName, userTimezone }) {
+    const [product, setProduct] = useState(null);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [snackbarOpen, setSnackbarOpen] = useState(false);
-    const [snackbarMessage, setSnackbarMessage] = useState('');
-    const [snackbarSeverity, setSnackbarSeverity] = useState('success');
-
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
-    const [authMessage, setAuthMessage] = useState(''); 
-
-    // State for new product modal
-    const [showAddProductModal, setShowAddProductModal] = useState(false);
-    const [newProductStatus, setNewProductStatus] = useState('Active'); // Default status
-    const [newProductParentId, setNewProductParentId] = useState(''); // For iteration items
-
-    // State for delete confirmation modal
-    const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
-    const [productToDeleteId, setProductToDeleteId] = useState(null);
-
-    // State for search and sort/filter
-    const [searchTerm, setSearchTerm] = useState('');
-    const [sortBy, setSortBy] = useState('newest'); 
-    const [filterByStatus, setFilterByStatus] = useState('All'); // Filter by overall product status
-
-    // State for Profile Menu
-    const [anchorElProfileMenu, setAnchorElProfileMenu] = useState(null);
-    const openProfileMenu = Boolean(anchorElProfileMenu);
-
-    // State for Settings Page navigation
-    const [currentPage, setCurrentPage] = useState('dashboard'); 
-
-    const [userName, setUserName] = useState('User'); 
-    const [userTimezone, setUserTimezone] = useState('UTC+05:30 (Chennai)'); 
-
-    const [quoteOfTheDay, setQuoteOfTheDay] = useState('');
-    const [quoteEmoji, setQuoteEmoji] = useState('💡'); 
+    const [selectedProductTab, setSelectedProductTab] = useState(0);
+    const [isEditingName, setIsEditingName] = useState(false);
+    const [editedProductName, setEditedProductName] = useState('');
+    const [isEditingDescription, setIsEditingDescription] = useState(false);
+    const [editedProductDescription, setEditedProductDescription] = useState('');
+    const [isSavingProductDetails, setIsSavingProductDetails] = useState(false);
 
     // AI Chat states for Research Tab
     const [researchChatHistory, setResearchChatHistory] = useState([]);
@@ -854,8 +854,1262 @@ function App() {
     const [selectedTemplate, setSelectedTemplate] = useState(null);
     const [isTemplateAILoading, setIsTemplateAILoading] = useState(false);
 
-    // Current active tab for product details
-    const [selectedProductTab, setSelectedProductTab] = useState(0); 
+
+    const token = localStorage.getItem('token');
+
+    const fetchProductDetails = useCallback(async () => {
+        if (!productId || !token) return;
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await axios.get(`${API_URL}/api/products/${productId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setProduct(response.data);
+            setEditedProductName(response.data.name);
+            setEditedProductDescription(response.data.description || '');
+
+            // Initialize document data for tabs
+            setResearchDocumentData(response.data.research_doc || { blocks: [] });
+            setPrdDocumentData(response.data.prd_doc || { blocks: [] });
+            
+            // Initialize chat history
+            setResearchChatHistory(response.data.research_chat_history || []);
+            setPrdChatHistory(response.data.prd_chat_history || []);
+
+        } catch (err) {
+            console.error("Failed to fetch product details:", err);
+            setError("Failed to load product details.");
+            setSnackbarMessage("Failed to load product details.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setLoading(false);
+        }
+    }, [productId, token, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen]);
+
+    const fetchCustomerInterviews = useCallback(async () => {
+        if (!productId || !token) return;
+        try {
+            const response = await axios.get(`${API_URL}/api/products/${productId}/interviews`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setCustomerInterviews(response.data);
+        } catch (err) {
+            console.error("Failed to fetch customer interviews:", err);
+            setSnackbarMessage("Failed to load customer interviews.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        }
+    }, [productId, token, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen]);
+
+    const fetchInterviewTemplates = useCallback(async () => {
+        if (!token) return;
+        try {
+            const response = await axios.get(`${API_URL}/api/interview-templates`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setInterviewTemplates(response.data);
+        } catch (err) {
+            console.error("Failed to fetch interview templates:", err);
+            setSnackbarMessage("Failed to load interview templates.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        }
+    }, [token, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen]);
+
+
+    useEffect(() => {
+        fetchProductDetails();
+        fetchCustomerInterviews();
+        fetchInterviewTemplates();
+    }, [fetchProductDetails, fetchCustomerInterviews, fetchInterviewTemplates]);
+
+
+    const handleSaveProductDetails = async () => {
+        setIsSavingProductDetails(true);
+        try {
+            const updatedProduct = {
+                name: editedProductName,
+                description: editedProductDescription,
+            };
+            await axios.put(`${API_URL}/api/products/${productId}`, updatedProduct, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setProduct(prev => ({ ...prev, name: editedProductName, description: editedProductDescription }));
+            setIsEditingName(false);
+            setIsEditingDescription(false);
+            setSnackbarMessage("Product details updated successfully!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Failed to update product details:", err);
+            setSnackbarMessage("Failed to update product details.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setIsSavingProductDetails(false);
+        }
+    };
+
+    const handleTabChange = (event, newValue) => {
+        setSelectedProductTab(newValue);
+    };
+
+    // AI Chat Functions (Research Tab)
+    const handleResearchPromptChange = (e) => setCurrentResearchPrompt(e.target.value);
+
+    const sendResearchPrompt = async () => {
+        if (!currentResearchPrompt.trim()) return;
+
+        const newChatEntry = {
+            role: 'user',
+            content: currentResearchPrompt,
+            timestamp: new Date().toISOString()
+        };
+        const updatedChatHistory = [...researchChatHistory, newChatEntry];
+        setResearchChatHistory(updatedChatHistory);
+        setCurrentResearchPrompt('');
+        setIsResearchAILoading(true);
+
+        try {
+            const response = await axios.post(`${API_URL}/api/products/${productId}/research_chat`, {
+                prompt: currentResearchPrompt,
+                history: researchChatHistory, // Send the full history for context
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const aiResponse = {
+                role: 'ai',
+                content: response.data.response,
+                timestamp: new Date().toISOString()
+            };
+            setResearchChatHistory(prev => [...prev, aiResponse]);
+        } catch (err) {
+            console.error("Error sending research prompt:", err);
+            setSnackbarMessage("Error getting AI response for research. Please try again.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+            setResearchChatHistory(prev => [...prev, { role: 'ai', content: 'Error: Could not get a response.', timestamp: new Date().toISOString() }]);
+        } finally {
+            setIsResearchAILoading(false);
+        }
+    };
+
+    const regenerateResearchResponse = async (promptToRegenerate, historyBeforePrompt) => {
+        setIsResearchAILoading(true);
+        // Temporarily remove the last AI response if it was an error
+        setResearchChatHistory(historyBeforePrompt);
+
+        try {
+            const response = await axios.post(`${API_URL}/api/products/${productId}/research_chat`, {
+                prompt: promptToRegenerate,
+                history: historyBeforePrompt, // Send history up to the point of regeneration
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const aiResponse = {
+                role: 'ai',
+                content: response.data.response,
+                timestamp: new Date().toISOString()
+            };
+            setResearchChatHistory(prev => [...prev, aiResponse]);
+            setSnackbarMessage("AI response regenerated!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Error regenerating research response:", err);
+            setSnackbarMessage("Failed to regenerate AI response for research.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+            setResearchChatHistory(prev => [...prev, { role: 'ai', content: 'Error: Could not regenerate response.', timestamp: new Date().toISOString() }]);
+        } finally {
+            setIsResearchAILoading(false);
+        }
+    };
+
+    const handleSaveResearchDocument = useCallback(async (data) => {
+        setResearchDocumentData(data);
+        try {
+            await axios.put(`${API_URL}/api/products/${productId}/research_doc`, { content: data }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setSnackbarMessage("Research document saved!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Error saving research document:", err);
+            setSnackbarMessage("Failed to save research document.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        }
+    }, [productId, token, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen]);
+
+    // AI Chat Functions (PRD Tab)
+    const handlePrdPromptChange = (e) => setCurrentPrdPrompt(e.target.value);
+
+    const sendPrdPrompt = async () => {
+        if (!currentPrdPrompt.trim()) return;
+
+        const newChatEntry = {
+            role: 'user',
+            content: currentPrdPrompt,
+            timestamp: new Date().toISOString()
+        };
+        const updatedChatHistory = [...prdChatHistory, newChatEntry];
+        setPrdChatHistory(updatedChatHistory);
+        setCurrentPrdPrompt('');
+        setIsPrdAILoading(true);
+
+        try {
+            const response = await axios.post(`${API_URL}/api/products/${productId}/prd_chat`, {
+                prompt: currentPrdPrompt,
+                history: prdChatHistory, // Send the full history for context
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const aiResponse = {
+                role: 'ai',
+                content: response.data.response,
+                timestamp: new Date().toISOString()
+            };
+            setPrdChatHistory(prev => [...prev, aiResponse]);
+        } catch (err) {
+            console.error("Error sending PRD prompt:", err);
+            setSnackbarMessage("Error getting AI response for PRD. Please try again.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+            setPrdChatHistory(prev => [...prev, { role: 'ai', content: 'Error: Could not get a response.', timestamp: new Date().toISOString() }]);
+        } finally {
+            setIsPrdAILoading(false);
+        }
+    };
+
+    const regeneratePrdResponse = async (promptToRegenerate, historyBeforePrompt) => {
+        setIsPrdAILoading(true);
+        setPrdChatHistory(historyBeforePrompt);
+
+        try {
+            const response = await axios.post(`${API_URL}/api/products/${productId}/prd_chat`, {
+                prompt: promptToRegenerate,
+                history: historyBeforePrompt,
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const aiResponse = {
+                role: 'ai',
+                content: response.data.response,
+                timestamp: new Date().toISOString()
+            };
+            setPrdChatHistory(prev => [...prev, aiResponse]);
+            setSnackbarMessage("AI response regenerated!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Error regenerating PRD response:", err);
+            setSnackbarMessage("Failed to regenerate AI response for PRD.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+            setPrdChatHistory(prev => [...prev, { role: 'ai', content: 'Error: Could not regenerate response.', timestamp: new Date().toISOString() }]);
+        } finally {
+            setIsPrdAILoading(false);
+        }
+    };
+
+    const handleSavePrdDocument = useCallback(async (data) => {
+        setPrdDocumentData(data);
+        try {
+            await axios.put(`${API_URL}/api/products/${productId}/prd_doc`, { content: data }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setSnackbarMessage("PRD document saved!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Error saving PRD document:", err);
+            setSnackbarMessage("Failed to save PRD document.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        }
+    }, [productId, token, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen]);
+
+
+    // Customer Interview Functions
+    const handleAddInterview = async () => {
+        if (!newInterviewCustomerName || !newInterviewCustomerEmail || !newInterviewDate) {
+            setSnackbarMessage("Please fill all fields for the interview.");
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
+            return;
+        }
+        try {
+            const response = await axios.post(`${API_URL}/api/products/${productId}/interviews`, {
+                customer_name: newInterviewCustomerName,
+                customer_email: newInterviewCustomerEmail,
+                interview_date: newInterviewDate,
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setCustomerInterviews(prev => [...prev, response.data]);
+            setShowAddInterviewModal(false);
+            setNewInterviewCustomerName('');
+            setNewInterviewCustomerEmail('');
+            setNewInterviewDate(new Date().toISOString().slice(0, 16));
+            setSnackbarMessage("Customer interview added successfully!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Failed to add interview:", err);
+            setSnackbarMessage("Failed to add customer interview.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        }
+    };
+
+    const handleSelectInterview = async (interviewId) => {
+        try {
+            const response = await axios.get(`${API_URL}/api/interviews/${interviewId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setSelectedInterview(response.data);
+            setInterviewNotesData(response.data.notes || { blocks: [] });
+            setInterviewSummaryData(response.data.summary || { blocks: [] });
+        } catch (err) {
+            console.error("Failed to fetch interview details:", err);
+            setSnackbarMessage("Failed to load interview details.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        }
+    };
+
+    const handleDeleteInterview = async (interviewId) => {
+        try {
+            await axios.delete(`${API_URL}/api/interviews/${interviewId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setCustomerInterviews(prev => prev.filter(interview => interview.id !== interviewId));
+            if (selectedInterview && selectedInterview.id === interviewId) {
+                setSelectedInterview(null);
+                setInterviewNotesData(null);
+                setInterviewSummaryData(null);
+            }
+            setSnackbarMessage("Interview deleted successfully!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Failed to delete interview:", err);
+            setSnackbarMessage("Failed to delete interview.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        }
+    };
+
+    const handleSaveInterviewNotes = useCallback(async (data) => {
+        if (!selectedInterview) return;
+        setInterviewNotesData(data);
+        try {
+            await axios.put(`${API_URL}/api/interviews/${selectedInterview.id}/notes`, { content: data }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setSnackbarMessage("Interview notes saved!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Error saving interview notes:", err);
+            setSnackbarMessage("Failed to save interview notes.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        }
+    }, [selectedInterview, token, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen]);
+
+    const generateInterviewSummary = async () => {
+        if (!selectedInterview || !interviewNotesData) {
+            setSnackbarMessage("No interview notes to summarize.");
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
+            return;
+        }
+        setIsTemplateAILoading(true); // Reusing this loading state
+        try {
+            const response = await axios.post(`${API_URL}/api/interviews/${selectedInterview.id}/summarize`, {
+                notes_content: interviewNotesData,
+                user_timezone: userTimezone // Pass user's timezone for accurate time representation in summary
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setInterviewSummaryData(response.data.summary);
+            setSnackbarMessage("Interview summary generated!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Failed to generate summary:", err);
+            setSnackbarMessage("Failed to generate interview summary.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setIsTemplateAILoading(false);
+        }
+    };
+
+    // Interview Template Functions
+    const handleAddTemplate = async () => {
+        if (!templateName || !templateQuestionsData) {
+            setSnackbarMessage("Please fill all fields for the template.");
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
+            return;
+        }
+        try {
+            const response = await axios.post(`${API_URL}/api/interview-templates`, {
+                name: templateName,
+                questions: templateQuestionsData
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setInterviewTemplates(prev => [...prev, response.data]);
+            setShowTemplateModal(false);
+            setTemplateName('');
+            setTemplateQuestionsData(null);
+            setSnackbarMessage("Interview template added successfully!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Failed to add template:", err);
+            setSnackbarMessage("Failed to add interview template.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        }
+    };
+
+    const handleDeleteTemplate = async (templateId) => {
+        try {
+            await axios.delete(`${API_URL}/api/interview-templates/${templateId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setInterviewTemplates(prev => prev.filter(template => template.id !== templateId));
+            if (selectedTemplate && selectedTemplate.id === templateId) {
+                setSelectedTemplate(null);
+                setTemplateQuestionsData(null);
+            }
+            setSnackbarMessage("Template deleted successfully!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Failed to delete template:", err);
+            setSnackbarMessage("Failed to delete template.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        }
+    };
+
+    const handleSelectTemplate = (template) => {
+        setSelectedTemplate(template);
+        setTemplateName(template.name);
+        setTemplateQuestionsData(template.questions);
+        setShowTemplateModal(true); // Open modal for editing/viewing
+    };
+
+    const handleSaveTemplateQuestions = useCallback(async (data) => {
+        if (!selectedTemplate) return; // Should not happen if coming from handleSelectTemplate
+        setTemplateQuestionsData(data);
+        try {
+            await axios.put(`${API_URL}/api/interview-templates/${selectedTemplate.id}`, { name: templateName, questions: data }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setSnackbarMessage("Template questions saved!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+            fetchInterviewTemplates(); // Refresh list to show updated template name if changed
+        } catch (err) {
+            console.error("Error saving template questions:", err);
+            setSnackbarMessage("Failed to save template questions.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        }
+    }, [selectedTemplate, templateName, token, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen, fetchInterviewTemplates]);
+
+    const generateQuestionsFromTemplate = async () => {
+        if (!templateName) {
+            setSnackbarMessage("Please enter a template name to generate questions.");
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
+            return;
+        }
+        setIsTemplateAILoading(true);
+        try {
+            const response = await axios.post(`${API_URL}/api/interview-templates/generate_questions`, {
+                template_name: templateName,
+                product_name: product?.name, // Pass product context
+                product_description: product?.description // Pass product context
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setTemplateQuestionsData(response.data.questions);
+            setSnackbarMessage("Questions generated from template!");
+            setSnackbarSeverity('success');
+            setSnackbarOpen(true);
+        } catch (err) {
+            console.error("Failed to generate questions from template:", err);
+            setSnackbarMessage("Failed to generate questions from template.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+        } finally {
+            setIsTemplateAILoading(false);
+        }
+    };
+
+    const handleUseTemplate = () => {
+        if (selectedInterview && templateQuestionsData) {
+            setInterviewNotesData(templateQuestionsData);
+            setSnackbarMessage("Template questions copied to current interview notes!");
+            setSnackbarSeverity('info');
+            setSnackbarOpen(true);
+            // Optionally, save notes immediately or prompt user to save
+            handleSaveInterviewNotes(templateQuestionsData);
+        } else {
+            setSnackbarMessage("Select an interview and a template first.");
+            setSnackbarSeverity('warning');
+            setSnackbarOpen(true);
+        }
+        setShowTemplateModal(false); // Close the template modal after using
+    };
+
+
+    if (loading) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column' }}>
+                <CircularProgress sx={{ color: '#4f46e5' }} />
+                <Typography sx={{ mt: 2, color: '#6b7280' }}>Loading product details...</Typography>
+            </Box>
+        );
+    }
+
+    if (error) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', p: 3 }}>
+                <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+                <Button onClick={onBackButtonClick} variant="contained" startIcon={<ArrowLeft />} sx={{ textTransform: 'none', backgroundColor: '#4f46e5', '&:hover': { backgroundColor: '#4338ca' } }}>
+                    Back to Dashboard
+                </Button>
+            </Box>
+        );
+    }
+
+    if (!product) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', p: 3 }}>
+                <Typography variant="h6" color="text.secondary">No product selected or found.</Typography>
+                <Button onClick={onBackButtonClick} variant="contained" startIcon={<ArrowLeft />} sx={{ mt: 2, textTransform: 'none', backgroundColor: '#4f46e5', '&:hover': { backgroundColor: '#4338ca' } }}>
+                    Back to Dashboard
+                </Button>
+            </Box>
+        );
+    }
+
+    const totalProgress = PRODUCT_TABS_ORDER.reduce((sum, tabName, index) => {
+        const productTabName = tabName.toLowerCase().replace(/ /g, '_');
+        const isCompleted = product?.completed_tabs?.[productTabName];
+        return sum + (isCompleted ? TAB_PROGRESS_PERCENTAGES[tabName] : 0);
+    }, 0);
+
+    return (
+        <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            height: '100vh', 
+            fontFamily: 'Inter, sans-serif', 
+            bgcolor: '#f9fafb',
+            overflowY: 'auto' 
+        }}>
+            <Box sx={{ p: 3, pb: 0, borderBottom: '1px solid #e0e7ff', bgcolor: '#fff', position: 'sticky', top: 0, zIndex: 1000 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                    <IconButton onClick={onBackButtonClick} sx={{ mr: 2, color: '#4f46e5' }}>
+                        <ArrowLeft size={24} />
+                    </IconButton>
+                    <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center' }}>
+                        {isEditingName ? (
+                            <TextField
+                                value={editedProductName}
+                                onChange={(e) => setEditedProductName(e.target.value)}
+                                onBlur={handleSaveProductDetails}
+                                onKeyPress={(e) => {
+                                    if (e.key === 'Enter') {
+                                        handleSaveProductDetails();
+                                        e.target.blur();
+                                    }
+                                }}
+                                autoFocus
+                                size="small"
+                                sx={{ 
+                                    minWidth: '200px', 
+                                    '.MuiOutlinedInput-notchedOutline': { border: 'none' },
+                                    '.MuiInputBase-input': { p: 0, fontWeight: 'bold', fontSize: '1.875rem' }
+                                }}
+                            />
+                        ) : (
+                            <Typography 
+                                variant="h4" 
+                                component="h1" 
+                                sx={{ 
+                                    fontWeight: 'bold', 
+                                    color: '#111827', 
+                                    cursor: 'pointer', 
+                                    '&:hover': { color: '#4f46e5' } 
+                                }}
+                                onClick={() => setIsEditingName(true)}
+                            >
+                                {product.name}
+                            </Typography>
+                        )}
+                        {isSavingProductDetails && <CircularProgress size={20} sx={{ ml: 2, color: '#4f46e5' }} />}
+                    </Box>
+                    <Chip 
+                        label={product.status} 
+                        sx={{ 
+                            ml: 2, 
+                            fontWeight: 'bold', 
+                            color: '#fff', 
+                            backgroundColor: product.status === 'Active' ? '#22c55e' : '#ef4444' 
+                        }} 
+                    />
+                </Box>
+                {isEditingDescription ? (
+                    <TextField
+                        value={editedProductDescription}
+                        onChange={(e) => setEditedProductDescription(e.target.value)}
+                        onBlur={handleSaveProductDetails}
+                        onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                                handleSaveProductDetails();
+                                e.target.blur();
+                            }
+                        }}
+                        multiline
+                        fullWidth
+                        size="small"
+                        sx={{ 
+                            mt: 1, 
+                            '.MuiOutlinedInput-notchedOutline': { border: 'none' },
+                            '.MuiInputBase-input': { p: 0, fontSize: '0.975rem', color: '#4b5563' }
+                        }}
+                    />
+                ) : (
+                    <Typography 
+                        variant="body1" 
+                        sx={{ 
+                            color: '#4b5563', 
+                            mb: 2, 
+                            cursor: 'pointer', 
+                            '&:hover': { color: '#4f46e5' } 
+                        }}
+                        onClick={() => setIsEditingDescription(true)}
+                    >
+                        {product.description || "Add a product description..."}
+                    </Typography>
+                )}
+
+                <LinearProgress 
+                    variant="determinate" 
+                    value={totalProgress} 
+                    sx={{ 
+                        height: 8, 
+                        borderRadius: 5, 
+                        mb: 2, 
+                        bgcolor: '#e0e7ff', 
+                        '& .MuiLinearProgress-bar': { bgcolor: '#4f46e5' } 
+                    }} 
+                />
+                <Typography variant="body2" sx={{ color: '#4b5563', textAlign: 'right', mb: 2 }}>
+                    Overall Progress: {totalProgress}%
+                </Typography>
+
+                <Tabs 
+                    value={selectedProductTab} 
+                    onChange={handleTabChange} 
+                    variant="scrollable" 
+                    scrollButtons="auto"
+                    aria-label="product detail tabs"
+                    sx={{
+                        '& .MuiTabs-indicator': { backgroundColor: '#4f46e5' },
+                        '& .MuiTab-root': {
+                            textTransform: 'none',
+                            fontWeight: 'bold',
+                            color: '#6b7280',
+                            '&.Mui-selected': {
+                                color: '#4f46e5',
+                            },
+                        },
+                    }}
+                >
+                    {PRODUCT_TABS_ORDER.map((tabName, index) => (
+                        <Tab 
+                            key={tabName} 
+                            label={tabName} 
+                            id={`product-tab-${index}`} 
+                            aria-controls={`product-tabpanel-${index}`} 
+                            icon={
+                                product?.completed_tabs?.[tabName.toLowerCase().replace(/ /g, '_')] ? <CheckCircle size={16} /> : null
+                            }
+                            iconPosition="end"
+                        />
+                    ))}
+                </Tabs>
+            </Box>
+
+            {/* Tab Panels */}
+            <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
+                {/* Research Tab */}
+                <TabPanel value={selectedProductTab} index={0}>
+                    <Grid container spacing={3} sx={{ flexGrow: 1 }}>
+                        <Grid item xs={12} md={6} sx={{ display: 'flex', flexDirection: 'column' }}>
+                            <Paper elevation={1} sx={{ p: 3, mb: 3, flexShrink: 0, bgcolor: '#f0f4ff', borderRadius: '0.75rem' }}>
+                                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', color: '#374151' }}>
+                                    <MessageSquare size={20} style={{ marginRight: '0.5rem' }} /> AI Research Chat
+                                </Typography>
+                                <Box sx={{ 
+                                    height: '300px', 
+                                    overflowY: 'auto', 
+                                    mb: 2, 
+                                    border: '1px solid #e0e7ff', 
+                                    borderRadius: '0.5rem', 
+                                    p: 2, 
+                                    bgcolor: '#fff',
+                                    display: 'flex',
+                                    flexDirection: 'column-reverse' // Show latest messages at bottom
+                                }}>
+                                    {researchChatHistory.slice().reverse().map((msg, index) => (
+                                        <Box 
+                                            key={index} 
+                                            sx={{ 
+                                                mb: 1, 
+                                                p: 1.5, 
+                                                borderRadius: '0.75rem', 
+                                                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                                                bgcolor: msg.role === 'user' ? '#e0e7ff' : '#f3f4f6',
+                                                color: msg.role === 'user' ? '#374151' : '#1f2937',
+                                                maxWidth: '80%',
+                                                textAlign: msg.role === 'user' ? 'right' : 'left'
+                                            }}
+                                        >
+                                            <Typography variant="caption" sx={{ fontSize: '0.7rem', color: '#6b7280', display: 'block', mb: 0.5 }}>
+                                                {msg.role === 'user' ? userName : 'AI'} @ {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                            </Typography>
+                                            <Typography variant="body2">{msg.content}</Typography>
+                                            {msg.role === 'ai' && msg.content.includes("Error:") && (
+                                                <Button 
+                                                    size="small" 
+                                                    startIcon={<RefreshCw size={14} />} 
+                                                    onClick={() => regenerateResearchResponse(researchChatHistory[researchChatHistory.indexOf(msg) - 1]?.content, researchChatHistory.slice(0, researchChatHistory.indexOf(msg) - 1))}
+                                                    sx={{ mt: 1, textTransform: 'none', fontSize: '0.75rem', color: '#4f46e5' }}
+                                                >
+                                                    Retry
+                                                </Button>
+                                            )}
+                                        </Box>
+                                    ))}
+                                    {isResearchAILoading && (
+                                        <Box sx={{ display: 'flex', alignItems: 'center', p: 1.5, borderRadius: '0.75rem', bgcolor: '#f3f4f6', color: '#1f2937', maxWidth: '80%', alignSelf: 'flex-start' }}>
+                                            <CircularProgress size={16} sx={{ mr: 1, color: '#4f46e5' }} />
+                                            <Typography variant="body2">AI is typing...</Typography>
+                                        </Box>
+                                    )}
+                                </Box>
+                                <TextField
+                                    fullWidth
+                                    variant="outlined"
+                                    placeholder="Ask the AI about market research, user needs, etc."
+                                    value={currentResearchPrompt}
+                                    onChange={handleResearchPromptChange}
+                                    onKeyPress={(e) => { if (e.key === 'Enter') sendResearchPrompt(); }}
+                                    InputProps={{
+                                        endAdornment: (
+                                            <InputAdornment position="end">
+                                                <IconButton onClick={sendResearchPrompt} disabled={isResearchAILoading}>
+                                                    {isResearchAILoading ? <CircularProgress size={20} /> : <Send size={20} />}
+                                                </IconButton>
+                                            </InputAdornment>
+                                        ),
+                                    }}
+                                />
+                            </Paper>
+                        </Grid>
+                        <Grid item xs={12} md={6} sx={{ display: 'flex', flexDirection: 'column' }}>
+                            <Paper elevation={1} sx={{ p: 3, flexGrow: 1, bgcolor: '#fff', borderRadius: '0.75rem', display: 'flex', flexDirection: 'column' }}>
+                                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', color: '#374151' }}>
+                                    <BookOpen size={20} style={{ marginRight: '0.5rem' }} /> Research Document
+                                </Typography>
+                                <Box sx={{ flexGrow: 1, minHeight: '300px' }}>
+                                    <Editor 
+                                        initialData={researchDocumentData} 
+                                        onChange={handleSaveResearchDocument} 
+                                        holder={`research-editor-${productId}`} 
+                                    />
+                                </Box>
+                            </Paper>
+                        </Grid>
+                    </Grid>
+                </TabPanel>
+
+                {/* PRD Tab */}
+                <TabPanel value={selectedProductTab} index={1}>
+                    <Grid container spacing={3} sx={{ flexGrow: 1 }}>
+                        <Grid item xs={12} md={6} sx={{ display: 'flex', flexDirection: 'column' }}>
+                            <Paper elevation={1} sx={{ p: 3, mb: 3, flexShrink: 0, bgcolor: '#f0f4ff', borderRadius: '0.75rem' }}>
+                                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', color: '#374151' }}>
+                                    <MessageSquare size={20} style={{ marginRight: '0.5rem' }} /> AI PRD Chat
+                                </Typography>
+                                <Box sx={{ 
+                                    height: '300px', 
+                                    overflowY: 'auto', 
+                                    mb: 2, 
+                                    border: '1px solid #e0e7ff', 
+                                    borderRadius: '0.5rem', 
+                                    p: 2, 
+                                    bgcolor: '#fff',
+                                    display: 'flex',
+                                    flexDirection: 'column-reverse'
+                                }}>
+                                    {prdChatHistory.slice().reverse().map((msg, index) => (
+                                        <Box 
+                                            key={index} 
+                                            sx={{ 
+                                                mb: 1, 
+                                                p: 1.5, 
+                                                borderRadius: '0.75rem', 
+                                                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                                                bgcolor: msg.role === 'user' ? '#e0e7ff' : '#f3f4f6',
+                                                color: msg.role === 'user' ? '#374151' : '#1f2937',
+                                                maxWidth: '80%',
+                                                textAlign: msg.role === 'user' ? 'right' : 'left'
+                                            }}
+                                        >
+                                            <Typography variant="caption" sx={{ fontSize: '0.7rem', color: '#6b7280', display: 'block', mb: 0.5 }}>
+                                                {msg.role === 'user' ? userName : 'AI'} @ {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                            </Typography>
+                                            <Typography variant="body2">{msg.content}</Typography>
+                                            {msg.role === 'ai' && msg.content.includes("Error:") && (
+                                                <Button 
+                                                    size="small" 
+                                                    startIcon={<RefreshCw size={14} />} 
+                                                    onClick={() => regeneratePrdResponse(prdChatHistory[prdChatHistory.indexOf(msg) - 1]?.content, prdChatHistory.slice(0, prdChatHistory.indexOf(msg) - 1))}
+                                                    sx={{ mt: 1, textTransform: 'none', fontSize: '0.75rem', color: '#4f46e5' }}
+                                                >
+                                                    Retry
+                                                </Button>
+                                            )}
+                                        </Box>
+                                    ))}
+                                    {isPrdAILoading && (
+                                        <Box sx={{ display: 'flex', alignItems: 'center', p: 1.5, borderRadius: '0.75rem', bgcolor: '#f3f4f6', color: '#1f2937', maxWidth: '80%', alignSelf: 'flex-start' }}>
+                                            <CircularProgress size={16} sx={{ mr: 1, color: '#4f46e5' }} />
+                                            <Typography variant="body2">AI is typing...</Typography>
+                                        </Box>
+                                    )}
+                                </Box>
+                                <TextField
+                                    fullWidth
+                                    variant="outlined"
+                                    placeholder="Ask the AI to help with PRD sections, requirements, etc."
+                                    value={currentPrdPrompt}
+                                    onChange={handlePrdPromptChange}
+                                    onKeyPress={(e) => { if (e.key === 'Enter') sendPrdPrompt(); }}
+                                    InputProps={{
+                                        endAdornment: (
+                                            <InputAdornment position="end">
+                                                <IconButton onClick={sendPrdPrompt} disabled={isPrdAILoading}>
+                                                    {isPrdAILoading ? <CircularProgress size={20} /> : <Send size={20} />}
+                                                </IconButton>
+                                            </InputAdornment>
+                                        ),
+                                    }}
+                                />
+                            </Paper>
+                        </Grid>
+                        <Grid item xs={12} md={6} sx={{ display: 'flex', flexDirection: 'column' }}>
+                            <Paper elevation={1} sx={{ p: 3, flexGrow: 1, bgcolor: '#fff', borderRadius: '0.75rem', display: 'flex', flexDirection: 'column' }}>
+                                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', color: '#374151' }}>
+                                    <FileText size={20} style={{ marginRight: '0.5rem' }} /> Product Requirements Document (PRD)
+                                </Typography>
+                                <Box sx={{ flexGrow: 1, minHeight: '300px' }}>
+                                    <Editor 
+                                        initialData={prdDocumentData} 
+                                        onChange={handleSavePrdDocument} 
+                                        holder={`prd-editor-${productId}`} 
+                                    />
+                                </Box>
+                            </Paper>
+                        </Grid>
+                    </Grid>
+                </TabPanel>
+
+                {/* Design Tab - Placeholder */}
+                <TabPanel value={selectedProductTab} index={2}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        <Typography variant="h5" sx={{ mb: 2, color: '#6b7280' }}>Design Collaboration Coming Soon!</Typography>
+                        <Typography variant="body1" sx={{ color: '#9ca3af', textAlign: 'center', maxWidth: '600px' }}>
+                            This section will integrate with design tools and allow you to manage your product's UI/UX.
+                        </Typography>
+                    </Box>
+                </TabPanel>
+
+                {/* Development Tab - Placeholder */}
+                <TabPanel value={selectedProductTab} index={3}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        <Typography variant="h5" sx={{ mb: 2, color: '#6b7280' }}>Development Tracking Coming Soon!</Typography>
+                        <Typography variant="body1" sx={{ color: '#9ca3af', textAlign: 'center', maxWidth: '600px' }}>
+                            Track development progress, link to repositories, and manage sprints directly from here.
+                        </Typography>
+                    </Box>
+                </TabPanel>
+
+                {/* Tech Documentation Tab - Placeholder */}
+                <TabPanel value={selectedProductTab} index={4}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        <Typography variant="h5" sx={{ mb: 2, color: '#6b7280' }}>Technical Documentation Hub Coming Soon!</Typography>
+                        <Typography variant="body1" sx={{ color: '#9ca3af', textAlign: 'center', maxWidth: '600px' }}>
+                            Generate and manage technical specifications, API docs, and architecture diagrams automatically.
+                        </Typography>
+                    </Box>
+                </TabPanel>
+
+                {/* Launch and Training Tab - Placeholder */}
+                <TabPanel value={selectedProductTab} index={5}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        <Typography variant="h5" sx={{ mb: 2, color: '#6b7280' }}>Launch & Training Planning Coming Soon!</Typography>
+                        <Typography variant="body1" sx={{ color: '#9ca3af', textAlign: 'center', maxWidth: '600px' }}>
+                            Plan your product launch, create training materials, and manage go-to-market strategies.
+                        </Typography>
+                    </Box>
+                </TabPanel>
+
+                {/* Feedback Tab */}
+                <TabPanel value={selectedProductTab} index={6}>
+                    <Grid container spacing={3} sx={{ flexGrow: 1 }}>
+                        <Grid item xs={12} md={6} sx={{ display: 'flex', flexDirection: 'column' }}>
+                            <Paper elevation={1} sx={{ p: 3, flexGrow: 1, bgcolor: '#fff', borderRadius: '0.75rem', display: 'flex', flexDirection: 'column' }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                    <Typography variant="h6" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', color: '#374151' }}>
+                                        <Users size={20} style={{ marginRight: '0.5rem' }} /> Customer Interviews
+                                    </Typography>
+                                    <Button 
+                                        variant="contained" 
+                                        startIcon={<PlusCircle size={18} />} 
+                                        onClick={() => setShowAddInterviewModal(true)}
+                                        sx={{ textTransform: 'none', backgroundColor: '#4f46e5', '&:hover': { backgroundColor: '#4338ca' } }}
+                                    >
+                                        Add Interview
+                                    </Button>
+                                </Box>
+                                <List sx={{ flexGrow: 1, overflowY: 'auto', border: '1px solid #e0e7ff', borderRadius: '0.5rem' }}>
+                                    {customerInterviews.length === 0 ? (
+                                        <ListItem>
+                                            <ListItemText primary="No interviews yet. Add your first customer interview!" sx={{ color: '#6b7280', textAlign: 'center', py: 3 }} />
+                                        </ListItem>
+                                    ) : (
+                                        customerInterviews.map(interview => (
+                                            <ListItem 
+                                                key={interview.id} 
+                                                secondaryAction={
+                                                    <IconButton edge="end" aria-label="delete" onClick={() => handleDeleteInterview(interview.id)}>
+                                                        <Trash2 size={20} color="#ef4444" />
+                                                    </IconButton>
+                                                }
+                                                onClick={() => handleSelectInterview(interview.id)}
+                                                sx={{ 
+                                                    '&:hover': { backgroundColor: '#f5f3ff', cursor: 'pointer' },
+                                                    bgcolor: selectedInterview?.id === interview.id ? '#eef2ff' : 'transparent'
+                                                }}
+                                            >
+                                                <ListItemAvatar>
+                                                    <Avatar sx={{ bgcolor: '#e0e7ff', color: '#4f46e5' }}>{interview.customer_name.charAt(0).toUpperCase()}</Avatar>
+                                                </ListItemAvatar>
+                                                <ListItemText 
+                                                    primary={interview.customer_name} 
+                                                    secondary={`${interview.customer_email} - ${new Date(interview.interview_date).toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`} 
+                                                />
+                                            </ListItem>
+                                        ))
+                                    )}
+                                </List>
+                            </Paper>
+                        </Grid>
+                        <Grid item xs={12} md={6} sx={{ display: 'flex', flexDirection: 'column' }}>
+                            <Paper elevation={1} sx={{ p: 3, flexGrow: 1, bgcolor: '#fff', borderRadius: '0.75rem', display: 'flex', flexDirection: 'column' }}>
+                                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', color: '#374151' }}>
+                                    <ClipboardList size={20} style={{ marginRight: '0.5rem' }} /> Interview Notes
+                                </Typography>
+                                {selectedInterview ? (
+                                    <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+                                        <Typography variant="body2" sx={{ color: '#6b7280', mb: 1 }}>
+                                            Notes for: <Typography component="span" sx={{ fontWeight: 'bold' }}>{selectedInterview.customer_name}</Typography>
+                                        </Typography>
+                                        <Box sx={{ flexGrow: 1, minHeight: '200px', mb: 2 }}>
+                                            <Editor 
+                                                initialData={interviewNotesData} 
+                                                onChange={handleSaveInterviewNotes} 
+                                                holder={`interview-notes-editor-${selectedInterview.id}`} 
+                                            />
+                                        </Box>
+                                        <Button 
+                                            variant="outlined" 
+                                            startIcon={isTemplateAILoading ? <CircularProgress size={18} /> : <Sparkles size={18} />} 
+                                            onClick={generateInterviewSummary}
+                                            disabled={isTemplateAILoading || !interviewNotesData || interviewNotesData?.blocks?.length === 0}
+                                            sx={{ textTransform: 'none', borderColor: '#4f46e5', color: '#4f46e5', '&:hover': { bgcolor: '#eef2ff' } }}
+                                        >
+                                            Generate AI Summary
+                                        </Button>
+                                        {interviewSummaryData && (
+                                            <Box sx={{ mt: 3, borderTop: '1px solid #e0e7ff', pt: 3 }}>
+                                                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', color: '#374151' }}>
+                                                    <MessageCircle size={20} style={{ marginRight: '0.5rem' }} /> AI Summary
+                                                </Typography>
+                                                <Editor initialData={interviewSummaryData} readOnly={true} holder={`interview-summary-editor-${selectedInterview.id}`} />
+                                            </Box>
+                                        )}
+                                    </Box>
+                                ) : (
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexGrow: 1, color: '#6b7280' }}>
+                                        <Info size={48} color="#d1d5db" />
+                                        <Typography variant="body1" sx={{ mt: 2 }}>Select an interview to view/edit notes and generate summary.</Typography>
+                                    </Box>
+                                )}
+                            </Paper>
+                        </Grid>
+                    </Grid>
+                </TabPanel>
+
+                {/* Tasks Tab - Placeholder */}
+                <TabPanel value={selectedProductTab} index={7}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        <Typography variant="h5" sx={{ mb: 2, color: '#6b7280' }}>Task Management Coming Soon!</Typography>
+                        <Typography variant="body1" sx={{ color: '#9ca3af', textAlign: 'center', maxWidth: '600px' }}>
+                            Manage all tasks related to your product, assign team members, and track deadlines.
+                        </Typography>
+                    </Box>
+                </TabPanel>
+
+                {/* Repo Tab - Placeholder */}
+                <TabPanel value={selectedProductTab} index={8}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        <Typography variant="h5" sx={{ mb: 2, color: '#6b7280' }}>Repository Integration Coming Soon!</Typography>
+                        <Typography variant="body1" sx={{ color: '#9ca3af', textAlign: 'center', maxWidth: '600px' }}>
+                            Connect your code repositories to view commits, branches, and pull requests.
+                        </Typography>
+                    </Box>
+                </TabPanel>
+
+                {/* Important Notes Tab - Placeholder */}
+                <TabPanel value={selectedProductTab} index={9}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                        <Typography variant="h5" sx={{ mb: 2, color: '#6b7280' }}>Important Notes Coming Soon!</Typography>
+                        <Typography variant="body1" sx={{ color: '#9ca3af', textAlign: 'center', maxWidth: '600px' }}>
+                            A dedicated space for crucial product notes, decisions, and knowledge base articles.
+                        </Typography>
+                    </Box>
+                </TabPanel>
+            </Box>
+
+            {/* Add/Edit Interview Modal */}
+            <Dialog open={showAddInterviewModal} onClose={() => setShowAddInterviewModal(false)} PaperProps={{ sx: { borderRadius: '1rem' } }}>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#111827' }}>Add New Customer Interview</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        id="customer-name"
+                        label="Customer Name"
+                        type="text"
+                        fullWidth
+                        variant="outlined"
+                        value={newInterviewCustomerName}
+                        onChange={(e) => setNewInterviewCustomerName(e.target.value)}
+                        sx={{ mb: 2 }}
+                    />
+                    <TextField
+                        margin="dense"
+                        id="customer-email"
+                        label="Customer Email"
+                        type="email"
+                        fullWidth
+                        variant="outlined"
+                        value={newInterviewCustomerEmail}
+                        onChange={(e) => setNewInterviewCustomerEmail(e.target.value)}
+                        sx={{ mb: 2 }}
+                    />
+                    <TextField
+                        margin="dense"
+                        id="interview-date"
+                        label="Interview Date & Time"
+                        type="datetime-local"
+                        fullWidth
+                        variant="outlined"
+                        value={newInterviewDate}
+                        onChange={(e) => setNewInterviewDate(e.target.value)}
+                        InputLabelProps={{
+                            shrink: true,
+                        }}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setShowAddInterviewModal(false)} sx={{ color: '#6b7280', textTransform: 'none' }}>Cancel</Button>
+                    <Button 
+                        onClick={handleAddInterview} 
+                        variant="contained" 
+                        sx={{ textTransform: 'none', backgroundColor: '#4f46e5', '&:hover': { backgroundColor: '#4338ca' } }}
+                    >
+                        Add Interview
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Interview Template Modal */}
+            <Dialog open={showTemplateModal} onClose={() => setShowTemplateModal(false)} PaperProps={{ sx: { borderRadius: '1rem', width: '100%', maxWidth: '800px' } }}>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#111827' }}>
+                    {selectedTemplate ? "Edit Interview Template" : "New Interview Template"}
+                </DialogTitle>
+                <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column' }}>
+                    <TextField
+                        autoFocus
+                        margin="dense"
+                        id="template-name"
+                        label="Template Name"
+                        type="text"
+                        fullWidth
+                        variant="outlined"
+                        value={templateName}
+                        onChange={(e) => setTemplateName(e.target.value)}
+                        sx={{ mb: 2 }}
+                    />
+                    <Box sx={{ flexGrow: 1, minHeight: '300px', mb: 2 }}>
+                        <Editor 
+                            initialData={templateQuestionsData} 
+                            onChange={setTemplateQuestionsData} 
+                            holder={`template-editor-${selectedTemplate?.id || 'new'}`} 
+                        />
+                    </Box>
+                    <Button 
+                        variant="outlined" 
+                        startIcon={isTemplateAILoading ? <CircularProgress size={18} /> : <Sparkles size={18} />} 
+                        onClick={generateQuestionsFromTemplate}
+                        disabled={isTemplateAILoading || !templateName.trim()}
+                        sx={{ textTransform: 'none', borderColor: '#4f46e5', color: '#4f46e5', '&:hover': { bgcolor: '#eef2ff' }, mb: 2 }}
+                    >
+                        Generate Questions with AI
+                    </Button>
+                    <Divider sx={{ mb: 2 }} />
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, display: 'flex', alignItems: 'center', color: '#374151' }}>
+                        <BookOpen size={20} style={{ marginRight: '0.5rem' }} /> Existing Templates
+                    </Typography>
+                    <List sx={{ border: '1px solid #e0e7ff', borderRadius: '0.5rem', maxHeight: '200px', overflowY: 'auto' }}>
+                        {interviewTemplates.length === 0 ? (
+                            <ListItem>
+                                <ListItemText primary="No templates created yet." sx={{ color: '#6b7280', textAlign: 'center', py: 1 }} />
+                            </ListItem>
+                        ) : (
+                            interviewTemplates.map(template => (
+                                <ListItem
+                                    key={template.id}
+                                    secondaryAction={
+                                        <IconButton edge="end" aria-label="delete" onClick={() => handleDeleteTemplate(template.id)}>
+                                            <Trash2 size={20} color="#ef4444" />
+                                        </IconButton>
+                                    }
+                                    onClick={() => handleSelectTemplate(template)}
+                                    sx={{ 
+                                        '&:hover': { backgroundColor: '#f5f3ff', cursor: 'pointer' },
+                                        bgcolor: selectedTemplate?.id === template.id ? '#eef2ff' : 'transparent'
+                                    }}
+                                >
+                                    <ListItemText primary={template.name} />
+                                </ListItem>
+                            ))
+                        )}
+                    </List>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => {
+                        setShowTemplateModal(false);
+                        setSelectedTemplate(null); // Clear selected template on close
+                        setTemplateName('');
+                        setTemplateQuestionsData(null);
+                    }} sx={{ color: '#6b7280', textTransform: 'none' }}>
+                        Cancel
+                    </Button>
+                    {selectedTemplate && (
+                        <Button 
+                            onClick={handleUseTemplate} 
+                            variant="outlined" 
+                            sx={{ textTransform: 'none', borderColor: '#22c55e', color: '#22c55e', '&:hover': { bgcolor: '#e6ffe6' } }}
+                        >
+                            Use This Template
+                        </Button>
+                    )}
+                    <Button 
+                        onClick={() => {
+                            if (selectedTemplate) {
+                                handleSaveTemplateQuestions(templateQuestionsData);
+                            } else {
+                                handleAddTemplate();
+                            }
+                        }} 
+                        variant="contained" 
+                        sx={{ textTransform: 'none', backgroundColor: '#4f46e5', '&:hover': { backgroundColor: '#4338ca' } }}
+                    >
+                        {selectedTemplate ? "Save Template" : "Create Template"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+        </Box>
+    );
+}
+
+// --- Main App Component ---
+function App() {
+    const [products, setProducts] = useState([]); 
+    const [selectedProduct, setSelectedProduct] = useState(null); // This is now the product *object*
+    const [newProductName, setNewProductName] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [snackbarOpen, setSnackbarOpen] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [authMessage, setAuthMessage] = useState(''); 
+
+    // State for new product modal
+    const [showAddProductModal, setShowAddProductModal] = useState(false);
+    const [newProductStatus, setNewProductStatus] = useState('Active'); // Default status
+    const [newProductParentId, setNewProductParentId] = useState(''); // For iteration items
+
+    // State for delete confirmation modal
+    const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+    const [productToDeleteId, setProductToDeleteId] = useState(null); 
+
+    // State for search and sort/filter
+    const [searchTerm, setSearchTerm] = useState('');
+    const [sortBy, setSortBy] = useState('newest');
+    const [filterByStatus, setFilterByStatus] = useState('All'); // Filter by overall product status
+
+    // State for Profile Menu
+    const [anchorElProfileMenu, setAnchorElProfileMenu] = useState(null);
+    const openProfileMenu = Boolean(anchorElProfileMenu);
+
+    // State for Settings Page navigation
+    const [currentPage, setCurrentPage] = useState('dashboard');
+    const [userName, setUserName] = useState('User');
+    const [userTimezone, setUserTimezone] = useState('UTC+05:30 (Chennai)');
+
+    const [quoteOfTheDay, setQuoteOfTheDay] = useState('');
+    const [quoteEmoji, setQuoteEmoji] = useState('💡');
+
+    // State for ProductDetail view (new state for navigation)
+    const [viewingProductId, setViewingProductId] = useState(null);
 
     // Array of quotes for Product Managers
     const productManagerQuotes = useMemo(() => [
@@ -883,11 +2137,12 @@ function App() {
     // Lottie animation setup (empty state)
     const lottieContainer = useRef(null);
     const lottieInstance = useRef(null);
+
     useEffect(() => {
-        if (lottieContainer.current && !selectedProduct) {
+        if (lottieContainer.current && !selectedProduct && !viewingProductId) { // Only load Lottie if no product is selected or being viewed
             if (window.lottie) {
                 if (lottieInstance.current) {
-                    lottieInstance.current.destroy(); 
+                    lottieInstance.current.destroy();
                 }
                 lottieInstance.current = window.lottie.loadAnimation({
                     container: lottieContainer.current,
@@ -895,147 +2150,96 @@ function App() {
                     loop: true,
                     autoplay: true,
                     animationData: {
-                        "v": "5.7.4", "fr": 60, "ip": 0, "op": 120, "wh": 100, "ht": 100, "nm": "Empty State", "ddd": 0, "assets": [],
-                        "layers": [
-                            { "ddd": 0, "ind": 1, "ty": 4, "nm": "Folder", "sr": 1, "ks": { "o": { "a": 0, "k": 100, "ix": 11 }, "rp": { "a": 0, "k": 0, "ix": 12 }, "s": { "a": 0, "k": [100, 100, 100], "ix": 6 }, "r": { "a": 0, "k": 0, "ix": 10 }, "p": { "a": 0, "k": [50, 50, 0], "ix": 2 }, "a": { "a": 0, "k": [50, 50, 0], "ix": 1 } }, "ao": 0, "shapes": [{ "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [0.8, 0.8, 0.8, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.5, 0.5, 0.5, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 1", "mn": "ADBE Vector Group", "hd": false }, { "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [0.9, 0.9, 0.9, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.6, 0.6, 0.6, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 2", "mn": "ADBE Vector Group", "hd": false, "tf": true }, { "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [1, 1, 1, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.7, 0.7, 0.7, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 3", "mn": "ADBE Vector Group", "hd": false, "tf": true }], "ip": 0, "op": 120, "st": 0, "bm": 0 }, { "ddd": 0, "ind": 2, "ty": 4, "nm": "Magnifying Glass", "sr": 1, "ks": { "o": { "a": 0, "k": 100, "ix": 11 }, "rp": { "a": 0, "k": 0, "ix": 12 }, "s": { "a": 0, "k": [100, 100, 100], "ix": 6 }, "r": { "a": 0, "k": 0, "ix": 10 }, "p": { "a": 0, "k": [50, 50, 0], "ix": 2 }, "a": { "a": 0, "k": [50, 50, 0], "ix": 1 } }, "ao": 0, "shapes": [{ "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.2, 0.2, 0.2, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "w": { "a": 0, "k": 2, "ix": 5 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Ellipse 1", "mn": "ADBE Vector Group", "hd": false }], "ip": 0, "op": 120, "st": 0, "bm": 0 } ]
+                        "v": "5.7.4", "fr": 60, "ip": 0, "op": 120, "wh": 100, "ht": 100, "nm": "Empty State", "ddd": 0, "assets": [], "layers": [
+                            { "ddd": 0, "ind": 1, "ty": 4, "nm": "Folder", "sr": 1, "ks": { "o": { "a": 0, "k": 100, "ix": 11 }, "rp": { "a": 0, "k": 0, "ix": 12 }, "s": { "a": 0, "k": [100, 100, 100], "ix": 6 }, "r": { "a": 0, "k": 0, "ix": 10 }, "p": { "a": 0, "k": [50, 50, 0], "ix": 2 }, "a": { "a": 0, "k": [50, 50, 0], "ix": 1 } }, "ao": 0, "shapes": [{ "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [0.8, 0.8, 0.8, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.5, 0.5, 0.5, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 1", "mn": "ADBE Vector Group", "hd": false }, { "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [0.9, 0.9, 0.9, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.6, 0.6, 0.6, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 2", "mn": "ADBE Vector Group", "hd": false, "tf": true }, { "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [0.8, 0.8, 0.8, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.5, 0.5, 0.5, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 3", "mn": "ADBE Vector Group", "hd": false }, { "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [0.9, 0.9, 0.9, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.6, 0.6, 0.6, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 4", "mn": "ADBE Vector Group", "hd": false, "tf": true }, { "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [0.8, 0.8, 0.8, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.5, 0.5, 0.5, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 5", "mn": "ADBE Vector Group", "hd": false }, { "ty": "gr", "it": [{ "ind": 0, "ty": "sh", "ix": 1, "ks": { "k": { "i": [{ "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }, { "x": 0.833, "y": 0.833 }], "o": [{ "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }, { "x": 0.167, "y": 0.167 }], "v": [[30, 80], [70, 80], [70, 20], [30, 20]] }, "ix": 2 }, "nm": "Rectangle Path", "mn": "ADBE Vector Shape - Group", "hd": false }, { "ty": "fl", "c": { "a": 0, "k": [0.9, 0.9, 0.9, 1], "ix": 3 }, "o": { "a": 0, "k": 100, "ix": 4 }, "r": 1, "nm": "Fill 1", "mn": "ADBE Vector Fill", "hd": false }, { "ty": "st", "c": { "a": 0, "k": [0.6, 0.6, 0.6, 1], "ix": 5 }, "o": { "a": 0, "k": 100, "ix": 6 }, "w": { "a": 0, "k": 2, "ix": 7 }, "lc": 1, "lj": 1, "ml": 4, "nm": "Stroke 1", "mn": "ADBE Vector Stroke", "hd": false }], "nm": "Rectangle 6", "mn": "ADBE Vector Group", "hd": false, "tf": true }
+                        ]
                     }
                 });
             }
+        } else if (lottieInstance.current && (selectedProduct || viewingProductId)) {
+            // Destroy Lottie animation when a product is selected/viewed
+            lottieInstance.current.destroy();
+            lottieInstance.current = null;
         }
-    }, [selectedProduct]); 
 
-    const handleSnackbarClose = (event, reason) => {
-        if (reason === 'clickaway') {
-            return;
-        }
-        setSnackbarOpen(false);
-    };
-
-    useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            setIsLoggedIn(true);
-            const fetchUserProfile = async () => {
-                try {
-                    const response = await axios.get(`${API_URL}/api/user/profile`, {
-                        headers: {
-                            Authorization: `Bearer ${token}`
-                        }
-                    });
-                    setUserName(response.data.username || 'User');
-                    setUserTimezone(response.data.timezone || 'UTC+05:30 (Chennai)');
-                } catch (err) {
-                    console.error("Error fetching user profile:", err);
-                    setSnackbarMessage("Failed to load user profile. Please try logging in again.");
-                    setSnackbarSeverity('error');
-                    setSnackbarOpen(true);
-                    handleLogout(); 
-                }
-            };
-            fetchUserProfile();
-        }
-    }, [isLoggedIn]); 
-
-    // Function to calculate product progress based on tab statuses
-    const calculateProductProgress = useCallback((product) => {
-        let totalWeightedProgress = 0;
-        let totalWeight = 0;
-
-        PRODUCT_TABS_ORDER.forEach(tabName => {
-            const statusKey = `${tabName.toLowerCase().replace(/ /g, '_')}_status`; // e.g., 'research_status'
-            const status = product[statusKey];
-            const weight = TAB_PROGRESS_PERCENTAGES[tabName] || 0; // Get defined percentage, default to 0
-
-            totalWeight += weight;
-
-            if (status === 'Completed' || status === 'Skipped') {
-                totalWeightedProgress += weight;
-            } else if (status === 'In Progress') {
-                // For 'In Progress', contribute half of its weight as a heuristic
-                totalWeightedProgress += weight / 2; 
+        return () => {
+            if (lottieInstance.current) {
+                lottieInstance.current.destroy();
+                lottieInstance.current = null;
             }
-        });
+        };
+    }, [selectedProduct, viewingProductId]); // Dependency array includes new state
 
-        if (totalWeight === 0) return 0;
-        return Math.round((totalWeightedProgress / totalWeight) * 100);
-    }, []);
+
+    const token = localStorage.getItem('token');
 
     useEffect(() => {
-        const fetchProducts = async () => {
-            if (!isLoggedIn) return;
-
-            setLoading(true);
-            setError(null);
-            try {
-                const token = localStorage.getItem('token');
-                const response = await axios.get(`${API_URL}/api/products`, {
-                    headers: {
-                        Authorization: `Bearer ${token}` 
-                    }
-                });
-                // Calculate progress for each product after fetching
-                const productsWithProgress = response.data.map(p => ({
-                    ...p,
-                    progress: calculateProductProgress(p) // Update progress based on new logic
-                }));
-                setProducts(productsWithProgress);
-            } catch (err) {
-                console.error("Error fetching products:", err);
-                const errorMessage = err.response && err.response.data && err.response.data.message 
-                                    ? err.response.data.message 
-                                    : "Failed to load products. Please check the backend server or your login status.";
-                setError(errorMessage);
-                setSnackbarMessage(errorMessage);
-                setSnackbarSeverity('error');
-                setSnackbarOpen(true);
-                if (err.response && (err.response.status === 401 || err.response.status === 403)) {
-                    handleLogout();
-                }
-            } finally {
-                setLoading(false);
+        const checkLoginStatus = () => {
+            if (token) {
+                setIsLoggedIn(true);
+                // In a real app, you'd validate the token with the backend
+                // For now, we'll just assume it's valid and fetch user info
+                fetchUserInfo();
+                fetchProducts();
+            } else {
+                setIsLoggedIn(false);
             }
         };
 
-        fetchProducts();
-    }, [isLoggedIn, calculateProductProgress]);
+        checkLoginStatus();
 
-    // Filter and Sort Logic
-    const filteredAndSortedProducts = useMemo(() => {
-        let currentProducts = products;
+        // Optional: Set up an interval to refresh token or check login status periodically
+        const interval = setInterval(checkLoginStatus, 3600 * 1000); // Every hour
+        return () => clearInterval(interval);
+    }, [token]);
 
-        // Apply status filter
-        if (filterByStatus !== 'All') {
-            currentProducts = currentProducts.filter(p => p.status === filterByStatus);
-        }
-
-        // Apply search filter
-        if (searchTerm) {
-            currentProducts = currentProducts.filter(p => 
-                p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (p.research_document_json && p.research_document_json.toLowerCase().includes(searchTerm.toLowerCase())) // Search in research doc
-            );
-        }
-
-        // Apply sort
-        currentProducts.sort((a, b) => {
-            if (sortBy === 'newest') {
-                return new Date(b.created_at) - new Date(a.created_at);
-            } else if (sortBy === 'oldest') {
-                return new Date(a.created_at) - new Date(b.created_at);
-            } else if (sortBy === 'alpha-asc') {
-                return a.name.localeCompare(b.name);
-            } else if (sortBy === 'alpha-desc') {
-                return b.name.localeCompare(a.name);
-            } else if (sortBy === 'progress-asc') {
-                return a.progress - b.progress;
-            } else if (sortBy === 'progress-desc') {
-                return b.progress - a.progress;
+    const fetchUserInfo = async () => {
+        if (!token) return;
+        try {
+            const response = await axios.get(`${API_URL}/api/user`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setUserName(response.data.username || 'User');
+            setUserTimezone(response.data.timezone || 'UTC+05:30 (Chennai)');
+        } catch (err) {
+            console.error("Failed to fetch user info:", err);
+            // If token is invalid, log out
+            if (err.response && err.response.status === 401) {
+                handleLogout();
             }
-            return 0;
-        });
+        }
+    };
 
-        return currentProducts;
-    }, [products, searchTerm, sortBy, filterByStatus]);
+
+    const fetchProducts = useCallback(async () => {
+        if (!token) {
+            setProducts([]);
+            return;
+        }
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await axios.get(`${API_URL}/api/products`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setProducts(response.data);
+        } catch (err) {
+            console.error("Failed to fetch products:", err);
+            setError("Failed to load products.");
+            setSnackbarMessage("Failed to load products. Please try logging in again.");
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+            if (err.response && err.response.status === 401) {
+                handleLogout();
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, [token, setSnackbarMessage, setSnackbarSeverity, setSnackbarOpen]);
+
+    useEffect(() => {
+        fetchProducts();
+    }, [fetchProducts]);
 
     const handleAddProduct = async () => {
         if (!newProductName.trim()) {
@@ -1045,51 +2249,26 @@ function App() {
             return;
         }
         setLoading(true);
-        setError(null);
-        setSnackbarOpen(false);
-        setShowAddProductModal(false); 
         try {
-            const token = localStorage.getItem('token');
-            const newProductData = {
-                name: newProductName,
+            const productData = { 
+                name: newProductName, 
                 status: newProductStatus,
-                parent_id: newProductParentId || null, // Ensure null if empty
-                is_archived: false,
-                progress: 0, 
-                // Initialize all tab statuses
-                research_status: 'Not Started',
-                prd_status: 'Not Started',
-                design_status: 'Not Started',
-                development_status: 'Not Started',
-                tech_doc_status: 'Not Started',
-                launch_training_status: 'Not Started',
-                // No initial JSON content for documents
+                parent_id: newProductParentId || null // Ensure empty string becomes null
             };
-
-            const response = await axios.post(`${API_URL}/api/products`, newProductData, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
+            const response = await axios.post(`${API_URL}/api/products`, productData, {
+                headers: { Authorization: `Bearer ${token}` }
             });
-            // Recalculate progress for the new product
-            const productWithProgress = {
-                ...response.data,
-                progress: calculateProductProgress(response.data)
-            };
-            setProducts([productWithProgress, ...products]); 
+            setProducts(prev => [...prev, response.data]);
             setNewProductName('');
             setNewProductStatus('Active');
             setNewProductParentId('');
+            setShowAddProductModal(false);
             setSnackbarMessage("Product added successfully!");
             setSnackbarSeverity('success');
             setSnackbarOpen(true);
         } catch (err) {
-            console.error("Error creating product:", err);
-            const errorMessage = err.response && err.response.data && err.response.data.message 
-                                ? err.response.data.message 
-                                : "Failed to add product. Please try again.";
-            setError(errorMessage);
-            setSnackbarMessage(errorMessage);
+            console.error("Error adding product:", err);
+            setSnackbarMessage(`Failed to add product: ${err.response?.data?.message || err.message}`);
             setSnackbarSeverity('error');
             setSnackbarOpen(true);
         } finally {
@@ -1097,651 +2276,67 @@ function App() {
         }
     };
 
-    const handleSelectProduct = useCallback(async (product) => {
-        setLoading(true);
+    const handleUpdateProductStatus = async (productId, newStatus) => {
         try {
-            // Fetch the full product details again to ensure latest data
-            const token = localStorage.getItem('token');
-            const response = await axios.get(`${API_URL}/api/products/${product.id}`, {
+            await axios.put(`${API_URL}/api/products/${productId}/status`, { status: newStatus }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            const fullProduct = response.data;
-
-            setSelectedProduct(fullProduct);
-            setSelectedProductTab(0); // Default to the first tab (Research)
-
-            // Set initial data for Editor.js instances
-            try {
-                setResearchDocumentData(fullProduct.research_document_json ? JSON.parse(fullProduct.research_document_json) : { blocks: [] });
-                setPrdDocumentData(fullProduct.prd_document_json ? JSON.parse(fullProduct.prd_document_json) : { blocks: [] });
-                // Reset chat histories when selecting a new product
-                setResearchChatHistory([]);
-                setPrdChatHistory([]);
-            } catch (e) {
-                console.error("Error parsing JSON for Editor.js:", e);
-                setSnackbarMessage("Error loading document content. It might be malformed.");
-                setSnackbarSeverity('error');
-                setSnackbarOpen(true);
-                setResearchDocumentData({ blocks: [] });
-                setPrdDocumentData({ blocks: [] });
-            }
-
-            // Fetch customer interviews for the selected product
-            const interviewsResponse = await axios.get(`${API_URL}/api/customer_interviews/product/${product.id}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setCustomerInterviews(interviewsResponse.data);
-            setSelectedInterview(null); // Clear selected interview when changing product
-
-        } catch (err) {
-            console.error("Error selecting product or fetching its details:", err);
-            const errorMessage = err.response && err.response.data && err.response.data.message 
-                                ? err.response.data.message 
-                                : "Failed to load product details. Please try again.";
-            setError(errorMessage);
-            setSnackbarMessage(errorMessage);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-            setSelectedProduct(null); // Clear selected product on error
-        } finally {
-            setLoading(false);
-        }
-    }, [calculateProductProgress]);
-
-    const handleUpdateProduct = async (productId, updateData) => {
-        setLoading(true);
-        setError(null);
-        setSnackbarOpen(false);
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.put(`${API_URL}/api/products/${productId}`, updateData, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            });
-            // Update local state for products and selectedProduct
-            const updatedProduct = {
-                ...response.data,
-                progress: calculateProductProgress(response.data)
-            };
-            setProducts(products.map(p =>
-                p.id === productId ? updatedProduct : p
-            ));
-            setSelectedProduct(updatedProduct); // Update selected product with latest data
-            setSnackbarMessage("Product updated successfully!");
+            setProducts(prev => prev.map(p => p.id === productId ? { ...p, status: newStatus } : p));
+            setSnackbarMessage("Product status updated!");
             setSnackbarSeverity('success');
             setSnackbarOpen(true);
         } catch (err) {
-            console.error("Error updating product:", err);
-            const errorMessage = err.response && err.response.data && err.response.data.message 
-                                ? err.response.data.message 
-                                : "Failed to update product. Please try again.";
-            setError(errorMessage);
-            setSnackbarMessage(errorMessage);
+            console.error("Failed to update product status:", err);
+            setSnackbarMessage("Failed to update product status.");
             setSnackbarSeverity('error');
             setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
         }
     };
 
-    const confirmDeleteProduct = (productId) => {
-        setProductToDeleteId(productId);
-        setShowDeleteConfirmModal(true);
-    };
-
     const handleDeleteProduct = async () => {
+        if (!productToDeleteId) return;
         setLoading(true);
-        setError(null);
-        setSnackbarOpen(false);
-        setShowDeleteConfirmModal(false); 
         try {
-            const token = localStorage.getItem('token');
             await axios.delete(`${API_URL}/api/products/${productToDeleteId}`, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
+                headers: { Authorization: `Bearer ${token}` }
             });
-            setProducts(products.filter(p => p.id !== productToDeleteId));
-            if (selectedProduct && selectedProduct.id === productToDeleteId) {
-                setSelectedProduct(null);
-                setResearchDocumentData(null);
-                setPrdDocumentData(null);
-                setResearchChatHistory([]);
-                setPrdChatHistory([]);
-                setCustomerInterviews([]);
-                setSelectedInterview(null);
-            }
+            setProducts(prev => prev.filter(p => p.id !== productToDeleteId));
+            setShowDeleteConfirmModal(false);
+            setProductToDeleteId(null);
             setSnackbarMessage("Product deleted successfully!");
             setSnackbarSeverity('success');
             setSnackbarOpen(true);
         } catch (err) {
             console.error("Error deleting product:", err);
-            const errorMessage = "Failed to delete product. Please try again.";
-            setError(errorMessage);
-            setSnackbarMessage(errorMessage);
+            setSnackbarMessage(`Failed to delete product: ${err.response?.data?.message || err.message}`);
             setSnackbarSeverity('error');
             setSnackbarOpen(true);
         } finally {
             setLoading(false);
-            setProductToDeleteId(null);
         }
+    };
+
+    const handleSnackbarClose = (event, reason) => {
+        if (reason === 'clickaway') {
+            return;
+        }
+        setSnackbarOpen(false);
     };
 
     const handleLogout = () => {
         localStorage.removeItem('token');
         setIsLoggedIn(false);
-        setProducts([]);
-        setSelectedProduct(null);
-        setResearchDocumentData(null);
-        setPrdDocumentData(null);
-        setResearchChatHistory([]);
-        setPrdChatHistory([]);
-        setCustomerInterviews([]);
-        setSelectedInterview(null);
-        setAuthMessage('You have been logged out.');
-        setSnackbarMessage('You have been logged out.');
+        setAuthMessage("You have been logged out.");
+        setUserName('User'); // Reset username on logout
+        setUserTimezone('UTC+05:30 (Chennai)'); // Reset timezone on logout
+        setCurrentPage('dashboard'); // Go back to dashboard view (which will show AuthPage)
+        setViewingProductId(null); // Clear any selected product
+        setSnackbarMessage("You have been successfully logged out.");
         setSnackbarSeverity('info');
         setSnackbarOpen(true);
-        setAnchorElProfileMenu(null); 
-        setCurrentPage('dashboard'); 
-        setUserName('User'); 
-        setUserTimezone('UTC+05:30 (Chennai)'); 
     };
 
-    // --- AI Chat Logic for Research Tab ---
-    const handleResearchPromptSubmit = async (e) => {
-        e.preventDefault();
-        if (!currentResearchPrompt.trim()) return;
-        if (!selectedProduct) {
-            setSnackbarMessage("Please select a product to generate research document.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
-            return;
-        }
-
-        setIsResearchAILoading(true);
-        const userMessage = { role: 'user', content: currentResearchPrompt };
-        const updatedChatHistory = [...researchChatHistory, userMessage];
-        setResearchChatHistory(updatedChatHistory);
-        setCurrentResearchPrompt('');
-
-        try {
-            const token = localStorage.getItem('token');
-            // For MVP, we're sending the full prompt directly.
-            // In a real conversational flow, you'd send the chat history to the backend
-            // and the backend would manage the Gemini conversation.
-            const response = await axios.post(`${API_URL}/api/generate-research-document`, {
-                product_id: selectedProduct.id,
-                prompt_text: currentResearchPrompt,
-                // scraped_data: "Example scraped data from Octoparse/ScrapingBee..." // Integrate this in future
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            const aiResponseText = response.data.research_document;
-            const aiMessage = { role: 'ai', content: aiResponseText };
-            setResearchChatHistory(prev => [...prev, aiMessage]);
-
-            // Update the product's research document in local state and DB
-            const researchDocJson = { blocks: [{ type: "paragraph", data: { text: aiResponseText } }] };
-            setResearchDocumentData(researchDocJson);
-            await handleUpdateProduct(selectedProduct.id, { 
-                research_document_json: JSON.stringify(researchDocJson),
-                research_status: 'Completed' // Mark as completed
-            });
-            setSnackbarMessage("Research document generated and saved!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-
-        } catch (err) {
-            console.error("Error generating research document:", err);
-            const errorMessage = err.response && err.response.data && err.response.data.error 
-                                ? err.response.data.error 
-                                : "Failed to generate research document. Please try again.";
-            setSnackbarMessage(errorMessage);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-            setResearchChatHistory(prev => [...prev, { role: 'ai', content: `Error: ${errorMessage}` }]);
-        } finally {
-            setIsResearchAILoading(false);
-        }
-    };
-
-    const handleResearchDocumentSave = useCallback(async (data) => {
-        if (!selectedProduct) return;
-        setLoading(true);
-        try {
-            await handleUpdateProduct(selectedProduct.id, { 
-                research_document_json: JSON.stringify(data),
-                research_status: 'Completed' // Mark as completed if manually edited/saved
-            });
-            setSnackbarMessage("Research document saved!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            setSnackbarMessage("Failed to save research document.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    }, [selectedProduct, handleUpdateProduct]);
-
-    // --- AI Chat Logic for PRD Tab ---
-    const handlePrdPromptSubmit = async (e) => {
-        e.preventDefault();
-        if (!currentPrdPrompt.trim()) return;
-        if (!selectedProduct) {
-            setSnackbarMessage("Please select a product to generate PRD.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
-            return;
-        }
-
-        setIsPrdAILoading(true);
-        const userMessage = { role: 'user', content: currentPrdPrompt };
-        const updatedChatHistory = [...prdChatHistory, userMessage];
-        setPrdChatHistory(updatedChatHistory);
-        setCurrentPrdPrompt('');
-
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.post(`${API_URL}/api/generate-prd-document`, {
-                product_id: selectedProduct.id,
-                user_requirements: currentPrdPrompt, // User's input for PRD
-                prd_structure_confirmation: "Standard PRD structure with Problem, Goals, Audience, Features, Non-Functional, Metrics, Future.", // Hardcoded for MVP, could be AI-driven later
-                research_data: selectedProduct.research_document_json || "" // Pass existing research data
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            const aiResponseText = response.data.prd_document;
-            const aiMessage = { role: 'ai', content: aiResponseText };
-            setPrdChatHistory(prev => [...prev, aiMessage]);
-
-            const prdDocJson = { blocks: [{ type: "paragraph", data: { text: aiResponseText } }] };
-            setPrdDocumentData(prdDocJson);
-            await handleUpdateProduct(selectedProduct.id, { 
-                prd_document_json: JSON.stringify(prdDocJson),
-                prd_status: 'Completed' // Mark as completed
-            });
-            setSnackbarMessage("PRD generated and saved!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-
-        } catch (err) {
-            console.error("Error generating PRD document:", err);
-            const errorMessage = err.response && err.response.data && err.response.data.error 
-                                ? err.response.data.error 
-                                : "Failed to generate PRD. Please try again.";
-            setSnackbarMessage(errorMessage);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-            setPrdChatHistory(prev => [...prev, { role: 'ai', content: `Error: ${errorMessage}` }]);
-        } finally {
-            setIsPrdAILoading(false);
-        }
-    };
-
-    const handlePrdDocumentSave = useCallback(async (data) => {
-        if (!selectedProduct) return;
-        setLoading(true);
-        try {
-            await handleUpdateProduct(selectedProduct.id, { 
-                prd_document_json: JSON.stringify(data),
-                prd_status: 'Completed' // Mark as completed if manually edited/saved
-            });
-            setSnackbarMessage("PRD document saved!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            setSnackbarMessage("Failed to save PRD document.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    }, [selectedProduct, handleUpdateProduct]);
-
-    // --- Customer Interview Logic ---
-    const handleAddCustomerInterview = async () => {
-        if (!newInterviewCustomerName.trim()) {
-            setSnackbarMessage("Customer name is required.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
-            return;
-        }
-        if (!selectedProduct) {
-            setSnackbarMessage("Please select a product first.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
-            return;
-        }
-
-        setLoading(true);
-        setShowAddInterviewModal(false);
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.post(`${API_URL}/api/customer_interviews`, {
-                product_id: selectedProduct.id,
-                customer_name: newInterviewCustomerName,
-                customer_email: newInterviewCustomerEmail,
-                interview_date: newInterviewDate,
-                interview_notes_json: JSON.stringify({ blocks: [{ type: "paragraph", data: { text: "Start typing interview notes here..." } }] }),
-                ai_summary_json: null
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setCustomerInterviews(prev => [response.data, ...prev]);
-            setNewInterviewCustomerName('');
-            setNewInterviewCustomerEmail('');
-            setNewInterviewDate(new Date().toISOString().slice(0, 16));
-            setSnackbarMessage("Customer interview added!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            console.error("Error adding customer interview:", err);
-            setSnackbarMessage("Failed to add customer interview.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleSelectInterview = async (interview) => {
-        setSelectedInterview(interview);
-        try {
-            setInterviewNotesData(interview.interview_notes_json ? JSON.parse(interview.interview_notes_json) : { blocks: [] });
-            setInterviewSummaryData(interview.ai_summary_json ? JSON.parse(interview.ai_summary_json) : { blocks: [] });
-        } catch (e) {
-            console.error("Error parsing interview notes/summary JSON:", e);
-            setSnackbarMessage("Error loading interview content. It might be malformed.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-            setInterviewNotesData({ blocks: [] });
-            setInterviewSummaryData({ blocks: [] });
-        }
-    };
-
-    const handleSaveInterviewNotes = useCallback(async (data) => {
-        if (!selectedInterview) return;
-        setLoading(true);
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.put(`${API_URL}/api/customer_interviews/${selectedInterview.id}`, {
-                interview_notes_json: JSON.stringify(data)
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setSelectedInterview(response.data); // Update selected interview with saved notes
-            setCustomerInterviews(prev => prev.map(int => int.id === response.data.id ? response.data : int));
-            setSnackbarMessage("Interview notes saved!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            setSnackbarMessage("Failed to save interview notes.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    }, [selectedInterview]);
-
-    const handleGenerateInterviewSummary = async () => {
-        if (!selectedInterview || !interviewNotesData || interviewNotesData.blocks.length === 0) {
-            setSnackbarMessage("No interview notes to summarize.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
-            return;
-        }
-        setLoading(true);
-        try {
-            const token = localStorage.getItem('token');
-            // Convert Editor.js data to plain text for AI prompt
-            const plainTextNotes = interviewNotesData.blocks.map(block => block.data.text || '').join('\n');
-
-            const response = await axios.post(`${API_URL}/api/customer_interviews/generate_summary`, {
-                interview_id: selectedInterview.id,
-                notes_content: plainTextNotes
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const summaryText = response.data.ai_summary;
-            const summaryJson = { blocks: [{ type: "paragraph", data: { text: summaryText } }] };
-            setInterviewSummaryData(summaryJson);
-
-            // Update the interview in the backend with the summary
-            const updatedInterview = { ...selectedInterview, ai_summary_json: JSON.stringify(summaryJson) };
-            setCustomerInterviews(prev => prev.map(int => int.id === updatedInterview.id ? updatedInterview : int));
-            setSelectedInterview(updatedInterview);
-
-            setSnackbarMessage("Interview summary generated and saved!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            console.error("Error generating interview summary:", err);
-            setSnackbarMessage("Failed to generate interview summary.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleDeleteInterview = async (interviewId) => {
-        setLoading(true);
-        try {
-            const token = localStorage.getItem('token');
-            await axios.delete(`${API_URL}/api/customer_interviews/${interviewId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setCustomerInterviews(prev => prev.filter(int => int.id !== interviewId));
-            if (selectedInterview && selectedInterview.id === interviewId) {
-                setSelectedInterview(null);
-                setInterviewNotesData(null);
-                setInterviewSummaryData(null);
-            }
-            setSnackbarMessage("Interview deleted!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            console.error("Error deleting interview:", err);
-            setSnackbarMessage("Failed to delete interview.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // --- Interview Template Logic ---
-    const fetchInterviewTemplates = useCallback(async () => {
-        setLoading(true);
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.get(`${API_URL}/api/interview_templates`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setInterviewTemplates(response.data);
-        } catch (err) {
-            console.error("Error fetching templates:", err);
-            setSnackbarMessage("Failed to load interview templates.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        if (isLoggedIn) {
-            fetchInterviewTemplates();
-        }
-    }, [isLoggedIn, fetchInterviewTemplates]);
-
-    const handleCreateTemplate = async () => {
-        if (!templateName.trim()) {
-            setSnackbarMessage("Template name is required.");
-            setSnackbarSeverity('warning');
-            setSnackbarOpen(true);
-            return;
-        }
-        setLoading(true);
-        setShowTemplateModal(false);
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.post(`${API_URL}/api/interview_templates`, {
-                template_name: templateName,
-                template_questions_json: templateQuestionsData ? JSON.stringify(templateQuestionsData) : null
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setInterviewTemplates(prev => [response.data, ...prev]);
-            setTemplateName('');
-            setTemplateQuestionsData(null);
-            setSnackbarMessage("Template created!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            console.error("Error creating template:", err);
-            setSnackbarMessage("Failed to create template.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleSelectTemplate = (template) => {
-        setSelectedTemplate(template);
-        try {
-            setTemplateQuestionsData(template.template_questions_json ? JSON.parse(template.template_questions_json) : { blocks: [] });
-        } catch (e) {
-            console.error("Error parsing template questions JSON:", e);
-            setSnackbarMessage("Error loading template content. It might be malformed.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-            setTemplateQuestionsData({ blocks: [] });
-        }
-        setShowTemplateModal(true); // Open modal to edit selected template
-    };
-
-    const handleUpdateTemplate = async () => {
-        if (!selectedTemplate) return;
-        setLoading(true);
-        setShowTemplateModal(false);
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.put(`${API_URL}/api/interview_templates/${selectedTemplate.id}`, {
-                template_name: templateName,
-                template_questions_json: templateQuestionsData ? JSON.stringify(templateQuestionsData) : null
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setInterviewTemplates(prev => prev.map(t => t.id === response.data.id ? response.data : t));
-            setSnackbarMessage("Template updated!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            console.error("Error updating template:", err);
-            setSnackbarMessage("Failed to update template.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleDeleteTemplate = async (templateId) => {
-        setLoading(true);
-        try {
-            const token = localStorage.getItem('token');
-            await axios.delete(`${API_URL}/api/interview_templates/${templateId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setInterviewTemplates(prev => prev.filter(t => t.id !== templateId));
-            if (selectedTemplate && selectedTemplate.id === templateId) {
-                setSelectedTemplate(null);
-                setTemplateName('');
-                setTemplateQuestionsData(null);
-            }
-            setSnackbarMessage("Template deleted!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            console.error("Error deleting template:", err);
-            setSnackbarMessage("Failed to delete template.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleGenerateTemplateQuestions = async (featureIdea, existingQuestions) => {
-        setIsTemplateAILoading(true);
-        try {
-            const token = localStorage.getItem('token');
-            const response = await axios.post(`${API_URL}/api/interview_templates/generate_questions`, {
-                feature_idea: featureIdea,
-                existing_questions: existingQuestions
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const generatedText = response.data.generated_questions;
-            setTemplateQuestionsData({ blocks: [{ type: "paragraph", data: { text: generatedText } }] });
-            setSnackbarMessage("Questions generated!");
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            console.error("Error generating template questions:", err);
-            setSnackbarMessage("Failed to generate questions.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setIsTemplateAILoading(false);
-        }
-    };
-
-    const handleProductStatusChange = async (productId, newStatus) => {
-        setLoading(true);
-        try {
-            await handleUpdateProduct(productId, { status: newStatus });
-            setSnackbarMessage(`Product status updated to ${newStatus}!`);
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            setSnackbarMessage("Failed to update product status.");
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleTabStatusChange = async (tabName, newStatus) => {
-        if (!selectedProduct) return;
-        setLoading(true);
-        const statusKey = `${tabName.toLowerCase().replace(/ /g, '_')}_status`;
-        try {
-            const updatedProductData = { [statusKey]: newStatus };
-            await handleUpdateProduct(selectedProduct.id, updatedProductData);
-            setSnackbarMessage(`${tabName} status updated to ${newStatus}!`);
-            setSnackbarSeverity('success');
-            setSnackbarOpen(true);
-        } catch (err) {
-            setSnackbarMessage(`Failed to update ${tabName} status.`);
-            setSnackbarSeverity('error');
-            setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-
-    const handleProfileMenuOpen = (event) => {
+    const handleProfileMenuClick = (event) => {
         setAnchorElProfileMenu(event.currentTarget);
     };
 
@@ -1750,57 +2345,103 @@ function App() {
     };
 
     const handleOpenSettings = () => {
-        setCurrentPage('settings'); 
+        setCurrentPage('settings');
         handleProfileMenuClose();
     };
 
     const handleSaveSettings = async () => {
-        setLoading(true);
-        setSnackbarOpen(false);
         try {
-            const token = localStorage.getItem('token');
-            const response = await axios.put(`${API_URL}/api/user/profile`, {
+            await axios.put(`${API_URL}/api/user`, {
                 username: userName,
                 timezone: userTimezone
             }, {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
+                headers: { Authorization: `Bearer ${token}` }
             });
-            setSnackbarMessage(response.data.message);
+            setSnackbarMessage("Settings saved successfully!");
             setSnackbarSeverity('success');
             setSnackbarOpen(true);
-            setCurrentPage('dashboard'); 
+            setCurrentPage('dashboard'); // Go back to dashboard after saving
         } catch (err) {
-            console.error("Error saving profile settings:", err);
-            const errorMessage = err.response && err.response.data && err.response.data.message 
-                                ? err.response.data.message 
-                                : "Failed to save profile settings. Please try again.";
-            setSnackbarMessage(errorMessage);
+            console.error("Failed to save settings:", err);
+            setSnackbarMessage(`Failed to save settings: ${err.response?.data?.message || err.message}`);
             setSnackbarSeverity('error');
             setSnackbarOpen(true);
-        } finally {
-            setLoading(false);
         }
     };
 
-    const displayHeaderProfileInitial = useMemo(() => {
-        return userName ? userName.charAt(0).toUpperCase() : 'U';
-    }, [userName]);
+    const filteredProducts = useMemo(() => {
+        let filtered = products;
 
+        if (filterByStatus !== 'All') {
+            filtered = filtered.filter(product => product.status === filterByStatus);
+        }
+
+        if (searchTerm) {
+            filtered = filtered.filter(product =>
+                product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                product.description?.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        }
+
+        // Always show parent products above their iterations, and iterations indented
+        const sorted = [...filtered].sort((a, b) => {
+            // Sort by parent_id first, then by creation_timestamp or name for children
+            if (a.parent_id === b.parent_id) {
+                if (sortBy === 'newest') {
+                    return new Date(b.created_at) - new Date(a.created_at);
+                } else if (sortBy === 'oldest') {
+                    return new Date(a.created_at) - new Date(b.created_at);
+                }
+                return a.name.localeCompare(b.name);
+            }
+            // Logic to group children under parents
+            if (a.parent_id === null && b.parent_id !== null) return -1; // Parent before child
+            if (a.parent_id !== null && b.parent_id === null) return 1;  // Child after parent
+            // If both are children, or both are parents, fall back to creation time/name sort
+            return 0;
+        });
+
+        // Re-order to ensure parent-child hierarchy is visually represented
+        const finalOrder = [];
+        const productMap = new Map(sorted.map(p => [p.id, p]));
+        const topLevelProducts = sorted.filter(p => p.parent_id === null);
+
+        topLevelProducts.forEach(parent => {
+            finalOrder.push(parent);
+            const children = sorted.filter(p => p.parent_id === parent.id);
+            children.forEach(child => {
+                finalOrder.push({ ...child, isIteration: true }); // Mark as iteration for styling
+            });
+        });
+
+        return finalOrder;
+
+    }, [products, searchTerm, sortBy, filterByStatus]);
+
+    const handleViewProductDetails = (productId) => {
+        setViewingProductId(productId);
+    };
+
+    const handleBackToDashboard = () => {
+        setViewingProductId(null);
+        setSelectedProduct(null); // Clear selected product object too
+        fetchProducts(); // Refresh products list when returning to dashboard
+    };
 
     if (!isLoggedIn) {
-        return <AuthPage 
-            setIsLoggedIn={setIsLoggedIn} 
-            setAuthMessage={setAuthMessage} 
-            setUserName={setUserName} 
-            setUserTimezone={setUserTimezone} 
-        />;
+        return (
+            <AuthPage 
+                setIsLoggedIn={setIsLoggedIn} 
+                setAuthMessage={setAuthMessage} 
+                setUserName={setUserName} 
+                setUserTimezone={setUserTimezone} 
+            />
+        );
     }
 
     if (currentPage === 'settings') {
         return (
-            <SettingsPage 
+            <SettingsPage
                 setCurrentPage={setCurrentPage}
                 userName={userName}
                 setUserName={setUserName}
@@ -1813,1029 +2454,411 @@ function App() {
             />
         );
     }
+    
+    if (viewingProductId) {
+        return (
+            <ProductDetail
+                productId={viewingProductId}
+                onBackButtonClick={handleBackToDashboard}
+                setSnackbarOpen={setSnackbarOpen}
+                setSnackbarMessage={setSnackbarMessage}
+                setSnackbarSeverity={setSnackbarSeverity}
+                userName={userName}
+                userTimezone={userTimezone}
+            />
+        );
+    }
+
 
     return (
-        <Box
-            sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                height: '100vh', 
-                width: '100vw',  
-                fontFamily: 'Inter',
-                background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)',
-                overflow: 'hidden', 
-            }}
-        >
-            {/* Editor.js CDN includes - REQUIRED for Editor component to work */}
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/editorjs@2.28.2/dist/editor.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/header@2.8.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/paragraph@2.11.3/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/list@1.9.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/code@2.9.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/table@2.5.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/quote@2.6.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/raw@2.5.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/image@2.9.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/marker@1.4.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/warning@2.8.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/delimiter@1.4.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/inline-code@1.4.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/link@2.5.0/dist/bundle.min.js"></script>
-            <script src="https://cdn.jsdelivr.net/npm/@editorjs/embed@2.5.3/dist/bundle.min.js"></script>
-            {/* Add more Editor.js tool CDNs here as needed */}
-
-            {/* Inject the keyframes for the pulse animation */}
-            <style>{pulseAnimation}</style>
-
-            {/* Main Header */}
-            <Box
-                component="header"
-                sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '1rem 2rem', 
-                    backgroundColor: '#fff',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)', 
-                    borderRadius: '0.75rem', 
-                    margin: '1rem', 
-                    flexShrink: 0, 
-                }}
-            >
+        <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            height: '100vh', 
+            fontFamily: 'Inter, sans-serif', 
+            background: 'linear-gradient(to bottom right, #f9fafb, #e5e7eb)',
+            overflowY: 'hidden' // Prevent main scrollbar when ProductDetail is active
+        }}>
+            {/* Header / Navbar */}
+            <Paper elevation={1} sx={{ 
+                width: '100%', 
+                p: 2, 
+                px: 3,
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between', 
+                backgroundColor: '#fff',
+                borderBottom: '1px solid #e0e7ff',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.04)'
+            }}>
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Sparkles size={32} color="#4f46e5" style={{ marginRight: '0.5rem' }} />
-                    <Box>
-                        <Typography variant="h6" component="h1" sx={{ fontWeight: 'bold', color: '#111827', lineHeight: 1 }}>
-                            Auto Product Manager
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: '#4b5563', display: 'block' }}>
-                            Your Product Management in Auto Pilot mode
-                        </Typography>
-                    </Box>
+                    <Sparkles size={32} color="#4f46e5" style={{ marginRight: '0.75rem' }} />
+                    <Typography variant="h6" component="div" sx={{ fontWeight: 'bold', color: '#111827' }}>
+                        Auto Product Manager
+                    </Typography>
                 </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    {/* Personalized Quote of the Day */}
-                    <Box sx={{ 
-                        textAlign: 'right', 
-                        marginRight: 3,
-                        '@keyframes fadeInOut': {
-                            '0%': { opacity: 0, transform: 'translateY(10px)' },
-                            '5%': { opacity: 1, transform: 'translateY(0)' },
-                            '95%': { opacity: 1, transform: 'translateY(0)' },
-                            '100%': { opacity: 0, transform: 'translateY(-10px)' },
-                        },
-                        animation: 'fadeInOut 15s infinite', 
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1,
-                    }}>
-                        <Typography variant="body2" sx={{ color: '#4f46e5', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                            Hey {userName}, quote of the day for you:
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: '#6b7280', fontStyle: 'italic', fontSize: '0.8rem', display: 'flex', alignItems: 'center' }}>
-                            <Box component="span" sx={{ fontSize: '1.2em', marginRight: '0.3em' }}>{quoteEmoji}</Box>
-                            "{quoteOfTheDay}"
-                        </Typography>
-                    </Box>
-
-                    {/* Profile Initial and Menu */}
-                    <IconButton
-                        aria-label="profile menu"
-                        aria-controls="profile-menu"
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <IconButton 
+                        onClick={handleProfileMenuClick}
+                        aria-controls={openProfileMenu ? 'profile-menu' : undefined}
                         aria-haspopup="true"
-                        onClick={handleProfileMenuOpen}
-                        sx={{ p: 0 }}
+                        aria-expanded={openProfileMenu ? 'true' : undefined}
+                        sx={{ ml: 2, p: 0 }}
                     >
-                        <Box
-                            sx={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: '50%',
-                                backgroundColor: '#e0e7ff', 
-                                color: '#4f46e5', 
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '1.2rem',
-                                fontWeight: 'bold',
-                                border: '2px solid #4f46e5',
-                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                                animation: 'pulse-initial 2s infinite', 
-                            }}
-                        >
-                            {displayHeaderProfileInitial}
-                        </Box>
+                        <Avatar sx={{ bgcolor: '#e0e7ff', color: '#4f46e5', width: 40, height: 40 }}>
+                            {userName.charAt(0).toUpperCase()}
+                        </Avatar>
                     </IconButton>
                     <Menu
                         id="profile-menu"
                         anchorEl={anchorElProfileMenu}
                         open={openProfileMenu}
                         onClose={handleProfileMenuClose}
-                        MenuListProps={{
-                            'aria-labelledby': 'profile-button',
-                        }}
-                        anchorOrigin={{
-                            vertical: 'bottom',
-                            horizontal: 'right',
-                        }}
-                        transformOrigin={{
-                            vertical: 'top',
-                            horizontal: 'right',
-                        }}
-                        PaperProps={{
-                            sx: {
-                                borderRadius: '0.75rem',
-                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                                minWidth: 180,
-                            }
-                        }}
+                        MenuListProps={{ 'aria-labelledby': 'profile-button' }}
+                        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                        sx={{ '& .MuiPaper-root': { borderRadius: '0.75rem', minWidth: 180, boxShadow: '0 4px 6px rgba(0,0,0,0.1)' } }}
                     >
-                        <MenuItem onClick={handleOpenSettings} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.5 }}>
-                            <Settings size={18} />
-                            <Typography variant="body2" fontWeight="medium">Settings</Typography>
+                        <MenuItem onClick={() => { /* View Profile Page - Not yet implemented */ handleProfileMenuClose(); }} sx={{ py: 1.5, px: 2, '&:hover': { bgcolor: '#f5f3ff' } }}>
+                            <User size={18} style={{ marginRight: '0.75rem', color: '#6b7280' }} />
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>{userName}</Typography>
                         </MenuItem>
-                        <MenuItem onClick={handleLogout} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 1.5 }}>
-                            <LogOut size={18} />
-                            <Typography variant="body2" fontWeight="medium">Logout</Typography>
+                        <Divider sx={{ my: '4px' }} />
+                        <MenuItem onClick={handleOpenSettings} sx={{ py: 1.5, px: 2, '&:hover': { bgcolor: '#f5f3ff' } }}>
+                            <Settings size={18} style={{ marginRight: '0.75rem', color: '#6b7280' }} />
+                            <Typography variant="body2">Settings</Typography>
+                        </MenuItem>
+                        <MenuItem onClick={handleLogout} sx={{ py: 1.5, px: 2, '&:hover': { bgcolor: '#f5f3ff' } }}>
+                            <LogOut size={18} style={{ marginRight: '0.75rem', color: '#ef4444' }} />
+                            <Typography variant="body2" sx={{ color: '#ef4444' }}>Log Out</Typography>
                         </MenuItem>
                     </Menu>
                 </Box>
-            </Box>
+            </Paper>
 
-            {/* Main Content Area: Sidebar + Product Detail View */}
-            <Box sx={{ flexGrow: 1, display: 'flex', padding: '1rem', gap: '1rem', overflow: 'hidden' }}> 
-                {/* Left Sidebar */}
-                <Paper
-                    elevation={3}
-                    sx={{
-                        width: '280px', 
-                        flexShrink: 0, 
-                        backgroundColor: '#fff',
-                        borderRadius: '1rem', 
-                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                        p: 2,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        height: '100%', 
-                        '@media (max-width: 600px)': { 
-                            width: '100%',
-                            marginBottom: '1rem',
-                            height: 'auto', 
-                        },
-                    }}
-                >
-                    {/* Add New Item Button */}
-                    <Button
-                        variant="contained"
-                        startIcon={<Plus size={20} />}
-                        sx={{
-                            backgroundColor: '#9333ea', 
-                            '&:hover': { backgroundColor: '#7e22ce' }, 
-                            color: '#fff',
-                            fontWeight: 600,
-                            borderRadius: '0.75rem',
-                            textTransform: 'none',
-                            padding: '0.75rem 1rem',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.06)',
-                            marginBottom: 3,
-                        }}
-                        onClick={() => setShowAddProductModal(true)}
-                    >
-                        Add New Item
-                    </Button>
-
-                    {/* Global Tasks Button (Placeholder for Phase 2) */}
-                    <Button
-                        variant="outlined"
-                        startIcon={<CheckCircle size={20} />}
-                        sx={{
-                            borderColor: '#4f46e5',
-                            color: '#4f46e5',
-                            '&:hover': { backgroundColor: '#eef2ff', borderColor: '#4338ca' },
-                            fontWeight: 600,
-                            borderRadius: '0.75rem',
-                            textTransform: 'none',
-                            padding: '0.75rem 1rem',
-                            marginBottom: 3,
-                        }}
-                        disabled // Disabled for Phase 1
-                    >
-                        Tasks (Coming Soon)
-                    </Button>
-
-                    {/* Search and Sort/Filter Controls */}
-                    <Box sx={{ marginBottom: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                        <TextField
-                            fullWidth
-                            variant="outlined"
-                            size="small"
-                            placeholder="Search items..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            InputProps={{
-                                startAdornment: (
-                                    <InputAdornment position="start">
-                                        <Search size={18} color="#9ca3af" />
-                                    </InputAdornment>
-                                ),
-                                sx: { borderRadius: '0.5rem' }
+            {/* Main Content Area */}
+            <Box sx={{ flexGrow: 1, display: 'flex', overflow: 'hidden' }}>
+                {/* Sidebar - Product List */}
+                <Box sx={{ 
+                    width: { xs: '100%', md: '300px' }, 
+                    minWidth: '280px',
+                    borderRight: '1px solid #e0e7ff', 
+                    bgcolor: '#fff', 
+                    display: 'flex', 
+                    flexDirection: 'column',
+                    overflowY: 'auto',
+                    p: 2,
+                    boxShadow: '2px 0 5px rgba(0,0,0,0.02)'
+                }}>
+                    <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Typography variant="h5" sx={{ fontWeight: 'bold', color: '#111827' }}>Your Products</Typography>
+                        <Button 
+                            variant="contained" 
+                            startIcon={<Plus size={18} />} 
+                            onClick={() => setShowAddProductModal(true)}
+                            sx={{ 
+                                textTransform: 'none', 
+                                backgroundColor: '#4f46e5', 
+                                '&:hover': { backgroundColor: '#4338ca' } 
                             }}
-                        />
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                            <FormControl fullWidth variant="outlined" size="small">
-                                <InputLabel id="sort-by-label">Sort By</InputLabel>
-                                <Select
-                                    labelId="sort-by-label"
-                                    id="sort-by-select"
-                                    value={sortBy}
-                                    onChange={(e) => setSortBy(e.target.value)}
-                                    label="Sort By"
-                                    sx={{ borderRadius: '0.5rem' }}
-                                >
-                                    <MenuItem value="newest">Created Date (Newest First)</MenuItem>
-                                    <MenuItem value="oldest">Created Date (Oldest First)</MenuItem>
-                                    <MenuItem value="alpha-asc">Alphabetical (A-Z)</MenuItem>
-                                    <MenuItem value="alpha-desc">Alphabetical (Z-A)</MenuItem>
-                                    <MenuItem value="progress-asc">Progress (Low to High)</MenuItem>
-                                    <MenuItem value="progress-desc">Progress (High to Low)</MenuItem>
-                                </Select>
-                            </FormControl>
-                            <FormControl fullWidth variant="outlined" size="small">
-                                <InputLabel id="filter-by-status-label">Filter By Status</InputLabel>
-                                <Select
-                                    labelId="filter-by-status-label"
-                                    id="filter-by-status-select"
-                                    value={filterByStatus}
-                                    onChange={(e) => setFilterByStatus(e.target.value)}
-                                    label="Filter By Status"
-                                    sx={{ borderRadius: '0.5rem' }}
-                                >
-                                    <MenuItem value="All">All Statuses</MenuItem>
-                                    <MenuItem value="Active">Active</MenuItem>
-                                    <MenuItem value="Completed">Completed</MenuItem>
-                                    <MenuItem value="Cancelled">Cancelled</MenuItem>
-                                    <MenuItem value="On-Hold">On-Hold</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Box>
+                        >
+                            Add New
+                        </Button>
                     </Box>
 
-                    {/* Product List */}
-                    <List
-                        subheader={
-                            <ListSubheader component="div" sx={{ 
-                                backgroundColor: 'transparent', 
-                                fontWeight: 'bold', 
-                                fontSize: '1.125rem', 
-                                color: '#1f2937', 
-                                lineHeight: '1.75rem', 
-                                paddingX: 0,
-                                paddingY: 1,
-                                display: 'flex',
-                                alignItems: 'center',
-                            }}>
-                                <Box sx={{ width: '0.5rem', height: '0.5rem', borderRadius: '9999px', backgroundColor: '#4f46e5', marginRight: '0.5rem' }} />
-                                All Products
-                            </ListSubheader>
-                        }
-                        sx={{ width: '100%', bgcolor: 'background.paper', overflowY: 'auto', flexGrow: 1 }} 
-                    >
-                        {loading && <Typography sx={{ color: '#9333ea', textAlign: 'center', marginY: 3, fontSize: '0.9rem', fontWeight: 500 }}>Loading...</Typography>}
-                        {error && <Alert severity="error" sx={{ marginY: 3, borderRadius: '0.5rem' }}>{error}</Alert>}
-                        {!loading && !error && filteredAndSortedProducts.length === 0 ? (
-                            <Typography variant="body2" sx={{ color: '#6b7280', textAlign: 'center', paddingY: 3 }}>
-                                No products matching criteria.
-                            </Typography>
-                        ) : (
-                            filteredAndSortedProducts.map(product => (
-                                <ListItem
-                                    key={product.id}
-                                    onClick={() => handleSelectProduct(product)}
-                                    sx={{
-                                        display: 'flex',
-                                        flexDirection: 'column', // Stack content vertically
-                                        alignItems: 'flex-start',
-                                        padding: 1.5,
-                                        borderRadius: '0.5rem',
-                                        marginBottom: '0.5rem',
-                                        backgroundColor: selectedProduct && selectedProduct.id === product.id ? '#eef2ff' : '#fff',
-                                        border: selectedProduct && selectedProduct.id === product.id ? '1px solid #c7d2fe' : '1px solid #f3f4f6',
-                                        '&:hover': { backgroundColor: '#e0e7ff' },
-                                        transition: 'background-color 0.2s, border-color 0.2s',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-                                        <ListItemText
-                                            primary={product.name}
-                                            primaryTypographyProps={{ fontWeight: 'medium', color: '#1f2937', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                        />
-                                        <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleUpdateProduct(product.id, { is_archived: !product.is_archived }); }}>
-                                                {product.is_archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
-                                            </IconButton>
-                                            <IconButton size="small" onClick={(e) => { e.stopPropagation(); confirmDeleteProduct(product.id); }}>
-                                                <Trash2 size={16} />
-                                            </IconButton>
-                                        </Box>
-                                    </Box>
-                                    <Typography component="span" variant="body2" sx={{ fontSize: '0.75rem', color: '#6b7280', width: '100%', marginTop: 0.5 }}>
-                                        Status: {product.status} | Progress: {product.progress}%
-                                    </Typography>
-                                    <LinearProgress 
-                                        variant="determinate" 
-                                        value={product.progress} 
-                                        sx={{ 
-                                            width: '100%', 
-                                            borderRadius: 5, 
-                                            height: 4, 
-                                            backgroundColor: '#e0e7ff', 
-                                            '& .MuiLinearProgress-bar': { backgroundColor: '#4f46e5' } 
-                                        }} 
-                                    />
-                                </ListItem>
-                            ))
-                        )}
-                    </List>
-                </Paper>
-
-                {/* Right Main Content: Product Detail Tabs */}
-                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {/* Product Detail Header */}
-                    <Paper
-                        elevation={3}
-                        sx={{
-                            backgroundColor: '#fff',
-                            p: 2,
-                            borderRadius: '1rem', 
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            flexWrap: 'wrap', 
-                            gap: 2, 
-                            flexShrink: 0, 
+                    {/* Search and Filter */}
+                    <TextField
+                        fullWidth
+                        variant="outlined"
+                        placeholder="Search products..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        InputProps={{
+                            startAdornment: (
+                                <InputAdornment position="start">
+                                    <Search size={20} color="#9ca3af" />
+                                </InputAdornment>
+                            ),
+                            sx: { borderRadius: '0.5rem' }
                         }}
-                    >
-                        <Box>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#1f2937' }}>
-                                {selectedProduct ? selectedProduct.name : "Select a Product/Item"} 
-                                <Typography component="span" variant="body2" sx={{ color: '#6b7280', marginLeft: 1 }}>
-                                    {selectedProduct ? `(Status: ${selectedProduct.status})` : ""}
-                                </Typography>
-                            </Typography>
-                            {selectedProduct && (
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 1 }}>
-                                    <Typography variant="body2" sx={{ color: '#4b5563' }}>
-                                        Overall Progress: {selectedProduct.progress}%
-                                    </Typography>
-                                    <LinearProgress 
-                                        variant="determinate" 
-                                        value={selectedProduct.progress} 
-                                        sx={{ 
-                                            width: 100, 
-                                            borderRadius: 5, 
-                                            height: 8, 
-                                            backgroundColor: '#e0e7ff', 
-                                            '& .MuiLinearProgress-bar': { backgroundColor: '#4f46e5' } 
-                                        }} 
-                                    />
-                                </Box>
-                            )}
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                            {selectedProduct && (
-                                <FormControl variant="outlined" size="small" sx={{ minWidth: 120 }}>
-                                    <InputLabel id="product-status-label">Status</InputLabel>
-                                    <Select
-                                        labelId="product-status-label"
-                                        value={selectedProduct.status}
-                                        onChange={(e) => handleProductStatusChange(selectedProduct.id, e.target.value)}
-                                        label="Status"
-                                        sx={{ borderRadius: '0.5rem' }}
-                                    >
-                                        {['Active', 'Completed', 'Cancelled', 'On-Hold'].map(status => (
-                                            <MenuItem key={status} value={status}>{status}</MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                            )}
-                            {/* Feature Assistant button (Placeholder for future general AI assistant) */}
-                            <Button
-                                variant="contained"
-                                startIcon={<MessageSquare size={20} />}
-                                sx={{
-                                    backgroundColor: '#4f46e5', 
-                                    '&:hover': { backgroundColor: '#4338ca' }, 
-                                    color: '#fff',
-                                    fontWeight: 600,
-                                    borderRadius: '0.5rem',
-                                    textTransform: 'none',
-                                    padding: '0.5rem 1rem',
-                                    boxShadow: 'none',
-                                }}
-                                disabled // Disabled for Phase 1
+                        sx={{ mb: 2 }}
+                    />
+                    <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                        <FormControl fullWidth size="small">
+                            <InputLabel>Sort By</InputLabel>
+                            <Select
+                                value={sortBy}
+                                label="Sort By"
+                                onChange={(e) => setSortBy(e.target.value)}
+                                sx={{ borderRadius: '0.5rem' }}
                             >
-                                Feature Assistant (Coming Soon)
-                            </Button>
-                        </Box>
-                    </Paper>
+                                <MenuItem value="newest">Newest First</MenuItem>
+                                <MenuItem value="oldest">Oldest First</MenuItem>
+                                <MenuItem value="name">Name (A-Z)</MenuItem>
+                            </Select>
+                        </FormControl>
+                        <FormControl fullWidth size="small">
+                            <InputLabel>Status</InputLabel>
+                            <Select
+                                value={filterByStatus}
+                                label="Status"
+                                onChange={(e) => setFilterByStatus(e.target.value)}
+                                sx={{ borderRadius: '0.5rem' }}
+                            >
+                                <MenuItem value="All">All</MenuItem>
+                                <MenuItem value="Active">Active</MenuItem>
+                                <MenuItem value="Archived">Archived</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </Box>
 
-                    {/* Product Detail Tabs Container */}
-                    <Paper
-                        elevation={1}
-                        sx={{
-                            backgroundColor: '#fff',
-                            borderRadius: '1rem',
-                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            flexGrow: 1, 
-                            overflow: 'hidden' 
-                        }}
-                    >
-                        {selectedProduct === null ? (
-                            <Box sx={{ 
-                                display: 'flex', 
-                                flexDirection: 'column', 
-                                alignItems: 'center', 
-                                justifyContent: 'center', 
-                                height: '100%', 
-                                minHeight: '300px', 
-                                p: 4,
-                            }}>
-                                <Box ref={lottieContainer} sx={{ width: '200px', height: '200px', marginBottom: 2 }}></Box>
-                                <Typography variant="h6" sx={{ color: '#4f46e5', fontWeight: 'bold', textAlign: 'center' }}>
-                                    Select a Product or Item
-                                </Typography>
-                                <Typography variant="body1" sx={{ color: '#6b7280', textAlign: 'center', maxWidth: '400px' }}>
-                                    Choose an item from the left sidebar to view its details and manage its lifecycle.
-                                </Typography>
-                            </Box>
-                        ) : (
-                            <>
-                                <Tabs 
-                                    value={selectedProductTab} 
-                                    onChange={(event, newValue) => setSelectedProductTab(newValue)} 
-                                    aria-label="Product detail tabs"
-                                    variant="scrollable" 
-                                    scrollButtons="auto"
-                                    sx={{
-                                        borderBottom: 1,
-                                        borderColor: 'divider',
-                                        '& .MuiTabs-indicator': { backgroundColor: '#4f46e5' }, 
+                    {loading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                            <CircularProgress sx={{ color: '#4f46e5' }} />
+                        </Box>
+                    ) : error ? (
+                        <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
+                    ) : filteredProducts.length === 0 ? (
+                        <Box sx={{ textAlign: 'center', mt: 4, color: '#6b7280' }}>
+                            <Package size={48} style={{ marginBottom: '1rem', color: '#d1d5db' }} />
+                            <Typography variant="h6">No Products Found</Typography>
+                            <Typography variant="body2">Click "Add New" to create your first product!</Typography>
+                        </Box>
+                    ) : (
+                        <List component="nav" sx={{ flexGrow: 1, '& .MuiListItemButton-root': { borderRadius: '0.75rem', mb: 1 } }}>
+                            {filteredProducts.map((product) => (
+                                <Paper 
+                                    key={product.id} 
+                                    elevation={1} 
+                                    sx={{ 
+                                        mb: 1, 
+                                        borderRadius: '0.75rem', 
+                                        overflow: 'hidden',
+                                        border: product.id === selectedProduct?.id ? '2px solid #4f46e5' : '1px solid #e0e7ff',
+                                        transition: 'all 0.2s',
+                                        '&:hover': { 
+                                            transform: 'translateY(-2px)', 
+                                            boxShadow: '0 4px 8px rgba(0,0,0,0.1)' 
+                                        },
+                                        ml: product.isIteration ? 4 : 0 // Indent iterations
                                     }}
                                 >
-                                    {PRODUCT_TABS_ORDER.map((tabName, index) => (
-                                        <Tab 
-                                            key={tabName} 
-                                            label={tabName} 
-                                            id={`product-tab-${index}`} 
-                                            aria-controls={`product-tabpanel-${index}`}
-                                            sx={{
-                                                textTransform: 'none',
-                                                fontWeight: 'bold',
-                                                color: selectedProduct[`${tabName.toLowerCase().replace(/ /g, '_')}_status`] === 'Completed' ? '#16a34a' : '#4f46e5',
-                                                '&.Mui-selected': {
-                                                    color: '#4f46e5', 
-                                                },
-                                                '&:hover': {
-                                                    backgroundColor: '#eef2ff',
-                                                },
-                                                borderRadius: '0.5rem 0.5rem 0 0', 
-                                                minHeight: '48px', 
-                                            }}
-                                        />
-                                    ))}
-                                </Tabs>
-
-                                {/* Tab Panels for each section */}
-                                {PRODUCT_TABS_ORDER.map((tabName, index) => (
-                                    <TabPanel value={selectedProductTab} index={index} key={tabName}>
-                                        {/* Common Status Controls for each tab */}
-                                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1, marginBottom: 2 }}>
-                                            <Typography variant="body2" color="textSecondary">
-                                                Status:
+                                    <ListItem 
+                                        button 
+                                        onClick={() => handleViewProductDetails(product.id)}
+                                        sx={{ 
+                                            py: 1.5, 
+                                            px: 2, 
+                                            bgcolor: product.id === selectedProduct?.id ? '#eef2ff' : 'transparent',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'flex-start'
+                                        }}
+                                    >
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+                                            <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: '#1f2937' }}>
+                                                {product.name}
                                             </Typography>
-                                            <FormControl variant="outlined" size="small" sx={{ minWidth: 120 }}>
-                                                <Select
-                                                    value={selectedProduct[`${tabName.toLowerCase().replace(/ /g, '_')}_status`]}
-                                                    onChange={(e) => handleTabStatusChange(tabName, e.target.value)}
-                                                    sx={{ borderRadius: '0.5rem' }}
-                                                >
-                                                    {['Not Started', 'In Progress', 'Completed', 'Skipped'].map(status => (
-                                                        <MenuItem key={status} value={status}>{status}</MenuItem>
-                                                    ))}
-                                                </Select>
-                                            </FormControl>
+                                            <Chip
+                                                label={product.status}
+                                                size="small"
+                                                sx={{
+                                                    backgroundColor: product.status === 'Active' ? '#dcfce7' : '#fee2e2',
+                                                    color: product.status === 'Active' ? '#16a34a' : '#ef4444',
+                                                    fontWeight: 'bold',
+                                                    height: '20px',
+                                                    fontSize: '0.75rem'
+                                                }}
+                                            />
                                         </Box>
+                                        <Typography variant="body2" sx={{ color: '#6b7280', fontSize: '0.8rem', mt: 0.5, width: '100%' }}>
+                                            Created: {new Date(product.created_at).toLocaleDateString()}
+                                        </Typography>
+                                        <LinearProgress 
+                                            variant="determinate" 
+                                            value={product.overall_progress || 0} 
+                                            sx={{ 
+                                                width: '100%', 
+                                                height: 5, 
+                                                borderRadius: 5, 
+                                                mt: 1, 
+                                                bgcolor: '#e0e7ff', 
+                                                '& .MuiLinearProgress-bar': { bgcolor: '#4f46e5' } 
+                                            }} 
+                                        />
+                                        <Typography variant="caption" sx={{ color: '#4b5563', textAlign: 'right', width: '100%', mt: 0.5 }}>
+                                            {product.overall_progress || 0}% Complete
+                                        </Typography>
+                                    </ListItem>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 1, borderTop: '1px solid #eef2ff' }}>
+                                        <IconButton 
+                                            size="small" 
+                                            onClick={(e) => { 
+                                                e.stopPropagation(); 
+                                                // setSelectedProduct(product); // This might be needed if you want to use selectedProduct for something else
+                                                // handleOpenEditProductModal(); // Placeholder for edit modal
+                                                setSnackbarMessage("Edit functionality coming soon!");
+                                                setSnackbarSeverity('info');
+                                                setSnackbarOpen(true);
+                                            }}
+                                            sx={{ color: '#6b7280', '&:hover': { color: '#4f46e5', bgcolor: '#eef2ff' } }}
+                                        >
+                                            <Edit size={16} />
+                                        </IconButton>
+                                        <IconButton 
+                                            size="small" 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setProductToDeleteId(product.id);
+                                                setShowDeleteConfirmModal(true);
+                                            }}
+                                            sx={{ color: '#6b7280', '&:hover': { color: '#ef4444', bgcolor: '#fee2e2' } }}
+                                        >
+                                            <Trash2 size={16} />
+                                        </IconButton>
+                                        <IconButton 
+                                            size="small" 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                const newStatus = product.status === 'Active' ? 'Archived' : 'Active';
+                                                handleUpdateProductStatus(product.id, newStatus);
+                                            }}
+                                            sx={{ color: '#6b7280', '&:hover': { color: '#22c55e', bgcolor: '#dcfce7' } }}
+                                        >
+                                            {product.status === 'Active' ? <Archive size={16} /> : <ArchiveRestore size={16} />}
+                                        </IconButton>
+                                    </Box>
+                                </Paper>
+                            ))}
+                        </List>
+                    )}
+                </Box>
 
-                                        {/* --- Research Tab Content --- */}
-                                        {tabName === 'Research' && (
-                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, flexGrow: 1, overflowY: 'auto' }}>
-                                                {/* Market Research Section */}
-                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #d8b4fe', backgroundColor: '#f5f3ff' }}>
-                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#4f46e5', marginBottom: 2 }}>
-                                                        Market Research
-                                                    </Typography>
-                                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: '300px', overflowY: 'auto', marginBottom: 2 }}>
-                                                        {researchChatHistory.map((msg, idx) => (
-                                                            <Box key={idx} sx={{ 
-                                                                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                                                                backgroundColor: msg.role === 'user' ? '#eef2ff' : '#f0f4f8',
-                                                                borderRadius: '0.75rem',
-                                                                p: 1.5,
-                                                                maxWidth: '80%',
-                                                                wordBreak: 'break-word',
-                                                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                                                            }}>
-                                                                <Typography variant="body2" sx={{ color: msg.role === 'user' ? '#4f46e5' : '#374151' }}>
-                                                                    {msg.content}
-                                                                </Typography>
-                                                            </Box>
-                                                        ))}
-                                                        {isResearchAILoading && (
-                                                            <Box sx={{ alignSelf: 'flex-start', p: 1.5 }}>
-                                                                <CircularProgress size={20} />
-                                                                <Typography variant="body2" sx={{ color: '#6b7280', ml: 1 }}>AI is thinking...</Typography>
-                                                            </Box>
-                                                        )}
-                                                    </Box>
-                                                    <form onSubmit={handleResearchPromptSubmit} style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                                                        <TextField
-                                                            fullWidth
-                                                            variant="outlined"
-                                                            size="small"
-                                                            placeholder="Ask AI about market research..."
-                                                            value={currentResearchPrompt}
-                                                            onChange={(e) => setCurrentResearchPrompt(e.target.value)}
-                                                            disabled={isResearchAILoading}
-                                                            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
-                                                        />
-                                                        <IconButton type="submit" color="primary" disabled={isResearchAILoading}>
-                                                            <Send />
-                                                        </IconButton>
-                                                        {/* Speech-to-text (Mic) button - Placeholder for now */}
-                                                        <IconButton color="primary" disabled> 
-                                                            <Mic />
-                                                        </IconButton>
-                                                    </form>
-                                                </Paper>
-
-                                                {/* Market Research Document Editor */}
-                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #e0e7ff', backgroundColor: '#f9fafb', flexGrow: 1 }}>
-                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 2 }}>
-                                                        Market Research Document
-                                                    </Typography>
-                                                    <Editor 
-                                                        initialData={researchDocumentData} 
-                                                        onChange={handleResearchDocumentSave} 
-                                                        holder="research-editor-container"
-                                                    />
-                                                </Paper>
-
-                                                {/* Customer Interviews Section */}
-                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #d8b4fe', backgroundColor: '#f5f3ff' }}>
-                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                                                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#4f46e5' }}>
-                                                            Customer Interviews
-                                                        </Typography>
-                                                        <Button 
-                                                            variant="contained" 
-                                                            startIcon={<PlusCircle size={20} />} 
-                                                            onClick={() => setShowAddInterviewModal(true)}
-                                                            sx={{ textTransform: 'none', borderRadius: '0.5rem', backgroundColor: '#16a34a', '&:hover': { backgroundColor: '#15803d' } }}
-                                                        >
-                                                            Add Interview
-                                                        </Button>
-                                                    </Box>
-                                                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 2 }}>
-                                                        <Button 
-                                                            variant="outlined" 
-                                                            startIcon={<Sparkles size={16} />} 
-                                                            onClick={fetchInterviewTemplates}
-                                                            sx={{ textTransform: 'none', borderRadius: '0.5rem', borderColor: '#9333ea', color: '#9333ea', '&:hover': { backgroundColor: '#f3e8ff' } }}
-                                                        >
-                                                            Manage Templates
-                                                        </Button>
-                                                    </Box>
-
-                                                    <List dense sx={{ maxHeight: 300, overflowY: 'auto', border: '1px solid #e0e7ff', borderRadius: '0.5rem' }}>
-                                                        {customerInterviews.length === 0 ? (
-                                                            <ListItem><ListItemText secondary="No interviews added yet." sx={{ textAlign: 'center' }} /></ListItem>
-                                                        ) : (
-                                                            customerInterviews.map(interview => (
-                                                                <ListItem 
-                                                                    key={interview.id} 
-                                                                    onClick={() => handleSelectInterview(interview)}
-                                                                    secondaryAction={
-                                                                        <IconButton edge="end" aria-label="delete" onClick={(e) => { e.stopPropagation(); handleDeleteInterview(interview.id); }}>
-                                                                            <Trash2 size={16} />
-                                                                        </IconButton>
-                                                                    }
-                                                                    sx={{ 
-                                                                        backgroundColor: selectedInterview && selectedInterview.id === interview.id ? '#eef2ff' : 'transparent',
-                                                                        '&:hover': { backgroundColor: '#eef2ff' },
-                                                                        borderRadius: '0.5rem',
-                                                                        marginBottom: '0.25rem'
-                                                                    }}
-                                                                >
-                                                                    <ListItemText 
-                                                                        primary={interview.customer_name} 
-                                                                        secondary={`${new Date(interview.interview_date).toLocaleDateString()} - ${interview.customer_email || 'N/A'}`} 
-                                                                    />
-                                                                </ListItem>
-                                                            ))
-                                                        )}
-                                                    </List>
-
-                                                    {selectedInterview && (
-                                                        <Box sx={{ marginTop: 3, borderTop: '1px solid #e0e7ff', paddingTop: 3 }}>
-                                                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 2 }}>
-                                                                Interview Notes for {selectedInterview.customer_name}
-                                                            </Typography>
-                                                            <Editor 
-                                                                initialData={interviewNotesData} 
-                                                                onChange={handleSaveInterviewNotes} 
-                                                                holder={`interview-notes-editor-${selectedInterview.id}`}
-                                                            />
-                                                            <Button 
-                                                                variant="contained" 
-                                                                startIcon={<Sparkles size={20} />} 
-                                                                onClick={handleGenerateInterviewSummary}
-                                                                disabled={loading}
-                                                                sx={{ textTransform: 'none', borderRadius: '0.5rem', backgroundColor: '#9333ea', '&:hover': { backgroundColor: '#7e22ce' }, marginTop: 2 }}
-                                                            >
-                                                                {loading ? <CircularProgress size={20} color="inherit" /> : 'Generate Summary'}
-                                                            </Button>
-
-                                                            {interviewSummaryData && (
-                                                                <Box sx={{ marginTop: 3 }}>
-                                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 1 }}>
-                                                                        AI Summary:
-                                                                    </Typography>
-                                                                    <Editor 
-                                                                        initialData={interviewSummaryData} 
-                                                                        readOnly={true} 
-                                                                        holder={`interview-summary-editor-${selectedInterview.id}`}
-                                                                    />
-                                                                </Box>
-                                                            )}
-                                                        </Box>
-                                                    )}
-                                                </Paper>
-                                            </Box>
-                                        )}
-
-                                        {/* --- PRD Tab Content --- */}
-                                        {tabName === 'PRD' && (
-                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, flexGrow: 1, overflowY: 'auto' }}>
-                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #d8b4fe', backgroundColor: '#f5f3ff' }}>
-                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#4f46e5', marginBottom: 2 }}>
-                                                        PRD Generation Assistant
-                                                    </Typography>
-                                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: '300px', overflowY: 'auto', marginBottom: 2 }}>
-                                                        {prdChatHistory.map((msg, idx) => (
-                                                            <Box key={idx} sx={{ 
-                                                                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                                                                backgroundColor: msg.role === 'user' ? '#eef2ff' : '#f0f4f8',
-                                                                borderRadius: '0.75rem',
-                                                                p: 1.5,
-                                                                maxWidth: '80%',
-                                                                wordBreak: 'break-word',
-                                                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                                                            }}>
-                                                                <Typography variant="body2" sx={{ color: msg.role === 'user' ? '#4f46e5' : '#374151' }}>
-                                                                    {msg.content}
-                                                                </Typography>
-                                                            </Box>
-                                                        ))}
-                                                        {isPrdAILoading && (
-                                                            <Box sx={{ alignSelf: 'flex-start', p: 1.5 }}>
-                                                                <CircularProgress size={20} />
-                                                                <Typography variant="body2" sx={{ color: '#6b7280', ml: 1 }}>AI is thinking...</Typography>
-                                                            </Box>
-                                                        )}
-                                                    </Box>
-                                                    <form onSubmit={handlePrdPromptSubmit} style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                                                        <TextField
-                                                            fullWidth
-                                                            variant="outlined"
-                                                            size="small"
-                                                            placeholder="Tell AI about your PRD requirements..."
-                                                            value={currentPrdPrompt}
-                                                            onChange={(e) => setCurrentPrdPrompt(e.target.value)}
-                                                            disabled={isPrdAILoading}
-                                                            sx={{ '& .MuiOutlinedInput-root': { borderRadius: '0.5rem' } }}
-                                                        />
-                                                        <IconButton type="submit" color="primary" disabled={isPrdAILoading}>
-                                                            <Send />
-                                                        </IconButton>
-                                                        {/* Speech-to-text (Mic) button - Placeholder for now */}
-                                                        <IconButton color="primary" disabled> 
-                                                            <Mic />
-                                                        </IconButton>
-                                                    </form>
-                                                </Paper>
-
-                                                <Paper elevation={1} sx={{ p: 3, borderRadius: '0.75rem', border: '1px solid #e0e7ff', backgroundColor: '#f9fafb', flexGrow: 1 }}>
-                                                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 2 }}>
-                                                        Product Requirements Document
-                                                    </Typography>
-                                                    <Editor 
-                                                        initialData={prdDocumentData} 
-                                                        onChange={handlePrdDocumentSave} 
-                                                        holder="prd-editor-container"
-                                                    />
-                                                </Paper>
-                                            </Box>
-                                        )}
-
-                                        {/* --- Other Tabs (Placeholders for now) --- */}
-                                        {tabName !== 'Research' && tabName !== 'PRD' && (
-                                            <Box sx={{ p: 3, textAlign: 'center', color: '#6b7280', flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-                                                <Typography variant="h6" sx={{ marginBottom: 2 }}>
-                                                    {tabName} Tab
-                                                </Typography>
-                                                <Typography variant="body1">
-                                                    Content for the {tabName} tab will be implemented in future phases.
-                                                </Typography>
-                                            </Box>
-                                        )}
-                                    </TabPanel>
-                                ))}
-                            </>
-                        )}
+                {/* Dashboard / Welcome Content (or detail view placeholder) */}
+                <Box sx={{ 
+                    flexGrow: 1, 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    p: 4, 
+                    overflowY: 'auto',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: '#f9fafb'
+                }}>
+                    <Paper elevation={3} sx={{ 
+                        maxWidth: '800px', 
+                        width: '100%', 
+                        p: { xs: 3, sm: 5 }, 
+                        borderRadius: '1rem', 
+                        textAlign: 'center',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                        backgroundColor: '#fff'
+                    }}>
+                        <Box ref={lottieContainer} sx={{ width: '150px', height: '150px', margin: '0 auto 1.5rem auto' }} />
+                        <Typography variant="h4" component="h2" sx={{ fontWeight: 'bold', color: '#111827', mb: 2 }}>
+                            Welcome to Auto Product Manager!
+                        </Typography>
+                        <Typography variant="body1" sx={{ color: '#4b5563', mb: 3 }}>
+                            Your all-in-one AI-powered platform for streamlined product lifecycle management.
+                        </Typography>
+                        <Button
+                            variant="contained"
+                            startIcon={<PlusCircle size={20} />}
+                            onClick={() => setShowAddProductModal(true)}
+                            sx={{
+                                textTransform: 'none',
+                                background: 'linear-gradient(to right, #4f46e5, #9333ea)',
+                                color: '#fff',
+                                fontWeight: 600,
+                                borderRadius: '0.5rem',
+                                paddingY: '0.75rem',
+                                paddingX: '1.5rem',
+                                '&:hover': {
+                                    background: 'linear-gradient(to right, #4338ca, #7e22ce)',
+                                    transform: 'scale(1.02)',
+                                },
+                            }}
+                        >
+                            Create Your First Product
+                        </Button>
+                        <Box sx={{ mt: 4, pt: 3, borderTop: '1px dashed #e0e7ff' }}>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', mb: 1 }}>
+                                <Box component="span" sx={{ fontSize: '1.5rem', mr: 1 }}>{quoteEmoji}</Box>
+                                Quote of the Day
+                            </Typography>
+                            <Typography variant="body2" sx={{ fontStyle: 'italic', color: '#6b7280' }}>
+                                "{quoteOfTheDay}"
+                            </Typography>
+                        </Box>
                     </Paper>
                 </Box>
             </Box>
 
-            {/* Add Product Modal */}
+            {/* Add New Product Modal */}
             <Dialog open={showAddProductModal} onClose={() => setShowAddProductModal(false)} PaperProps={{ sx: { borderRadius: '1rem' } }}>
-                <DialogTitle sx={{ fontWeight: 'bold', color: '#1f2937' }}>Add New Product/Item</DialogTitle>
-                <DialogContent dividers>
+                <DialogTitle sx={{ fontWeight: 'bold', color: '#111827' }}>Add New Product</DialogTitle>
+                <DialogContent>
                     <TextField
                         autoFocus
                         margin="dense"
-                        id="new-product-name"
-                        label="Product/Item Name"
+                        id="name"
+                        label="Product Name"
                         type="text"
                         fullWidth
                         variant="outlined"
                         value={newProductName}
                         onChange={(e) => setNewProductName(e.target.value)}
-                        sx={{ marginBottom: 2 }}
+                        sx={{ mb: 2 }}
                     />
-                    <FormControl fullWidth margin="dense" sx={{ marginBottom: 2 }}>
+                    <FormControl fullWidth margin="dense" sx={{ mb: 2 }}>
                         <InputLabel id="new-product-status-label">Status</InputLabel>
                         <Select
                             labelId="new-product-status-label"
+                            id="new-product-status"
                             value={newProductStatus}
-                            onChange={(e) => setNewProductStatus(e.target.value)}
                             label="Status"
+                            onChange={(e) => setNewProductStatus(e.target.value)}
                         >
-                            {['Active', 'Completed', 'Cancelled', 'On-Hold'].map(status => (
-                                <MenuItem key={status} value={status}>{status}</MenuItem>
-                            ))}
+                            <MenuItem value="Active">Active</MenuItem>
+                            <MenuItem value="Archived">Archived</MenuItem>
                         </Select>
                     </FormControl>
                     <FormControl fullWidth margin="dense">
-                        <InputLabel id="new-product-parent-label">Parent Item (for Iteration)</InputLabel>
+                        <InputLabel id="new-product-parent-label">Parent Product (for iterations)</InputLabel>
                         <Select
                             labelId="new-product-parent-label"
+                            id="new-product-parent"
                             value={newProductParentId}
+                            label="Parent Product (for iterations)"
                             onChange={(e) => setNewProductParentId(e.target.value)}
-                            label="Parent Item (for Iteration)"
+                            displayEmpty
                         >
-                            <MenuItem value=""><em>None</em></MenuItem>
-                            {products.filter(p => !p.parent_id).map(p => ( // Only show top-level products as parents
-                                <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+                            <MenuItem value="">
+                                <em>None</em>
+                            </MenuItem>
+                            {products.filter(p => p.parent_id === null).map((product) => (
+                                <MenuItem key={product.id} value={product.id}>{product.name}</MenuItem>
                             ))}
                         </Select>
+                        <FormHelperText>Select if this is an iteration or sub-product of an existing product.</FormHelperText>
                     </FormControl>
                 </DialogContent>
-                <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
-                    <Button 
-                        onClick={() => setShowAddProductModal(false)} 
-                        sx={{ 
-                            textTransform: 'none', 
-                            color: '#6b7280', 
-                            borderRadius: '0.5rem', 
-                            '&:hover': { backgroundColor: '#f3f4f6' } 
-                        }}
-                    >
-                        Cancel
-                    </Button>
+                <DialogActions>
+                    <Button onClick={() => setShowAddProductModal(false)} sx={{ color: '#6b7280', textTransform: 'none' }}>Cancel</Button>
                     <Button 
                         onClick={handleAddProduct} 
                         variant="contained" 
-                        disabled={loading || !newProductName.trim()}
+                        disabled={loading}
                         sx={{ 
                             textTransform: 'none', 
                             backgroundColor: '#4f46e5', 
-                            color: '#fff', 
-                            borderRadius: '0.5rem',
-                            '&:hover': { backgroundColor: '#4338ca' },
-                            '&:disabled': { opacity: 0.5, color: '#fff' }
+                            '&:hover': { backgroundColor: '#4338ca' } 
                         }}
                     >
-                        Add Product
+                        {loading ? <CircularProgress size={20} color="inherit" /> : 'Add Product'}
                     </Button>
                 </DialogActions>
             </Dialog>
-
-            {/* Add Customer Interview Modal */}
-            <Dialog open={showAddInterviewModal} onClose={() => setShowAddInterviewModal(false)} PaperProps={{ sx: { borderRadius: '1rem' } }}>
-                <DialogTitle sx={{ fontWeight: 'bold', color: '#1f2937' }}>Add New Customer Interview</DialogTitle>
-                <DialogContent dividers>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        id="interview-customer-name"
-                        label="Customer Name"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={newInterviewCustomerName}
-                        onChange={(e) => setNewInterviewCustomerName(e.target.value)}
-                        sx={{ marginBottom: 2 }}
-                    />
-                    <TextField
-                        margin="dense"
-                        id="interview-customer-email"
-                        label="Customer Email (Optional)"
-                        type="email"
-                        fullWidth
-                        variant="outlined"
-                        value={newInterviewCustomerEmail}
-                        onChange={(e) => setNewInterviewCustomerEmail(e.target.value)}
-                        sx={{ marginBottom: 2 }}
-                    />
-                    <TextField
-                        margin="dense"
-                        id="interview-date"
-                        label="Interview Date"
-                        type="datetime-local"
-                        fullWidth
-                        variant="outlined"
-                        value={newInterviewDate}
-                        onChange={(e) => setNewInterviewDate(e.target.value)}
-                        InputLabelProps={{
-                            shrink: true,
-                        }}
-                    />
-                </DialogContent>
-                <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
-                    <Button 
-                        onClick={() => setShowAddInterviewModal(false)} 
-                        sx={{ 
-                            textTransform: 'none', 
-                            color: '#6b7280', 
-                            borderRadius: '0.5rem', 
-                            '&:hover': { backgroundColor: '#f3f4f6' } 
-                        }}
-                    >
-                        Cancel
-                    </Button>
-                    <Button 
-                        onClick={handleAddCustomerInterview} 
-                        variant="contained" 
-                        disabled={loading || !newInterviewCustomerName.trim()}
-                        sx={{ 
-                            textTransform: 'none', 
-                            backgroundColor: '#4f46e5', 
-                            color: '#fff', 
-                            borderRadius: '0.5rem',
-                            '&:hover': { backgroundColor: '#4338ca' },
-                            '&:disabled': { opacity: 0.5, color: '#fff' }
-                        }}
-                    >
-                        Add Interview
-                    </Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Interview Template Modal */}
-            <Dialog open={showTemplateModal} onClose={() => { setShowTemplateModal(false); setSelectedTemplate(null); setTemplateName(''); setTemplateQuestionsData(null); }} PaperProps={{ sx: { borderRadius: '1rem', maxWidth: '800px' } }} fullWidth>
-                <DialogTitle sx={{ fontWeight: 'bold', color: '#1f2937' }}>
-                    {selectedTemplate ? 'Edit Interview Template' : 'Manage Interview Templates'}
-                </DialogTitle>
-                <DialogContent dividers sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {!selectedTemplate ? (
-                        <>
-                            <Box sx={{ display: 'flex', gap: 2, marginBottom: 2 }}>
-                                <TextField
-                                    autoFocus
-                                    margin="dense"
-                                    id="template-name-input"
-                                    label="New Template Name"
-                                    type="text"
-                                    fullWidth
-                                    variant="outlined"
-                                    value={templateName}
-                                    onChange={(e) => setTemplateName(e.target.value)}
-                                />
-                                <Button 
-                                    onClick={handleCreateTemplate} 
-                                    variant="contained" 
-                                    disabled={loading || !templateName.trim()}
-                                    sx={{ textTransform: 'none', borderRadius: '0.5rem', backgroundColor: '#16a34a', '&:hover': { backgroundColor: '#15803d' } }}
-                                >
-                                    Create
-                                </Button>
-                            </Box>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 1 }}>Existing Templates</Typography>
-                            <List dense sx={{ maxHeight: 300, overflowY: 'auto', border: '1px solid #e0e7ff', borderRadius: '0.5rem' }}>
-                                {interviewTemplates.length === 0 ? (
-                                    <ListItem><ListItemText secondary="No templates created yet." sx={{ textAlign: 'center' }} /></ListItem>
-                                ) : (
-                                    interviewTemplates.map(template => (
-                                        <ListItem 
-                                            key={template.id} 
-                                            onClick={() => handleSelectTemplate(template)}
-                                            secondaryAction={
-                                                <IconButton edge="end" aria-label="delete" onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(template.id); }}>
-                                                    <Trash2 size={16} />
-                                                </IconButton>
-                                            }
-                                            sx={{ 
-                                                backgroundColor: selectedTemplate && selectedTemplate.id === template.id ? '#eef2ff' : 'transparent',
-                                                '&:hover': { backgroundColor: '#eef2ff' },
-                                                borderRadius: '0.5rem',
-                                                marginBottom: '0.25rem'
-                                            }}
-                                        >
-                                            <ListItemText primary={template.template_name} />
-                                        </ListItem>
-                                    ))
-                                )}
-                            </List>
-                        </>
-                    ) : (
-                        <>
-                            <TextField
-                                margin="dense"
-                                id="edit-template-name"
-                                label="Template Name"
-                                type="text"
-                                fullWidth
-                                variant="outlined"
-                                value={templateName}
-                                onChange={(e) => setTemplateName(e.target.value)}
-                                sx={{ marginBottom: 2 }}
-                            />
-                            <Typography variant="body1" sx={{ fontWeight: 'bold', color: '#374151', marginBottom: 1 }}>
-                                Template Questions
-                            </Typography>
-                            <Editor 
-                                initialData={templateQuestionsData} 
-                                onChange={setTemplateQuestionsData} 
-                                holder={`template-editor-${selectedTemplate.id}`}
-                            />
-                            <Button 
-                                variant="contained" 
-                                startIcon={<Sparkles size={20} />} 
-                                onClick={() => handleGenerateTemplateQuestions(selectedProduct?.name || '', templateQuestionsData ? JSON.stringify(templateQuestionsData) : '')}
-                                disabled={isTemplateAILoading || !selectedProduct}
-                                sx={{ textTransform: 'none', borderRadius: '0.5rem', backgroundColor: '#9333ea', '&:hover': { backgroundColor: '#7e22ce' }, marginTop: 2 }}
-                            >
-                                {isTemplateAILoading ? <CircularProgress size={20} color="inherit" /> : 'Generate Questions with AI'}
-                            </Button>
-                        </>
-                    )}
-                </DialogContent>
-                <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
-                    <Button 
-                        onClick={() => { setShowTemplateModal(false); setSelectedTemplate(null); setTemplateName(''); setTemplateQuestionsData(null); }} 
-                        sx={{ 
-                            textTransform: 'none', 
-                            color: '#6b7280', 
-                            borderRadius: '0.5rem', 
-                            '&:hover': { backgroundColor: '#f3f4f6' } 
-                        }}
-                    >
-                        {selectedTemplate ? 'Close' : 'Cancel'}
-                    </Button>
-                    {selectedTemplate && (
-                        <Button 
-                            onClick={handleUpdateTemplate} 
-                            variant="contained" 
-                            disabled={loading || !templateName.trim()}
-                            sx={{ 
-                                textTransform: 'none', 
-                                backgroundColor: '#4f46e5', 
-                                color: '#fff', 
-                                borderRadius: '0.5rem',
-                                '&:hover': { backgroundColor: '#4338ca' },
-                                '&:disabled': { opacity: 0.5, color: '#fff' }
-                            }}
-                        >
-                            Save Changes
-                        </Button>
-                    )}
-                </DialogActions>
-            </Dialog>
-
 
             {/* Delete Confirmation Modal */}
             <Dialog
@@ -2846,30 +2869,20 @@ function App() {
                 PaperProps={{ sx: { borderRadius: '1rem' } }}
             >
                 <DialogTitle id="alert-dialog-title" sx={{ fontWeight: 'bold', color: '#ef4444' }}>
-                    {"Confirm Deletion"}
+                    {"Confirm Delete Product?"}
                 </DialogTitle>
                 <DialogContent>
                     <DialogContentText id="alert-dialog-description" sx={{ color: '#4b5563' }}>
-                        Are you sure you want to delete this product/item? This action cannot be undone.
+                        Are you sure you want to delete the product "{products.find(p => p.id === productToDeleteId)?.name}"? This action cannot be undone.
                     </DialogContentText>
                 </DialogContent>
-                <DialogActions sx={{ padding: 2, justifyContent: 'space-between' }}>
-                    <Button 
-                        onClick={() => setShowDeleteConfirmModal(false)} 
-                        sx={{ 
-                            textTransform: 'none', 
-                            color: '#6b7280', 
-                            borderRadius: '0.5rem', 
-                            '&:hover': { backgroundColor: '#f3f4f6' } 
-                        }}
-                    >
-                        Cancel
-                    </Button>
+                <DialogActions>
+                    <Button onClick={() => setShowDeleteConfirmModal(false)} sx={{ color: '#6b7280', textTransform: 'none' }}>Cancel</Button>
                     <Button 
                         onClick={handleDeleteProduct} 
+                        autoFocus 
                         variant="contained" 
                         color="error" 
-                        autoFocus
                         disabled={loading}
                         sx={{ 
                             textTransform: 'none', 
@@ -2893,26 +2906,5 @@ function App() {
         </Box>
     );
 }
-
-// Helper function for TabPanel content
-const TabPanel = (props) => {
-    const { children, value, index, ...other } = props;
-    return (
-        <div
-            role="tabpanel"
-            hidden={value !== index}
-            id={`product-tabpanel-${index}`}
-            aria-labelledby={`product-tab-${index}`}
-            {...other}
-            style={{ flexGrow: 1, display: value === index ? 'flex' : 'none', flexDirection: 'column', overflowY: 'auto' }}
-        >
-            {value === index && (
-                <Box sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-                    {children}
-                </Box>
-            )}
-        </div>
-    );
-};
 
 export default App;
